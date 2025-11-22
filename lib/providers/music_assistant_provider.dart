@@ -5,11 +5,15 @@ import '../services/music_assistant_api.dart';
 import '../services/settings_service.dart';
 import '../services/builtin_player_service.dart';
 import '../services/audio_player_service.dart';
+import '../services/auth_service.dart';
+import '../services/debug_logger.dart';
 
 class MusicAssistantProvider with ChangeNotifier {
   MusicAssistantAPI? _api;
   BuiltinPlayerService? _builtinPlayer;
   final AudioPlayerService _audioPlayer = AudioPlayerService();
+  final AuthService _authService = AuthService();
+  final DebugLogger _logger = DebugLogger();
   MAConnectionState _connectionState = MAConnectionState.disconnected;
   String? _serverUrl;
 
@@ -35,6 +39,24 @@ class MusicAssistantProvider with ChangeNotifier {
   Future<void> _initialize() async {
     _serverUrl = await SettingsService.getServerUrl();
     if (_serverUrl != null && _serverUrl!.isNotEmpty) {
+      // Auto-login if credentials are saved
+      final username = await SettingsService.getUsername();
+      final password = await SettingsService.getPassword();
+
+      if (username != null && password != null && username.isNotEmpty && password.isNotEmpty) {
+        _logger.log('🔐 Auto-login with saved credentials...');
+        try {
+          final token = await _authService.login(_serverUrl!, username, password);
+          if (token != null) {
+            _logger.log('✓ Auto-login successful');
+          } else {
+            _logger.log('⚠️ Auto-login failed - session cookie may be expired');
+          }
+        } catch (e) {
+          _logger.log('⚠️ Auto-login error: $e');
+        }
+      }
+
       await connectToServer(_serverUrl!);
     }
   }

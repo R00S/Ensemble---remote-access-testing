@@ -498,15 +498,11 @@ class MusicAssistantAPI {
       _logger.log('Playing track via queue: $uri on player $playerId');
 
       await _sendCommand(
-        'player_command/play_media',
+        'player_queues/play_media',
         args: {
-          'player_id': playerId,
-          'media': [
-            {
-              'uri': uri,
-              'media_type': 'track',
-            }
-          ],
+          'queue_id': playerId,
+          'media': [uri], // Array of URI strings, not objects
+          'option': 'play', // Play immediately
         },
       );
 
@@ -520,22 +516,18 @@ class MusicAssistantAPI {
   /// Play multiple tracks via queue
   Future<void> playTracks(String playerId, List<Track> tracks, {int? startIndex}) async {
     try {
-      final mediaItems = tracks.map((track) {
-        final uri = _buildTrackUri(track);
-        return {
-          'uri': uri,
-          'media_type': 'track',
-        };
-      }).toList();
+      // Build array of URI strings (not objects!)
+      final mediaUris = tracks.map((track) => _buildTrackUri(track)).toList();
 
       _logger.log('Playing ${tracks.length} tracks via queue on player $playerId');
 
       await _sendCommand(
-        'player_command/play_media',
+        'player_queues/play_media',
         args: {
-          'player_id': playerId,
-          'media': mediaItems,
-          if (startIndex != null) 'start_index': startIndex,
+          'queue_id': playerId,
+          'media': mediaUris, // Array of URI strings
+          'option': 'play', // Play immediately
+          if (startIndex != null) 'start_item': startIndex,
         },
       );
 

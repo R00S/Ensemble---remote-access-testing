@@ -511,13 +511,24 @@ class MusicAssistantAPI {
       final result = response['result'];
       if (result == null) return null;
 
+      // Debug: Log the first queue item to see structure
+      if (result is List && result.isNotEmpty) {
+        _logger.log('🔍 DEBUG: First queue item raw data: ${result[0]}');
+      }
+
       // The API returns a List of items directly, not a PlayerQueue object
-      final items = (result as List<dynamic>)
-          .map((i) => QueueItem.fromJson(i as Map<String, dynamic>))
-          .toList();
+      final items = <QueueItem>[];
+      for (var i in (result as List<dynamic>)) {
+        try {
+          items.add(QueueItem.fromJson(i as Map<String, dynamic>));
+        } catch (e) {
+          _logger.log('⚠️ Failed to parse queue item: $e');
+          // Continue parsing other items
+        }
+      }
 
       if (items.isEmpty) {
-        _logger.log('⚠️ Queue is empty');
+        _logger.log('⚠️ Queue is empty or all items failed to parse');
         return null;
       }
 

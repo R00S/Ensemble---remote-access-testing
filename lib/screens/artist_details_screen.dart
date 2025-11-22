@@ -196,14 +196,15 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          if (album.year != null)
-            Text(
-              '${album.year}',
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 12,
-              ),
+          Text(
+            album.artistsString,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 12,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );

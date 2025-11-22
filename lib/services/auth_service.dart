@@ -43,29 +43,30 @@ class AuthService {
 
       _logger.log('Auth response status: ${response.statusCode}');
 
-      // Check for session cookies
-      final cookies = response.headers['set-cookie'];
-      if (cookies != null && cookies.isNotEmpty) {
-        _logger.log('✓ Received session cookie');
-
-        // Extract authelia_session cookie if present
-        final sessionCookie = _extractSessionCookie(cookies);
-        if (sessionCookie != null) {
-          _logger.log('✓ Extracted session cookie');
-          await SettingsService.setAuthToken(sessionCookie);
-          return sessionCookie;
-        }
-      }
-
-      // Check response status
+      // Check response status first - only proceed if successful
       if (response.statusCode == 200) {
         _logger.log('✓ Authentication successful');
+
+        // Check for session cookies
+        final cookies = response.headers['set-cookie'];
+        if (cookies != null && cookies.isNotEmpty) {
+          _logger.log('✓ Received session cookie');
+
+          // Extract authelia_session cookie if present
+          final sessionCookie = _extractSessionCookie(cookies);
+          if (sessionCookie != null) {
+            _logger.log('✓ Extracted session cookie');
+            await SettingsService.setAuthToken(sessionCookie);
+            return sessionCookie;
+          }
+        }
+
         // If 200 but no cookie, might not need auth
         return 'authenticated';
       }
 
       _logger.log('✗ Authentication failed: ${response.statusCode}');
-      _logger.log('Response: ${response.body}');
+      _logger.log('Response body: ${response.body}');
       return null;
     } catch (e) {
       _logger.log('✗ Login error: $e');

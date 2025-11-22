@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/music_player_provider.dart';
 import '../providers/music_assistant_provider.dart';
 import '../screens/player_screen.dart';
+import '../screens/queue_screen.dart';
 
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key});
@@ -97,6 +98,20 @@ class MiniPlayer extends StatelessWidget {
                           ),
                         ],
                       ),
+                    ),
+                    // Queue button
+                    IconButton(
+                      icon: const Icon(Icons.queue_music),
+                      color: Colors.white70,
+                      iconSize: 24,
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const QueueScreen(),
+                          ),
+                        );
+                      },
                     ),
                     // Playback controls for selected player
                     IconButton(

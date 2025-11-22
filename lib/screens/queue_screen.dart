@@ -1,0 +1,260 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/music_assistant_provider.dart';
+import '../models/player.dart';
+
+class QueueScreen extends StatefulWidget {
+  const QueueScreen({super.key});
+
+  @override
+  State<QueueScreen> createState() => _QueueScreenState();
+}
+
+class _QueueScreenState extends State<QueueScreen> {
+  PlayerQueue? _queue;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQueue();
+  }
+
+  Future<void> _loadQueue() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final maProvider = context.read<MusicAssistantProvider>();
+    final player = maProvider.selectedPlayer;
+
+    if (player != null && maProvider.api != null) {
+      final queue = await maProvider.api!.getQueue(player.playerId);
+      setState(() {
+        _queue = queue;
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maProvider = context.watch<MusicAssistantProvider>();
+    final player = maProvider.selectedPlayer;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF1a1a1a),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          player != null ? '${player.name} Queue' : 'Queue',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w300,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadQueue,
+          ),
+        ],
+      ),
+      body: _buildBody(maProvider),
+    );
+  }
+
+  Widget _buildBody(MusicAssistantProvider maProvider) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (maProvider.selectedPlayer == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.speaker_group, size: 64, color: Colors.grey[700]),
+            const SizedBox(height: 16),
+            Text(
+              'No player selected',
+              style: TextStyle(color: Colors.grey[600], fontSize: 18),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_queue == null || _queue!.items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.queue_music, size: 64, color: Colors.grey[700]),
+            const SizedBox(height: 16),
+            Text(
+              'Queue is empty',
+              style: TextStyle(color: Colors.grey[600], fontSize: 18),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Queue info
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Icon(Icons.queue_music, color: Colors.grey[400]),
+              const SizedBox(width: 8),
+              Text(
+                '${_queue!.items.length} track${_queue!.items.length != 1 ? 's' : ''}',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Queue items
+        Expanded(
+          child: ReorderableListView.builder(
+            itemCount: _queue!.items.length,
+            onReorder: (oldIndex, newIndex) {
+              // TODO: Implement queue reordering via API
+              // For now, just update local state
+              setState(() {
+                if (newIndex > oldIndex) {
+                  newIndex -= 1;
+                }
+                final item = _queue!.items.removeAt(oldIndex);
+                _queue!.items.insert(newIndex, item);
+              });
+            },
+            itemBuilder: (context, index) {
+              final item = _queue!.items[index];
+              final isCurrentItem = _queue!.currentIndex == index;
+
+              return _buildQueueItem(item, index, isCurrentItem, maProvider);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQueueItem(
+    QueueItem item,
+    int index,
+    bool isCurrentItem,
+    MusicAssistantProvider maProvider,
+  ) {
+    final imageUrl = maProvider.api?.getImageUrl(item.track, size: 80);
+
+    return Dismissible(
+      key: Key(item.queueItemId),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16.0),
+        color: Colors.red[900],
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (direction) {
+        // TODO: Implement queue item removal via API
+        setState(() {
+          _queue!.items.removeAt(index);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Removed ${item.track.name}'),
+            action: SnackBarAction(
+              label: 'Undo',
+              onPressed: () {
+                setState(() {
+                  _queue!.items.insert(index, item);
+                });
+              },
+            ),
+          ),
+        );
+      },
+      child: Container(
+        color: isCurrentItem ? Colors.blue.withOpacity(0.1) : null,
+        child: ListTile(
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              ReorderableDragStartListener(
+                index: index,
+                child: Icon(
+                  Icons.drag_handle,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Album art
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: imageUrl != null
+                    ? Image.network(
+                        imageUrl,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 48,
+                            height: 48,
+                            color: Colors.grey[800],
+                            child: const Icon(Icons.music_note, size: 24),
+                          );
+                        },
+                      )
+                    : Container(
+                        width: 48,
+                        height: 48,
+                        color: Colors.grey[800],
+                        child: const Icon(Icons.music_note, size: 24),
+                      ),
+              ),
+            ],
+          ),
+          title: Text(
+            item.track.name,
+            style: TextStyle(
+              color: isCurrentItem ? Colors.blue : Colors.white,
+              fontWeight: isCurrentItem ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          subtitle: item.track.artists.isNotEmpty
+              ? Text(
+                  item.track.artists.first.name,
+                  style: TextStyle(
+                    color: isCurrentItem ? Colors.blue[200] : Colors.grey[400],
+                  ),
+                )
+              : null,
+          trailing: isCurrentItem
+              ? Icon(Icons.play_arrow, color: Colors.blue[400])
+              : null,
+        ),
+      ),
+    );
+  }
+}

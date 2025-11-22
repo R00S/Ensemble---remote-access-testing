@@ -30,6 +30,10 @@ class MusicAssistantProvider with ChangeNotifier {
   Track? _currentTrack; // Current track playing on selected player
   Timer? _playerStateTimer;
 
+  // Player list caching
+  DateTime? _playersLastFetched;
+  static const Duration _playersCacheDuration = Duration(minutes: 5);
+
   MAConnectionState get connectionState => _connectionState;
   String? get serverUrl => _serverUrl;
   List<Artist> get artists => _artists;
@@ -300,9 +304,21 @@ class MusicAssistantProvider with ChangeNotifier {
   // ============================================================================
 
   /// Load available players and auto-select one
-  Future<void> _loadAndSelectPlayers() async {
+  Future<void> _loadAndSelectPlayers({bool forceRefresh = false}) async {
     try {
+      // Check cache first
+      final now = DateTime.now();
+      if (!forceRefresh &&
+          _playersLastFetched != null &&
+          _availablePlayers.isNotEmpty &&
+          now.difference(_playersLastFetched!) < _playersCacheDuration) {
+        _logger.log('Using cached player list (${_availablePlayers.length} players)');
+        return;
+      }
+
+      _logger.log('Fetching fresh player list...');
       _availablePlayers = await getPlayers();
+      _playersLastFetched = DateTime.now();
       _logger.log('Loaded ${_availablePlayers.length} players');
 
       // Log each player for debugging
@@ -404,7 +420,7 @@ class MusicAssistantProvider with ChangeNotifier {
 
   /// Refresh the list of available players
   Future<void> refreshPlayers() async {
-    await _loadAndSelectPlayers();
+    await _loadAndSelectPlayers(forceRefresh: true);
   }
 
   // ============================================================================

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/music_assistant_provider.dart';
-import '../providers/music_player_provider.dart';
 import '../models/media_item.dart';
-import '../models/audio_track.dart';
 import 'album_details_screen.dart';
 import 'artist_details_screen.dart';
 
@@ -364,25 +362,19 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _playTrack(Track track) async {
     final maProvider = context.read<MusicAssistantProvider>();
-    final playerProvider = context.read<MusicPlayerProvider>();
 
-    final streamUrl = maProvider.getStreamUrl(
-      track.provider,
-      track.itemId,
-      uri: track.uri,
-      providerMappings: track.providerMappings,
-    );
-    final audioTrack = AudioTrack(
-      id: track.itemId,
-      title: track.name,
-      artist: track.artistsString,
-      album: track.album?.name ?? '',
-      filePath: streamUrl,
-      duration: track.duration,
-    );
+    if (maProvider.selectedPlayer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No player selected')),
+      );
+      return;
+    }
 
-    await playerProvider.setPlaylist([audioTrack]);
-    await playerProvider.play();
+    // Use Music Assistant to play the track on the selected player
+    await maProvider.playTrack(
+      maProvider.selectedPlayer!.playerId,
+      track,
+    );
   }
 
   String _formatDuration(Duration duration) {

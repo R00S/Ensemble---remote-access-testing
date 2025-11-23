@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/music_assistant_provider.dart';
-import '../providers/music_player_provider.dart';
 import '../models/media_item.dart';
-import '../models/audio_track.dart';
 
 class LibraryTracksScreen extends StatelessWidget {
   const LibraryTracksScreen({super.key});
@@ -142,29 +140,22 @@ class LibraryTracksScreen extends StatelessWidget {
     MusicAssistantProvider maProvider,
     int startIndex,
   ) async {
-    final playerProvider = context.read<MusicPlayerProvider>();
     final tracks = maProvider.tracks;
+    if (tracks.isEmpty) return;
 
-    // Convert all tracks to AudioTrack objects
-    final audioTracks = tracks.map((track) {
-      final streamUrl = maProvider.getStreamUrl(
-        track.provider,
-        track.itemId,
-        uri: track.uri,
-        providerMappings: track.providerMappings,
+    if (maProvider.selectedPlayer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No player selected')),
       );
-      return AudioTrack(
-        id: track.itemId,
-        title: track.name,
-        artist: track.artistsString,
-        album: track.album?.name ?? '',
-        filePath: streamUrl,
-        duration: track.duration,
-      );
-    }).toList();
+      return;
+    }
 
-    await playerProvider.setPlaylist(audioTracks, initialIndex: startIndex);
-    await playerProvider.play();
+    // Use Music Assistant to play tracks on the selected player
+    await maProvider.playTracks(
+      maProvider.selectedPlayer!.playerId,
+      tracks,
+      startIndex: startIndex,
+    );
   }
 
   String _formatDuration(Duration duration) {

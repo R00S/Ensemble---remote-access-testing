@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/music_player_provider.dart';
 import '../providers/music_assistant_provider.dart';
-import '../screens/player_screen.dart';
 import '../screens/queue_screen.dart';
 import 'volume_control.dart';
 
@@ -25,7 +23,7 @@ class MiniPlayer extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => const PlayerScreen(),
+            builder: (context) => const QueueScreen(),
           ),
         );
       },

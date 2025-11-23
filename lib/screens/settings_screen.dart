@@ -6,7 +6,6 @@ import '../services/settings_service.dart';
 import '../services/auth_service.dart';
 import '../services/debug_logger.dart';
 import 'debug_log_screen.dart';
-import 'playback_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -537,33 +536,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
 
             const SizedBox(height: 32),
-
-            // Playback settings button
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const PlaybackSettingsScreen(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.high_quality_rounded),
-                label: const Text('Playback & Quality Settings'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white38),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
 
             // Debug logs button
             SizedBox(

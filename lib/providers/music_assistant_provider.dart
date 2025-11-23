@@ -4,16 +4,12 @@ import '../models/media_item.dart';
 import '../models/player.dart';
 import '../services/music_assistant_api.dart';
 import '../services/settings_service.dart';
-import '../services/builtin_player_service.dart';
-import '../services/audio_player_service.dart';
 import '../services/auth_service.dart';
 import '../services/debug_logger.dart';
 import '../services/error_handler.dart';
 
 class MusicAssistantProvider with ChangeNotifier {
   MusicAssistantAPI? _api;
-  BuiltinPlayerService? _builtinPlayer;
-  final AudioPlayerService _audioPlayer = AudioPlayerService();
   final AuthService _authService = AuthService();
   final DebugLogger _logger = DebugLogger();
   MAConnectionState _connectionState = MAConnectionState.disconnected;
@@ -98,19 +94,12 @@ class MusicAssistantProvider with ChangeNotifier {
         notifyListeners();
 
         if (state == MAConnectionState.connected) {
-          // Start built-in player service
-          _builtinPlayer = BuiltinPlayerService(_api!, _audioPlayer);
-          _builtinPlayer!.start();
-
           // Load available players and auto-select
           _loadAndSelectPlayers();
 
           // Auto-load library when connected
           loadLibrary();
         } else if (state == MAConnectionState.disconnected) {
-          // Stop built-in player service
-          _builtinPlayer?.stop();
-          _builtinPlayer = null;
           _availablePlayers = [];
           _selectedPlayer = null;
         }
@@ -129,8 +118,6 @@ class MusicAssistantProvider with ChangeNotifier {
   }
 
   Future<void> disconnect() async {
-    _builtinPlayer?.stop();
-    _builtinPlayer = null;
     _playerStateTimer?.cancel();
     _playerStateTimer = null;
     await _api?.disconnect();
@@ -141,9 +128,6 @@ class MusicAssistantProvider with ChangeNotifier {
     _currentTrack = null;
     notifyListeners();
   }
-
-  /// Get the built-in player ID (the ID of this mobile app as a player)
-  String? get builtinPlayerId => _api?.builtinPlayerId;
 
   Future<void> loadLibrary() async {
     if (!isConnected) return;
@@ -475,18 +459,6 @@ class MusicAssistantProvider with ChangeNotifier {
           }
         }
 
-        // Fall back to builtin player
-        if (playerToSelect == null && builtinPlayerId != null) {
-          try {
-            playerToSelect = _availablePlayers.firstWhere(
-              (p) => p.playerId == builtinPlayerId && p.available,
-            );
-            _logger.log('Selected builtin player: ${playerToSelect.name}');
-          } catch (e) {
-            // Builtin player not found
-          }
-        }
-
         // Final fallback to first available player
         if (playerToSelect == null) {
           playerToSelect = _availablePlayers.firstWhere(
@@ -611,8 +583,6 @@ class MusicAssistantProvider with ChangeNotifier {
   @override
   void dispose() {
     _playerStateTimer?.cancel();
-    _builtinPlayer?.dispose();
-    _audioPlayer.dispose();
     _api?.dispose();
     super.dispose();
   }

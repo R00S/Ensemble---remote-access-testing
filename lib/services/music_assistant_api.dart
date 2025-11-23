@@ -758,6 +758,8 @@ class MusicAssistantAPI {
           final result = response['result'];
           if (result == null) return null;
 
+          _logger.log('🔍 player_queues/items returned ${result is List ? result.length : '?'} items');
+
           // The API returns a List of items directly, not a PlayerQueue object
           final items = <QueueItem>[];
           for (var i in (result as List<dynamic>)) {
@@ -775,8 +777,15 @@ class MusicAssistantAPI {
           }
 
           _logger.log('🎵 Queue has ${items.length} items, currentIndex: $currentIndex');
+
+          // Log first 5 items to see what we got
+          _logger.log('📋 First 5 queue items:');
+          for (var i = 0; i < items.length && i < 5; i++) {
+            _logger.log('  [$i] ${items[i].track.name} - ${items[i].track.artistsString}');
+          }
+
           if (currentIndex != null && currentIndex >= 0 && currentIndex < items.length) {
-            _logger.log('✅ Current track: ${items[currentIndex].track.name}');
+            _logger.log('✅ Current track at index $currentIndex: ${items[currentIndex].track.name}');
           } else if (currentIndex != null) {
             _logger.log('⚠️ Current index $currentIndex is out of range (0-${items.length - 1})');
             currentIndex = null;
@@ -1104,24 +1113,39 @@ class MusicAssistantAPI {
   String? getImageUrl(MediaItem item, {int size = 256}) {
     // Images are in metadata.images as an array
     final images = item.metadata?['images'] as List<dynamic>?;
-    if (images == null || images.isEmpty) return null;
+    if (images == null || images.isEmpty) {
+      _logger.log('⚠️ No images found for ${item.name}');
+      return null;
+    }
 
-    // Try to find a remotely accessible image first, otherwise use first image
+    _logger.log('🖼️ Found ${images.length} images for ${item.name}');
+
+    // Try to find a non-remotely accessible image first (prefer local/opensubsonic)
     Map<String, dynamic>? selectedImage;
     for (var img in images) {
       final imgMap = img as Map<String, dynamic>;
-      if (imgMap['remotely_accessible'] == true) {
+      final provider = imgMap['provider'] as String?;
+
+      // Prefer opensubsonic images over spotify/remote
+      if (provider != null && provider.startsWith('opensubsonic')) {
         selectedImage = imgMap;
+        _logger.log('✅ Selected opensubsonic image: ${imgMap['path']}');
         break;
       }
     }
-    selectedImage ??= images.first as Map<String, dynamic>;
+
+    // If no opensubsonic image, use first image
+    if (selectedImage == null) {
+      selectedImage = images.first as Map<String, dynamic>;
+      _logger.log('ℹ️ Using first image: ${selectedImage['path']} (provider: ${selectedImage['provider']})');
+    }
 
     final imagePath = selectedImage['path'] as String?;
     if (imagePath == null) return null;
 
     // If path is already a full URL, use it directly
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      _logger.log('🔗 Using direct URL: $imagePath');
       return imagePath;
     }
 

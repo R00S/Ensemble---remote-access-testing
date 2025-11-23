@@ -54,12 +54,22 @@ class Player {
         currentItemId ??= currentMedia['queue_item_id'] as String?;
         elapsedTime = (currentMedia['elapsed_time'] as num?)?.toDouble();
         elapsedTimeLastUpdated = (currentMedia['elapsed_time_last_updated'] as num?)?.toDouble();
+
+        if (elapsedTime != null) {
+          print('📊 Player ${json['name']}: elapsed_time from current_media: $elapsedTime seconds');
+        }
       }
     }
 
     // Also check top-level elapsed time fields
-    elapsedTime ??= (json['elapsed_time'] as num?)?.toDouble();
-    elapsedTimeLastUpdated ??= (json['elapsed_time_last_updated'] as num?)?.toDouble();
+    if (elapsedTime == null) {
+      elapsedTime = (json['elapsed_time'] as num?)?.toDouble();
+      elapsedTimeLastUpdated = (json['elapsed_time_last_updated'] as num?)?.toDouble();
+
+      if (elapsedTime != null) {
+        print('📊 Player ${json['name']}: elapsed_time from top-level: $elapsedTime seconds');
+      }
+    }
 
     return Player(
       playerId: json['player_id'] as String,

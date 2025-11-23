@@ -763,13 +763,24 @@ class MusicAssistantAPI {
             currentIndex = items.indexWhere(
               (item) => item.queueItemId == player.currentItemId,
             );
-            if (currentIndex == -1) currentIndex = null;
+            if (currentIndex == -1) {
+              _logger.log('⚠️ Current item ID "${player.currentItemId}" not found in queue');
+              currentIndex = null;
+            } else {
+              _logger.log('✓ Current track at index $currentIndex: ${items[currentIndex].track.name}');
+            }
+          } else {
+            _logger.log('⚠️ Player has no current_item_id');
           }
 
+          // Check if API provides queue metadata
+          // Note: We may need to get this from a different endpoint
           return PlayerQueue(
             playerId: playerId,
             items: items,
-            currentIndex: currentIndex ?? 0, // Default to first item if no current item
+            currentIndex: currentIndex, // Don't default - let it be null if unknown
+            shuffleEnabled: null, // TODO: Get from queue metadata if available
+            repeatMode: null, // TODO: Get from queue metadata if available
           );
         } catch (e) {
           _logger.log('Error getting queue: $e');

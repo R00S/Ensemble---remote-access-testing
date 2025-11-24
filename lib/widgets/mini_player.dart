@@ -5,6 +5,7 @@ import '../screens/now_playing_screen.dart';
 import '../screens/queue_screen.dart';
 import 'volume_control.dart';
 import '../constants/hero_tags.dart';
+import 'animated_icon_button.dart';
 
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key});
@@ -141,8 +142,8 @@ class MiniPlayer extends StatelessWidget {
                     // Volume control (compact mute button)
                     const VolumeControl(compact: true),
                     // Playback controls for selected player
-                    IconButton(
-                      icon: const Icon(Icons.skip_previous_rounded),
+                    AnimatedIconButton(
+                      icon: Icons.skip_previous_rounded,
                       color: Colors.white,
                       iconSize: 26,
                       onPressed: () async {
@@ -158,12 +159,10 @@ class MiniPlayer extends StatelessWidget {
                         }
                       },
                     ),
-                    IconButton(
-                      icon: Icon(
-                        selectedPlayer.isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                      ),
+                    AnimatedIconButton(
+                      icon: selectedPlayer.isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
                       color: Colors.white,
                       iconSize: 32,
                       onPressed: () async {
@@ -179,8 +178,8 @@ class MiniPlayer extends StatelessWidget {
                         }
                       },
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.skip_next_rounded),
+                    AnimatedIconButton(
+                      icon: Icons.skip_next_rounded,
                       color: Colors.white,
                       iconSize: 28,
                       onPressed: () async {

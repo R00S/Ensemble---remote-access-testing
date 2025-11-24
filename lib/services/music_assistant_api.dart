@@ -1001,23 +1001,23 @@ class MusicAssistantAPI {
 
   // Player control commands
   Future<void> pausePlayer(String playerId) async {
-    await _sendPlayerCommand(playerId, 'pause');
+    await _sendQueueCommand(playerId, 'pause');
   }
 
   Future<void> resumePlayer(String playerId) async {
-    await _sendPlayerCommand(playerId, 'play');
+    await _sendQueueCommand(playerId, 'play');
   }
 
   Future<void> nextTrack(String playerId) async {
-    await _sendPlayerCommand(playerId, 'next');
+    await _sendQueueCommand(playerId, 'next');
   }
 
   Future<void> previousTrack(String playerId) async {
-    await _sendPlayerCommand(playerId, 'previous');
+    await _sendQueueCommand(playerId, 'previous');
   }
 
   Future<void> stopPlayer(String playerId) async {
-    await _sendPlayerCommand(playerId, 'stop');
+    await _sendQueueCommand(playerId, 'stop');
   }
 
   /// Set player volume (0-100)
@@ -1085,17 +1085,17 @@ class MusicAssistantAPI {
     }
   }
 
-  Future<void> _sendPlayerCommand(String playerId, String command) async {
+  Future<void> _sendQueueCommand(String queueId, String command) async {
     try {
-      _logger.log('🎮 Sending player command: $command to player $playerId');
+      _logger.log('🎮 Sending queue command: $command to queue $queueId');
       final response = await _sendCommand(
-        'player_command/$command',
-        args: {'player_id': playerId},
+        'player_queues/$command',
+        args: {'queue_id': queueId},
       );
-      _logger.log('✅ Player command $command completed successfully');
+      _logger.log('✅ Queue command $command completed successfully');
       _logger.log('   Response: ${response.toString()}');
     } catch (e) {
-      _logger.log('❌ Error sending player command $command: $e');
+      _logger.log('❌ Error sending queue command $command: $e');
       _logger.log('   Stack trace: ${StackTrace.current}');
       rethrow;
     }

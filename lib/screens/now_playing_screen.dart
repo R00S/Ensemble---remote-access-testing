@@ -6,6 +6,7 @@ import '../models/player.dart';
 import '../widgets/volume_control.dart';
 import 'queue_screen.dart';
 import '../constants/hero_tags.dart';
+import '../widgets/animated_icon_button.dart';
 
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
@@ -273,8 +274,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   ),
                   const SizedBox(width: 12),
                   // Previous
-                  IconButton(
-                    icon: const Icon(Icons.skip_previous_rounded),
+                  AnimatedIconButton(
+                    icon: Icons.skip_previous_rounded,
                     color: Colors.white,
                     iconSize: 42,
                     onPressed: () async {
@@ -292,39 +293,25 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   ),
                   const SizedBox(width: 12),
                   // Play/Pause
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: Icon(
-                        selectedPlayer.isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                      ),
-                      color: const Color(0xFF1a1a1a),
-                      iconSize: 42,
-                      onPressed: () async {
-                        try {
-                          await maProvider.playPauseSelectedPlayer();
-                        } catch (e) {
-                          print('❌ Error in play/pause: $e');
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
-                            );
-                          }
+                  _AnimatedPlayButton(
+                    isPlaying: selectedPlayer.isPlaying,
+                    onPressed: () async {
+                      try {
+                        await maProvider.playPauseSelectedPlayer();
+                      } catch (e) {
+                        print('❌ Error in play/pause: $e');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: $e')),
+                          );
                         }
-                      },
-                    ),
+                      }
+                    },
                   ),
                   const SizedBox(width: 12),
                   // Next
-                  IconButton(
-                    icon: const Icon(Icons.skip_next_rounded),
+                  AnimatedIconButton(
+                    icon: Icons.skip_next_rounded,
                     color: Colors.white,
                     iconSize: 42,
                     onPressed: () async {
@@ -376,5 +363,80 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     final minutes = duration.inMinutes;
     final secs = duration.inSeconds % 60;
     return '${minutes.toString().padLeft(1, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Animated play/pause button with scale animation
+class _AnimatedPlayButton extends StatefulWidget {
+  final bool isPlaying;
+  final VoidCallback onPressed;
+
+  const _AnimatedPlayButton({
+    required this.isPlaying,
+    required this.onPressed,
+  });
+
+  @override
+  State<_AnimatedPlayButton> createState() => _AnimatedPlayButtonState();
+}
+
+class _AnimatedPlayButtonState extends State<_AnimatedPlayButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 100),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.85).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleTap() async {
+    // Animate press
+    await _controller.forward();
+    await _controller.reverse();
+
+    // Call the callback
+    widget.onPressed();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) => _controller.reverse(),
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          width: 72,
+          height: 72,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: Icon(
+              widget.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            ),
+            color: const Color(0xFF1a1a1a),
+            iconSize: 42,
+            onPressed: _handleTap,
+          ),
+        ),
+      ),
+    );
   }
 }

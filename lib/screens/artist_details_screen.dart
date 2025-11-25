@@ -122,8 +122,18 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
     final themeProvider = context.watch<ThemeProvider>();
     final imageUrl = maProvider.getImageUrl(widget.artist, size: 512);
 
-    // Theme colors
-    final colorScheme = Theme.of(context).colorScheme;
+    // Determine if we should use adaptive theme colors
+    final useAdaptiveTheme = themeProvider.adaptiveTheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Get the color scheme to use
+    ColorScheme? adaptiveScheme;
+    if (useAdaptiveTheme) {
+      adaptiveScheme = isDark ? _darkColorScheme : _lightColorScheme;
+    }
+
+    // Use adaptive scheme if available, otherwise use global theme
+    final colorScheme = adaptiveScheme ?? Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(

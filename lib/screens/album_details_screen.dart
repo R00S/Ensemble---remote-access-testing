@@ -166,8 +166,18 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
     final themeProvider = context.watch<ThemeProvider>();
     final imageUrl = maProvider.getImageUrl(widget.album, size: 512);
     
-    // Use theme colors
-    final colorScheme = Theme.of(context).colorScheme;
+    // Determine if we should use adaptive theme colors
+    final useAdaptiveTheme = themeProvider.adaptiveTheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Get the color scheme to use
+    ColorScheme? adaptiveScheme;
+    if (useAdaptiveTheme) {
+      adaptiveScheme = isDark ? _darkColorScheme : _lightColorScheme;
+    }
+
+    // Use adaptive scheme if available, otherwise use global theme
+    final colorScheme = adaptiveScheme ?? Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(

@@ -190,7 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Center(
                 child: Image.asset(
                   'assets/images/attm_long_logo.png',
-                  height: 80,
+                  height: 120,
                   fit: BoxFit.contain,
                   color: colorScheme.onBackground, // Tints the logo to match theme
                 ),

@@ -143,10 +143,11 @@ class MusicAssistantProvider with ChangeNotifier {
       notifyListeners();
 
       // Load artists, albums, and tracks in parallel
+      // Use a high limit to fetch "all" items (assuming library < 5000 items per type)
       final results = await Future.wait([
-        _api!.getArtists(limit: 500),
-        _api!.getAlbums(limit: 500),
-        _api!.getTracks(limit: 500),
+        _api!.getArtists(limit: 5000),
+        _api!.getAlbums(limit: 5000),
+        _api!.getTracks(limit: 5000),
       ]);
 
       _artists = results[0] as List<Artist>;
@@ -173,7 +174,7 @@ class MusicAssistantProvider with ChangeNotifier {
       notifyListeners();
 
       _artists = await _api!.getArtists(
-        limit: limit,
+        limit: limit ?? 5000, // Default to high limit if not specified
         offset: offset,
         search: search,
       );
@@ -203,7 +204,7 @@ class MusicAssistantProvider with ChangeNotifier {
       notifyListeners();
 
       _albums = await _api!.getAlbums(
-        limit: limit,
+        limit: limit ?? 5000, // Default to high limit
         offset: offset,
         search: search,
         artistId: artistId,

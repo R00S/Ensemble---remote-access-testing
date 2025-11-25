@@ -24,13 +24,6 @@ class LogoText extends StatelessWidget {
           fontSize: fontSize,
           fontWeight: FontWeight.bold,
           // Typewriter fonts often don't need extra letter spacing
-          shadows: [
-            Shadow(
-              color: colorScheme.primary.withOpacity(0.5),
-              offset: const Offset(1, 1),
-              blurRadius: 2,
-            ),
-          ],
         ),
       ),
       maxLines: 1,

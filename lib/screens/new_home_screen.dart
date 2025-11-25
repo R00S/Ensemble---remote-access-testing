@@ -21,8 +21,8 @@ class NewHomeScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Padding(
-          padding: EdgeInsets.only(left: 8.0),
-          child: LogoText(fontSize: 24),
+          padding: EdgeInsets.only(left: 16.0), // More padding
+          child: LogoText(fontSize: 28), // Bigger logo
         ),
         titleSpacing: 0,
         centerTitle: false,

@@ -26,13 +26,19 @@ I am not a developer. This application was created using **Claude Code** and **G
 - **Settings Management** - Configure server URL with persistent storage
 
 ### Control Features
-- Clean, minimalistic dark UI design
 - Full playback controls (play/pause/skip/seek) for server players
 - Progress bar with time display
 - Volume control for server players
 - Now playing display with track information
 - Queue management and viewing
-- Multi-player support
+- Multi-player support with device selector
+- Play on... button for quick device selection
+
+### Theming Options
+- **Material You** - Dynamic theming based on your device's wallpaper
+- **Adaptive Theming** - Album artwork-based color schemes
+- **Light/Dark Mode** - System-aware or manual theme selection
+- Clean, minimalistic UI design
 
 ## Screenshots
 
@@ -44,7 +50,7 @@ I am not a developer. This application was created using **Claude Code** and **G
 
 ## Download
 
-Download the latest release from the [Releases page](https://github.com/CollotsSpot/Amass/releases).
+Download the latest release from the [Releases page](https://github.com/CollotsSpot/Assistant-To-The-Music/releases).
 
 ## Setup
 

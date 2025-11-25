@@ -54,21 +54,25 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
   Future<void> _loadArtistAlbums() async {
     final provider = context.read<MusicAssistantProvider>();
 
-    // Load albums for this specific artist
+    // Load albums for this specific artist by filtering
     if (provider.api != null) {
       print('🎵 Loading albums for artist: ${widget.artist.name}');
       print('   Provider: ${widget.artist.provider}');
       print('   ItemId: ${widget.artist.itemId}');
 
-      // Get albums for this artist
-      final artistAlbums = await provider.api!.getAlbums(
-        artistId: widget.artist.itemId,
-      );
+      // Get all albums and filter locally (API filtering not reliable yet)
+      final allAlbums = await provider.api!.getAlbums();
 
-      print('   Got ${artistAlbums.length} albums for this artist');
-      if (artistAlbums.isNotEmpty) {
-        print('   First album: ${artistAlbums.first.name}');
-      }
+      // Filter albums that include this artist
+      final artistAlbums = allAlbums.where((album) {
+        if (album.artists == null) return false;
+        return album.artists!.any((artist) =>
+          artist.itemId == widget.artist.itemId || 
+          artist.name == widget.artist.name // Fallback to name match
+        );
+      }).toList();
+
+      print('   Got ${artistAlbums.length} albums for this artist (from ${allAlbums.length} total)');
 
       setState(() {
         _albums = artistAlbums;

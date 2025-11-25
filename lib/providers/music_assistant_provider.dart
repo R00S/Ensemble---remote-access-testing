@@ -349,7 +349,9 @@ class MusicAssistantProvider with ChangeNotifier {
       
       // Toggle the state
       await _api?.setPower(playerId, !player.powered);
-      // Player state will be updated on next poll
+      
+      // Immediately refresh players to update UI
+      await refreshPlayers();
     } catch (e) {
       ErrorHandler.logError('Toggle power', e);
       // Don't rethrow to avoid crashing UI, just log

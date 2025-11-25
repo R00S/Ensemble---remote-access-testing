@@ -8,6 +8,8 @@ const Color brandAccentColor = Color(0xFF604CEC);
 final ColorScheme brandLightColorScheme = ColorScheme.fromSeed(
   seedColor: brandAccentColor,
   brightness: Brightness.light,
+  background: const Color(0xFFFAFAFA),
+  surface: const Color(0xFFFFFFFF),
 );
 
 final ColorScheme brandDarkColorScheme = ColorScheme.fromSeed(

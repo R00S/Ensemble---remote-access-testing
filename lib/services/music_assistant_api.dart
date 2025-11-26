@@ -429,6 +429,7 @@ class MusicAssistantAPI {
 
       if (items.isNotEmpty) {
         _logger.log('   First recent album: ${items[0]['name']}');
+        _logger.log('   🔍 DEBUG: First album raw data: ${items[0]}');
       }
 
       return items

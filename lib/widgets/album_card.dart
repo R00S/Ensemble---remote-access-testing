@@ -42,7 +42,8 @@ class AlbumCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Album artwork
-          Expanded(
+          AspectRatio(
+            aspectRatio: 1.0,
             child: Hero(
               tag: HeroTags.albumCover + (album.uri ?? album.itemId) + suffix,
               child: Container(

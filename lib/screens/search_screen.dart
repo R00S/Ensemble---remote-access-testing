@@ -7,8 +7,13 @@ import 'artist_details_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   final bool autofocus;
+  final bool isSearchActive;
 
-  const SearchScreen({super.key, this.autofocus = false});
+  const SearchScreen({
+    super.key, 
+    this.autofocus = false,
+    this.isSearchActive = true, // Default to true for backward compatibility
+  });
 
   @override
   State<SearchScreen> createState() => SearchScreenState();
@@ -29,11 +34,27 @@ class SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-focus the search field only if requested
-    if (widget.autofocus) {
+    
+    // Set initial focus capability
+    _focusNode.canRequestFocus = widget.isSearchActive;
+
+    // Auto-focus the search field only if requested and active
+    if (widget.autofocus && widget.isSearchActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _focusNode.requestFocus();
       });
+    }
+  }
+
+  @override
+  void didUpdateWidget(SearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    if (widget.isSearchActive != oldWidget.isSearchActive) {
+      _focusNode.canRequestFocus = widget.isSearchActive;
+      if (!widget.isSearchActive) {
+        _focusNode.unfocus();
+      }
     }
   }
 

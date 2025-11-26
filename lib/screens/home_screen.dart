@@ -39,7 +39,10 @@ class _HomeScreenState extends State<HomeScreen> {
             // Wrap SearchScreen in Focus widget to prevent it from grabbing focus when hidden
             Focus(
               descendantsAreFocusable: _selectedIndex == 2,
-              child: SearchScreen(key: _searchScreenKey),
+              child: SearchScreen(
+                key: _searchScreenKey,
+                isSearchActive: _selectedIndex == 2,
+              ),
             ),
             const SettingsScreen(),
           ],

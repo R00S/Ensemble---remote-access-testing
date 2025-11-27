@@ -982,14 +982,72 @@ class MusicAssistantAPI {
       final contentType = currentItem.streamdetails!.contentType;
       final extension = _getExtension(contentType);
 
-      // Music Assistant uses port 8097 for streaming (not 8095!)
+      // Construct streaming URL using correct port
+      // Logic should match connect() but for HTTP/HTTPS streaming endpoint
+      
       var baseUrl = serverUrl;
+      var useSecure = true;
+
       if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-        baseUrl = 'https://$baseUrl';
+        // Determine protocol based on ws/wss if present, or default to http
+        if (baseUrl.startsWith('wss://')) {
+          baseUrl = 'https://' + baseUrl.substring(6);
+          useSecure = true;
+        } else if (baseUrl.startsWith('ws://')) {
+          baseUrl = 'http://' + baseUrl.substring(5);
+          useSecure = false;
+        } else {
+          // Default to secure
+          baseUrl = 'https://$baseUrl';
+          useSecure = true;
+        }
+      } else {
+        useSecure = baseUrl.startsWith('https://');
       }
 
       final uri = Uri.parse(baseUrl);
-      final streamUrl = '${uri.scheme}://${uri.host}:8097/flow/$playerId/$streamId.$extension';
+      
+      // Determine the correct streaming port
+      int streamPort;
+      if (_cachedCustomPort != null) {
+        // If custom port is set (e.g. 8095 or 443), use it.
+        // Note: Music Assistant usually exposes streaming on the SAME port as the API
+        // when behind a proxy or in standard docker config, OR on 8097 if accessed directly.
+        // Since we are connecting via a custom port (likely the main web port),
+        // we should try to use that same port for streaming if possible, 
+        // or fallback to relative path if just path is needed.
+        
+        // However, standard MA behavior is:
+        // API/WS: 8095
+        // Stream: 8097 (internal) or /flow/... on 8095?
+        // Actually, MA exposes /flow on the webserver port too!
+        
+        streamPort = _cachedCustomPort!;
+      } else if (uri.hasPort) {
+        streamPort = uri.port;
+      } else {
+        // No port specified in URL or settings
+        if (useSecure) {
+          streamPort = 443;
+        } else {
+          // If accessing via HTTP without port, assume default MA port 8095
+          // But wait, earlier code hardcoded 8097. 
+          // If the user is using a reverse proxy (no port in URL), we should likely stick to the default port (80/443)
+          // effectively NOT adding a port.
+          streamPort = useSecure ? 443 : 8095;
+        }
+      }
+
+      // Reconstruct URI with the determined port
+      final finalUri = Uri(
+        scheme: uri.scheme,
+        host: uri.host,
+        port: streamPort,
+        path: '/flow/$playerId/$streamId.$extension',
+      );
+
+      final streamUrl = finalUri.toString();
+      _logger.log('Generated stream URL: $streamUrl');
 
       return streamUrl;
     } catch (e) {

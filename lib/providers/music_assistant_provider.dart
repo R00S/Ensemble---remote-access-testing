@@ -152,14 +152,11 @@ class MusicAssistantProvider with ChangeNotifier {
     final playerId = await SettingsService.getBuiltinPlayerId();
     if (playerId == null) return;
 
-    final isPlaying = _localPlayer.isPlaying;
-    final state = isPlaying ? 'playing' : 'paused'; // Simplified state
     final position = _localPlayer.position.inSeconds.toDouble();
     final duration = _localPlayer.duration.inSeconds.toDouble();
 
     await _api!.updateBuiltinPlayerState(
       playerId,
-      state,
       elapsedTime: position,
       totalTime: duration > 0 ? duration : null,
       powered: _isLocalPlayerPowered,

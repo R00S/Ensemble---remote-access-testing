@@ -14,6 +14,8 @@ class SettingsService {
   static const String _keyCustomColor = 'custom_color';
   static const String _keyLastFmApiKey = 'lastfm_api_key';
   static const String _keyTheAudioDbApiKey = 'theaudiodb_api_key';
+  static const String _keyEnableLocalPlayback = 'enable_local_playback';
+  static const String _keyLocalPlayerName = 'local_player_name';
 
   static Future<String?> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
@@ -185,6 +187,27 @@ class SettingsService {
     } else {
       await prefs.setString(_keyTheAudioDbApiKey, key);
     }
+  }
+
+  // Local Playback Settings
+  static Future<bool> getEnableLocalPlayback() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyEnableLocalPlayback) ?? false;
+  }
+
+  static Future<void> setEnableLocalPlayback(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyEnableLocalPlayback, enabled);
+  }
+
+  static Future<String> getLocalPlayerName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLocalPlayerName) ?? 'Assistant To The Music';
+  }
+
+  static Future<void> setLocalPlayerName(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLocalPlayerName, name);
   }
 
   static Future<void> clearSettings() async {

@@ -1205,6 +1205,62 @@ class MusicAssistantAPI {
     }
   }
 
+  // ============================================================================
+  // BUILT-IN PLAYER MANAGEMENT
+  // ============================================================================
+
+  Stream<Map<String, dynamic>> get builtinPlayerEvents {
+    if (!_eventStreams.containsKey('builtin_player')) {
+      _eventStreams['builtin_player'] = StreamController<Map<String, dynamic>>.broadcast();
+    }
+    return _eventStreams['builtin_player']!.stream;
+  }
+
+  /// Register this device as a player
+  Future<void> registerBuiltinPlayer(String playerId, String name) async {
+    try {
+      _logger.log('Registering built-in player: $playerId ($name)');
+      await _sendCommand(
+        'builtin_player/register', // Corrected command based on ARCHITECTURE.md
+        args: {
+          'player_id': playerId,
+          'name': name,
+          // Capabilities can be added here if needed, e.g., 'can_play_stream': true
+        },
+      );
+    } catch (e) {
+      _logger.log('Error registering built-in player: $e');
+      rethrow; // Rethrow to propagate the error up
+    }
+  }
+  
+  /// Send player state update to server
+  Future<void> updateBuiltinPlayerState(String playerId, String state, {
+    int? volumeLevel, // 0-100
+    bool? volumeMuted,
+    double? elapsedTime, // seconds
+    double? totalTime, // seconds
+  }) async {
+    // This command allows the local player to report its status back to MA
+    // so the server UI updates correctly
+    try {
+      await _sendCommand(
+        'builtin_player/update_state',
+        args: {
+          'player_id': playerId,
+          'state': state, // idle, playing, paused, stopped
+          if (volumeLevel != null) 'volume_level': volumeLevel,
+          if (volumeMuted != null) 'volume_muted': volumeMuted,
+          if (elapsedTime != null) 'elapsed_time': elapsedTime,
+          if (totalTime != null) 'total_time': totalTime,
+        },
+      );
+    } catch (e) {
+      _logger.log('Error updating built-in player state: $e');
+      // Do not rethrow, as state updates are frequent and should not block the app
+    }
+  }
+
   Future<void> _sendQueueCommand(String queueId, String command) async {
     try {
       _logger.log('🎮 Sending queue command: $command to queue $queueId');

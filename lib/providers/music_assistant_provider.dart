@@ -7,11 +7,14 @@ import '../services/settings_service.dart';
 import '../services/auth_service.dart';
 import '../services/debug_logger.dart';
 import '../services/error_handler.dart';
+import '../services/local_player_service.dart';
 
 class MusicAssistantProvider with ChangeNotifier {
   MusicAssistantAPI? _api;
   final AuthService _authService = AuthService();
   final DebugLogger _logger = DebugLogger();
+  final LocalPlayerService _localPlayer = LocalPlayerService();
+  
   MAConnectionState _connectionState = MAConnectionState.disconnected;
   String? _serverUrl;
 
@@ -26,6 +29,11 @@ class MusicAssistantProvider with ChangeNotifier {
   List<Player> _availablePlayers = [];
   Track? _currentTrack; // Current track playing on selected player
   Timer? _playerStateTimer;
+  
+  // Local Playback
+  bool _isLocalPlaybackEnabled = false;
+  StreamSubscription? _localPlayerEventSubscription;
+  Timer? _localPlayerStateReportTimer;
 
   // Player list caching
   DateTime? _playersLastFetched;
@@ -106,7 +114,59 @@ class MusicAssistantProvider with ChangeNotifier {
       }
 
       await connectToServer(_serverUrl!);
+      
+      // Initialize local playback if enabled
+      _isLocalPlaybackEnabled = await SettingsService.getEnableLocalPlayback();
+      if (_isLocalPlaybackEnabled) {
+        await _initializeLocalPlayback();
+      }
     }
+  }
+
+  Future<void> _initializeLocalPlayback() async {
+    await _localPlayer.initialize();
+    if (isConnected) {
+      await _registerLocalPlayer();
+    }
+  }
+
+  Future<void> _registerLocalPlayer() async {
+    if (_api == null) return;
+    
+    final playerId = await SettingsService.getBuiltinPlayerId();
+    final name = await SettingsService.getLocalPlayerName();
+    
+    if (playerId != null) {
+      await _api!.registerBuiltinPlayer(playerId, name);
+      _startReportingLocalPlayerState();
+    }
+  }
+  
+  void _startReportingLocalPlayerState() {
+    _localPlayerStateReportTimer?.cancel();
+    // Report state every second (for smooth seek bar)
+    _localPlayerStateReportTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      await _reportLocalPlayerState();
+    });
+  }
+  
+  Future<void> _reportLocalPlayerState() async {
+    if (_api == null || !_isLocalPlaybackEnabled) return;
+    
+    final playerId = await SettingsService.getBuiltinPlayerId();
+    if (playerId == null) return;
+
+    final isPlaying = _localPlayer.isPlaying;
+    final state = isPlaying ? 'playing' : 'paused'; // Simplified state
+    final position = _localPlayer.position.inSeconds.toDouble();
+    final duration = _localPlayer.duration.inSeconds.toDouble();
+    
+    await _api!.updateBuiltinPlayerState(
+      playerId,
+      state,
+      elapsedTime: position,
+      totalTime: duration > 0 ? duration : null,
+    );
   }
 
   Future<void> connectToServer(String serverUrl) async {
@@ -131,11 +191,20 @@ class MusicAssistantProvider with ChangeNotifier {
 
           // Auto-load library when connected
           loadLibrary();
+          
+          // Re-register local player if enabled
+          if (_isLocalPlaybackEnabled) {
+            _registerLocalPlayer();
+          }
         } else if (state == MAConnectionState.disconnected) {
           _availablePlayers = [];
           _selectedPlayer = null;
         }
       });
+      
+      // Listen to built-in player events
+      _localPlayerEventSubscription?.cancel();
+      _localPlayerEventSubscription = _api!.builtinPlayerEvents.listen(_handleLocalPlayerEvent);
 
       await _api!.connect();
       notifyListeners();
@@ -149,9 +218,78 @@ class MusicAssistantProvider with ChangeNotifier {
     }
   }
 
+  Future<void> _handleLocalPlayerEvent(Map<String, dynamic> event) async {
+    if (!_isLocalPlaybackEnabled) return;
+    
+    _logger.log('📥 Received local player event: ${event['command']}');
+    
+    try {
+      final command = event['command'] as String?;
+      
+      switch (command) {
+        case 'play_media':
+          final url = event['url'] as String?;
+          if (url != null) {
+            await _localPlayer.playUrl(url);
+          }
+          break;
+          
+        case 'stop':
+          await _localPlayer.stop();
+          break;
+          
+        case 'pause':
+          await _localPlayer.pause();
+          break;
+          
+        case 'play':
+          await _localPlayer.play();
+          break;
+          
+        case 'seek':
+          final position = event['position'] as int?;
+          if (position != null) {
+            await _localPlayer.seek(Duration(seconds: position));
+          }
+          break;
+          
+        case 'volume_set':
+          final volume = event['volume_level'] as int?;
+          if (volume != null) {
+            await _localPlayer.setVolume(volume / 100.0);
+          }
+          break;
+      }
+      
+      // Report state immediately after command
+      await _reportLocalPlayerState();
+      
+    } catch (e) {
+      _logger.log('Error handling local player event: $e');
+    }
+  }
+  
+  Future<void> enableLocalPlayback() async {
+    _isLocalPlaybackEnabled = true;
+    await SettingsService.setEnableLocalPlayback(true);
+    await _initializeLocalPlayback();
+    notifyListeners();
+  }
+  
+  Future<void> disableLocalPlayback() async {
+    _isLocalPlaybackEnabled = false;
+    await SettingsService.setEnableLocalPlayback(false);
+    await _localPlayer.stop();
+    _localPlayerStateReportTimer?.cancel();
+    // Ideally unregister from server here if API supports it
+    notifyListeners();
+  }
+
   Future<void> disconnect() async {
     _playerStateTimer?.cancel();
     _playerStateTimer = null;
+    _localPlayerStateReportTimer?.cancel();
+    _localPlayerEventSubscription?.cancel();
     await _api?.disconnect();
     _connectionState = MAConnectionState.disconnected;
     _artists = [];
@@ -494,32 +632,31 @@ class MusicAssistantProvider with ChangeNotifier {
       final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
 
       // Filter out ghost players and duplicates
-      // 1. "Music Assistant Mobile" players are legacy/ghosts
-      // 2. "This Device" players: Only keep the one matching our client ID
+      // 1. "Music Assistant Mobile" players are legacy/ghosts (created by old versions)
+      // 2. Valid players are those matching our current builtinPlayerId (if any)
+      
       int filteredCount = 0;
       final List<String> ghostPlayerIds = [];
 
       _availablePlayers = allPlayers.where((player) {
         final nameLower = player.name.toLowerCase();
 
-        // Legacy ghosts
+        // Filter out legacy "Music Assistant Mobile" ghosts
         if (nameLower.contains('music assistant mobile')) {
           filteredCount++;
           ghostPlayerIds.add('${player.playerId} (Mobile Ghost)');
           return false;
         }
 
-        // Filter "This Device" duplicates
-        if (nameLower.contains('this device')) {
-          // If we have a builtin ID, only keep the player that matches it
-          if (builtinPlayerId != null && player.playerId != builtinPlayerId) {
-            filteredCount++;
-            ghostPlayerIds.add('${player.playerId} (Duplicate This Device)');
-            return false;
-          }
-          // If we don't have a builtin ID yet (rare), or this matches, keep it
+        // "This Device" / Local Players
+        // If this player matches OUR persistent ID, keep it (it's us!)
+        if (builtinPlayerId != null && player.playerId == builtinPlayerId) {
+          return true;
         }
 
+        // If it's some OTHER "This Device" (from another installation/device), keep it too
+        // We only strictly filter the known "Music Assistant Mobile" ghosts
+        
         return true;
       }).toList();
 

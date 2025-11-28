@@ -9,6 +9,7 @@ import '../models/player.dart';
 import 'debug_logger.dart';
 import 'settings_service.dart';
 import 'retry_helper.dart';
+import 'auth/auth_manager.dart';
 
 enum MAConnectionState {
   disconnected,
@@ -19,6 +20,7 @@ enum MAConnectionState {
 
 class MusicAssistantAPI {
   final String serverUrl;
+  final AuthManager authManager;
   WebSocketChannel? _channel;
   final _uuid = const Uuid();
   final _logger = DebugLogger();
@@ -37,7 +39,7 @@ class MusicAssistantAPI {
   // Cached custom port setting
   int? _cachedCustomPort;
 
-  MusicAssistantAPI(this.serverUrl);
+  MusicAssistantAPI(this.serverUrl, this.authManager);
 
   Future<void> connect() async {
     if (_currentState == MAConnectionState.connected ||
@@ -139,16 +141,11 @@ class MusicAssistantAPI {
       _logger.log('Attempting ${useSecure ? "secure (WSS)" : "unsecure (WS)"} connection');
       _logger.log('Final WebSocket URL: $wsUrl');
 
-      // Get authentication token for WebSocket connection
-      final authToken = await SettingsService.getAuthToken();
-      final headers = <String, dynamic>{};
+      // Get authentication headers from AuthManager
+      final headers = authManager.getWebSocketHeaders();
 
-      if (authToken != null && authToken.isNotEmpty && authToken != 'authenticated') {
-        // Add session cookie to WebSocket handshake
-        headers['Cookie'] = 'authelia_session=$authToken';
-        _logger.log('🔑 Adding session cookie to WebSocket handshake');
-      } else if (authToken == 'authenticated') {
-        _logger.log('✓ Authenticated (no cookie needed for WebSocket)');
+      if (headers.isNotEmpty) {
+        _logger.log('🔑 Adding auth headers to WebSocket handshake: ${headers.keys.join(', ')}');
       } else {
         _logger.log('ℹ️ No authentication configured for WebSocket');
       }

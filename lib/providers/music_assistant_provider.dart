@@ -9,12 +9,14 @@ import '../services/auth_service.dart';
 import '../services/debug_logger.dart';
 import '../services/error_handler.dart';
 import '../services/local_player_service.dart';
+import '../services/auth/auth_manager.dart';
 
 class MusicAssistantProvider with ChangeNotifier {
   MusicAssistantAPI? _api;
-  final AuthService _authService = AuthService();
+  final AuthService _authService = AuthService(); // TODO: Remove after full migration
+  final AuthManager _authManager = AuthManager(); // NEW: Universal auth system
   final DebugLogger _logger = DebugLogger();
-  final LocalPlayerService _localPlayer = LocalPlayerService();
+  late final LocalPlayerService _localPlayer;
   
   MAConnectionState _connectionState = MAConnectionState.disconnected;
   String? _serverUrl;
@@ -90,7 +92,11 @@ class MusicAssistantProvider with ChangeNotifier {
   // API access
   MusicAssistantAPI? get api => _api;
 
+  // Auth manager access for login screen
+  AuthManager get authManager => _authManager;
+
   MusicAssistantProvider() {
+    _localPlayer = LocalPlayerService(_authManager);
     _initialize();
   }
 
@@ -183,7 +189,7 @@ class MusicAssistantProvider with ChangeNotifier {
       // Disconnect existing connection
       await _api?.disconnect();
 
-      _api = MusicAssistantAPI(serverUrl);
+      _api = MusicAssistantAPI(serverUrl, _authManager);
 
       // Listen to connection state changes
       _api!.connectionState.listen((state) {

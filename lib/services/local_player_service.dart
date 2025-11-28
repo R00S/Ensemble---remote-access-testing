@@ -3,11 +3,15 @@ import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import 'settings_service.dart';
 import 'debug_logger.dart';
+import 'auth/auth_manager.dart';
 
 class LocalPlayerService {
+  final AuthManager authManager;
   final _player = AudioPlayer();
   final _logger = DebugLogger();
   bool _isInitialized = false;
+
+  LocalPlayerService(this.authManager);
 
   // Expose player state streams
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
@@ -79,16 +83,14 @@ class LocalPlayerService {
   Future<void> playUrl(String url) async {
     try {
       _logger.log('LocalPlayerService: Loading URL: $url');
-      
-      // Get auth token for Authelia
-      final authToken = await SettingsService.getAuthToken();
-      final Map<String, String> headers = {};
-      
-      if (authToken != null && authToken.isNotEmpty && authToken != 'authenticated') {
-        // Critical: Pass the auth cookie to the audio player
-        // This ensures playback works even if the server is behind Authelia
-        headers['Cookie'] = 'authelia_session=$authToken';
-        _logger.log('LocalPlayerService: Added auth cookie to request');
+
+      // Get auth headers from AuthManager
+      final headers = authManager.getStreamingHeaders();
+
+      if (headers.isNotEmpty) {
+        _logger.log('LocalPlayerService: Added auth headers to request: ${headers.keys.join(', ')}');
+      } else {
+        _logger.log('LocalPlayerService: No authentication needed for streaming');
       }
 
       // Create audio source with headers

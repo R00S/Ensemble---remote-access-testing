@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/music_assistant_provider.dart';
 import '../services/settings_service.dart';
-import '../services/auth_service.dart';
+import '../services/auth/auth_strategy.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -17,11 +17,11 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _portController = TextEditingController(text: '8095');
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
 
   bool _isConnecting = false;
-  bool _showAdvanced = false;
-  bool _requiresAuth = false;
+  bool _isDetectingAuth = false;
+  AuthStrategy? _detectedAuthStrategy;
+  String? _detectedAuthType;
   String? _error;
 
   @override
@@ -47,8 +47,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordController.dispose();
     super.dispose();
   }
-  
-  // ... existing code ...
 
   String _normalizeServerUrl(String url) {
     // Remove any trailing slashes
@@ -73,6 +71,80 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // For domain names, default to https://
     return 'https://$url';
+  }
+
+  Future<void> _detectAuthRequirements() async {
+    if (_serverUrlController.text.trim().isEmpty) {
+      setState(() {
+        _error = 'Please enter your Music Assistant server address';
+      });
+      return;
+    }
+
+    setState(() {
+      _isDetectingAuth = true;
+      _error = null;
+      _detectedAuthStrategy = null;
+      _detectedAuthType = null;
+    });
+
+    try {
+      final serverUrl = _normalizeServerUrl(_serverUrlController.text.trim());
+      final provider = context.read<MusicAssistantProvider>();
+
+      // Auto-detect authentication requirements
+      final strategy = await provider.authManager.detectAuthStrategy(serverUrl);
+
+      if (strategy == null) {
+        setState(() {
+          _error = 'Cannot determine authentication requirements. Please check server URL.';
+          _isDetectingAuth = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _detectedAuthStrategy = strategy;
+        _detectedAuthType = _getAuthTypeName(strategy.name);
+        _isDetectingAuth = false;
+      });
+
+      // If no auth required, connect immediately
+      if (strategy.name == 'none') {
+        await _connect();
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Auth detection failed: ${e.toString()}';
+        _isDetectingAuth = false;
+      });
+    }
+  }
+
+  String _getAuthTypeName(String strategyName) {
+    switch (strategyName) {
+      case 'none':
+        return 'No Authentication';
+      case 'basic':
+        return 'HTTP Basic Auth';
+      case 'authelia':
+        return 'Authelia';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  IconData _getAuthIcon(String strategyName) {
+    switch (strategyName) {
+      case 'none':
+        return Icons.lock_open_rounded;
+      case 'basic':
+        return Icons.vpn_key_rounded;
+      case 'authelia':
+        return Icons.shield_rounded;
+      default:
+        return Icons.security_rounded;
+    }
   }
 
   Future<void> _connect() async {
@@ -115,8 +187,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final provider = context.read<MusicAssistantProvider>();
 
-      // Handle authentication if needed
-      if (_requiresAuth) {
+      // Handle authentication based on detected strategy
+      if (_detectedAuthStrategy != null && _detectedAuthStrategy!.name != 'none') {
         final username = _usernameController.text.trim();
         final password = _passwordController.text.trim();
 
@@ -128,9 +200,15 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // Attempt login
-        final token = await _authService.login(serverUrl, username, password);
-        if (token == null) {
+        // Attempt login with detected strategy
+        final success = await provider.authManager.login(
+          serverUrl,
+          username,
+          password,
+          _detectedAuthStrategy!,
+        );
+
+        if (!success) {
           setState(() {
             _error = 'Authentication failed. Please check your credentials.';
             _isConnecting = false;
@@ -138,9 +216,15 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // Save credentials
+        // Save credentials for future auto-login
         await SettingsService.setUsername(username);
         await SettingsService.setPassword(password);
+
+        // Save auth credentials to settings
+        final serialized = provider.authManager.serializeCredentials();
+        if (serialized != null) {
+          await SettingsService.setAuthCredentials(serialized);
+        }
       }
 
       // Connect to server
@@ -177,6 +261,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
+    // Determine if we need auth fields
+    final needsAuth = _detectedAuthStrategy != null && _detectedAuthStrategy!.name != 'none';
+
     return Scaffold(
       backgroundColor: colorScheme.background,
       body: SafeArea(
@@ -193,7 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   'assets/images/attm_long_logo.png',
                   height: 160,
                   fit: BoxFit.contain,
-                  color: colorScheme.onBackground, // Tints the logo to match theme
+                  color: colorScheme.onBackground,
                 ),
               ),
 
@@ -226,13 +313,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: colorScheme.onSurface.withOpacity(0.54),
                   ),
                 ),
-                enabled: !_isConnecting,
+                enabled: !_isConnecting && !_isDetectingAuth,
                 keyboardType: TextInputType.url,
                 textInputAction: TextInputAction.next,
               ),
-              
-              // ... rest of UI ...
-
 
               const SizedBox(height: 24),
 
@@ -263,18 +347,72 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: colorScheme.onSurface.withOpacity(0.54),
                   ),
                 ),
-                enabled: !_isConnecting,
+                enabled: !_isConnecting && !_isDetectingAuth,
                 keyboardType: TextInputType.number,
-                textInputAction: _requiresAuth ? TextInputAction.next : TextInputAction.done,
-                onSubmitted: (_) => _requiresAuth ? null : _connect(),
+                textInputAction: needsAuth ? TextInputAction.next : TextInputAction.done,
+                onSubmitted: (_) => needsAuth ? null : _detectedAuthStrategy == null ? _detectAuthRequirements() : _connect(),
               ),
 
               const SizedBox(height: 24),
 
-              // Authentication fields
-              if (_requiresAuth) ...[
-                const SizedBox(height: 16),
+              // Detected auth method indicator
+              if (_detectedAuthType != null)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: needsAuth
+                        ? colorScheme.primaryContainer.withOpacity(0.3)
+                        : colorScheme.tertiaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: needsAuth
+                          ? colorScheme.primary.withOpacity(0.3)
+                          : colorScheme.tertiary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _getAuthIcon(_detectedAuthStrategy!.name),
+                        color: needsAuth ? colorScheme.primary : colorScheme.tertiary,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Detected: $_detectedAuthType',
+                              style: TextStyle(
+                                color: needsAuth
+                                    ? colorScheme.onPrimaryContainer
+                                    : colorScheme.onTertiaryContainer,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (needsAuth)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'This server requires authentication',
+                                  style: TextStyle(
+                                    color: colorScheme.onPrimaryContainer.withOpacity(0.7),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
+              // Authentication fields (shown only if auth required)
+              if (needsAuth) ...[
                 Text(
                   'Username',
                   style: textTheme.titleMedium?.copyWith(
@@ -338,9 +476,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _connect(),
                 ),
+
+                const SizedBox(height: 16),
               ],
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
 
               // Error message
               if (_error != null)
@@ -366,9 +506,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-              // Connect button
+              // Connect button (changes based on state)
               ElevatedButton(
-                onPressed: _isConnecting ? null : _connect,
+                onPressed: (_isConnecting || _isDetectingAuth)
+                    ? null
+                    : (_detectedAuthStrategy == null ? _detectAuthRequirements : _connect),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colorScheme.primary,
                   foregroundColor: colorScheme.onPrimary,
@@ -378,22 +520,44 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   elevation: 0,
                 ),
-                child: _isConnecting
-                    ? SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
-                        ),
+                child: _isDetectingAuth
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Detecting authentication...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       )
-                    : const Text(
-                        'Connect',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    : _isConnecting
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
+                            ),
+                          )
+                        : Text(
+                            _detectedAuthStrategy == null ? 'Detect & Connect' : 'Connect',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
               ),
             ],
           ),

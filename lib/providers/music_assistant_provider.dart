@@ -235,21 +235,35 @@ class MusicAssistantProvider with ChangeNotifier {
       switch (command) {
         case 'play_media':
           // Server sends 'media_url', relative path
-          final urlPath = event['media_url'] as String? ?? event['url'] as String?;
+          var urlPath = event['media_url'] as String? ?? event['url'] as String?;
 
           _logger.log('🎵 play_media: urlPath=$urlPath, _serverUrl=$_serverUrl');
 
           if (urlPath != null && _serverUrl != null) {
+            // Strip 'builtin_player/' prefix if present
+            // Server sends: builtin_player/flow/... but Traefik routes: /flow/...
+            if (urlPath.startsWith('builtin_player/')) {
+              urlPath = urlPath.substring('builtin_player/'.length);
+              _logger.log('🎵 Stripped builtin_player prefix, new path: $urlPath');
+            }
+
             // Construct full URL
             String fullUrl;
             if (urlPath.startsWith('http')) {
               fullUrl = urlPath;
               _logger.log('🎵 Using absolute URL from server: $fullUrl');
             } else {
+              // Add protocol if not present
+              var baseUrl = _serverUrl!;
+              if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+                baseUrl = 'https://$baseUrl';
+                _logger.log('🎵 Added https:// protocol to baseUrl: $baseUrl');
+              }
+
               // Ensure no double slashes
-              final baseUrl = _serverUrl!.endsWith('/')
-                  ? _serverUrl!.substring(0, _serverUrl!.length - 1)
-                  : _serverUrl!;
+              baseUrl = baseUrl.endsWith('/')
+                  ? baseUrl.substring(0, baseUrl.length - 1)
+                  : baseUrl;
               final path = urlPath.startsWith('/') ? urlPath : '/$urlPath';
               fullUrl = '$baseUrl$path';
               _logger.log('🎵 Constructed URL: baseUrl=$baseUrl + path=$path = $fullUrl');

@@ -235,18 +235,11 @@ class MusicAssistantProvider with ChangeNotifier {
       switch (command) {
         case 'play_media':
           // Server sends 'media_url', relative path
-          var urlPath = event['media_url'] as String? ?? event['url'] as String?;
+          final urlPath = event['media_url'] as String? ?? event['url'] as String?;
 
           _logger.log('🎵 play_media: urlPath=$urlPath, _serverUrl=$_serverUrl');
 
           if (urlPath != null && _serverUrl != null) {
-            // Strip 'builtin_player/' prefix if present
-            // Server sends: builtin_player/flow/... but Traefik routes: /flow/...
-            if (urlPath.startsWith('builtin_player/')) {
-              urlPath = urlPath.substring('builtin_player/'.length);
-              _logger.log('🎵 Stripped builtin_player prefix, new path: $urlPath');
-            }
-
             // Construct full URL
             String fullUrl;
             if (urlPath.startsWith('http')) {

@@ -15,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final GlobalKey<SearchScreenState> _searchScreenKey = GlobalKey<SearchScreenState>();
+  final GlobalKey<ExpandablePlayerState> _playerKey = GlobalKey<ExpandablePlayerState>();
 
   @override
   Widget build(BuildContext context) {
@@ -25,36 +26,41 @@ class _HomeScreenState extends State<HomeScreen> {
       canPop: _selectedIndex == 0,
       onPopInvoked: (didPop) {
         if (didPop) return;
+        // If player is expanded, collapse it first
+        if (_playerKey.currentState?.isExpanded == true) {
+          _playerKey.currentState?.collapse();
+          return;
+        }
         setState(() {
           _selectedIndex = 0;
         });
       },
-      child: Scaffold(
-        backgroundColor: colorScheme.background,
-        body: Stack(
-          children: [
-            // Home and Library use IndexedStack for state preservation
-            Offstage(
-              offstage: _selectedIndex > 1,
-              child: IndexedStack(
-                index: _selectedIndex.clamp(0, 1),
-                children: const [
-                  NewHomeScreen(),
-                  NewLibraryScreen(),
-                ],
-              ),
+      child: Stack(
+        children: [
+          // Main scaffold with bottom nav
+          Scaffold(
+            backgroundColor: colorScheme.background,
+            body: Stack(
+              children: [
+                // Home and Library use IndexedStack for state preservation
+                Offstage(
+                  offstage: _selectedIndex > 1,
+                  child: IndexedStack(
+                    index: _selectedIndex.clamp(0, 1),
+                    children: const [
+                      NewHomeScreen(),
+                      NewLibraryScreen(),
+                    ],
+                  ),
+                ),
+                // Search and Settings are conditionally rendered (removed from tree when not visible)
+                if (_selectedIndex == 2)
+                  SearchScreen(key: _searchScreenKey),
+                if (_selectedIndex == 3)
+                  const SettingsScreen(),
+              ],
             ),
-            // Search and Settings are conditionally rendered (removed from tree when not visible)
-            if (_selectedIndex == 2)
-              SearchScreen(key: _searchScreenKey),
-            if (_selectedIndex == 3)
-              const SettingsScreen(),
-            // Expandable player - positioned above bottom nav, hidden on settings
-            if (_selectedIndex != 3)
-              const ExpandablePlayer(),
-          ],
-        ),
-        bottomNavigationBar: Container(
+            bottomNavigationBar: Container(
               decoration: BoxDecoration(
                 color: colorScheme.surface,
                 boxShadow: [
@@ -111,6 +117,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
+          ),
+          // Expandable player overlay - on top of everything including bottom nav
+          // Hidden on settings screen
+          if (_selectedIndex != 3)
+            ExpandablePlayer(key: _playerKey, hasBottomNav: true),
+        ],
       ),
     );
   }

@@ -14,7 +14,14 @@ import 'volume_control.dart';
 /// This replaces the separate MiniPlayer and NowPlayingScreen with a single
 /// component that animates smoothly between collapsed and expanded states.
 class ExpandablePlayer extends StatefulWidget {
-  const ExpandablePlayer({super.key});
+  /// Whether there's a bottom navigation bar below this player.
+  /// When true, the collapsed player will be positioned above the nav bar.
+  final bool hasBottomNav;
+
+  const ExpandablePlayer({
+    super.key,
+    this.hasBottomNav = false,
+  });
 
   @override
   State<ExpandablePlayer> createState() => ExpandablePlayerState();
@@ -229,6 +236,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     // Primary accent color for buttons/sliders
     final primaryColor = adaptiveScheme?.primary ?? Colors.white;
 
+    // Bottom nav bar height (standard is ~56 + safe area)
+    const bottomNavHeight = 56.0;
+    final collapsedBottomOffset = widget.hasBottomNav
+        ? bottomNavHeight + bottomPadding + _collapsedMargin
+        : _collapsedMargin;
+
     // Calculate dimensions based on expansion
     final collapsedWidth = screenSize.width - (_collapsedMargin * 2);
     final expandedWidth = screenSize.width;
@@ -240,7 +253,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
     // Margins shrink to zero when expanded
     final horizontalMargin = lerpDouble(_collapsedMargin, 0, expandProgress);
-    final bottomMargin = lerpDouble(_collapsedMargin, 0, expandProgress);
+    // Bottom offset: above nav bar when collapsed, at screen bottom when expanded
+    final bottomOffset = lerpDouble(collapsedBottomOffset, 0, expandProgress);
 
     // Border radius shrinks when expanded
     final borderRadius = lerpDouble(_collapsedBorderRadius, 0, expandProgress);
@@ -253,7 +267,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     return Positioned(
       left: horizontalMargin,
       right: horizontalMargin,
-      bottom: bottomMargin,
+      bottom: bottomOffset,
       child: GestureDetector(
         onTap: () {
           if (!isExpanded) expand();

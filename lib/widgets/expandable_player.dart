@@ -415,7 +415,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   Positioned(
                     left: 24,
                     right: 24,
-                    top: artistTop + 28,
+                    top: artistTop! + 28,
                     child: Opacity(
                       opacity: ((t - 0.3) / 0.7).clamp(0.0, 1.0),
                       child: Text(

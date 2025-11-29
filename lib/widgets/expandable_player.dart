@@ -236,18 +236,28 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final primaryColor = adaptiveScheme?.primary ?? Colors.white;
 
     // Container dimensions
-    // Always account for bottom nav bar space so it remains visible
     const bottomNavHeight = 56.0;
-    final bottomNavSpace = bottomNavHeight + bottomPadding;
 
-    final collapsedBottomOffset = bottomNavSpace + _collapsedMargin;
-    // When expanded, stay above the bottom nav bar
-    final expandedBottomOffset = bottomNavSpace;
+    // Calculate offsets based on whether bottom nav exists
+    final double collapsedBottomOffset;
+    final double expandedBottomOffset;
+    final double expandedHeight;
+
+    if (widget.hasBottomNav) {
+      // With bottom nav: position above it, stay above it when expanded
+      final bottomNavSpace = bottomNavHeight + bottomPadding;
+      collapsedBottomOffset = bottomNavSpace + _collapsedMargin;
+      expandedBottomOffset = bottomNavSpace;
+      expandedHeight = screenSize.height - bottomNavSpace;
+    } else {
+      // Without bottom nav: just use safe area padding
+      collapsedBottomOffset = bottomPadding + _collapsedMargin;
+      expandedBottomOffset = 0; // Go to very bottom when expanded
+      expandedHeight = screenSize.height; // Full screen
+    }
 
     final collapsedWidth = screenSize.width - (_collapsedMargin * 2);
     final width = lerpDouble(collapsedWidth, screenSize.width, t);
-    // Expanded height should not cover bottom nav
-    final expandedHeight = screenSize.height - bottomNavSpace;
     final height = lerpDouble(_collapsedHeight, expandedHeight, t);
     final horizontalMargin = lerpDouble(_collapsedMargin, 0, t);
     final bottomOffset = lerpDouble(collapsedBottomOffset, expandedBottomOffset, t);
@@ -302,7 +312,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final controlsRight = collapsedControlsRight; // Only used when collapsed
 
     // Vertical: in collapsed, center the 34px play button in 64px height
-    final collapsedControlsTop = (_collapsedHeight - 34) / 2 - 4; // Adjust up for visual centering
+    final collapsedControlsTop = (_collapsedHeight - 34) / 2 - 6; // Adjust up for visual centering
     final expandedControlsTop = expandedArtistTop + 100;
     final controlsTop = lerpDouble(collapsedControlsTop, expandedControlsTop, t);
 

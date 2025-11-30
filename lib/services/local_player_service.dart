@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import 'debug_logger.dart';
 import 'auth/auth_manager.dart';
-import 'audio_handler.dart';
 import '../main.dart' show audioHandler;
 
 /// Metadata for the currently playing track
@@ -27,35 +27,125 @@ class LocalPlayerService {
   final _logger = DebugLogger();
   bool _isInitialized = false;
 
+  // Fallback player when audioHandler is not available
+  AudioPlayer? _fallbackPlayer;
+
   // Current track metadata for notifications
   TrackMetadata? _currentMetadata;
 
   LocalPlayerService(this.authManager);
 
-  // Expose player state streams from the audio handler
-  Stream<PlayerState> get playerStateStream => audioHandler.playerStateStream;
-  Stream<Duration> get positionStream => audioHandler.positionStream;
-  Stream<Duration?> get durationStream => audioHandler.durationStream;
+  /// Check if we're using the audio handler (with background support) or fallback
+  bool get _useAudioHandler => audioHandler != null;
+
+  // Expose player state streams
+  Stream<PlayerState> get playerStateStream {
+    if (_useAudioHandler) {
+      return audioHandler!.playerStateStream;
+    }
+    return _fallbackPlayer?.playerStateStream ?? const Stream.empty();
+  }
+
+  Stream<Duration> get positionStream {
+    if (_useAudioHandler) {
+      return audioHandler!.positionStream;
+    }
+    return _fallbackPlayer?.positionStream ?? const Stream.empty();
+  }
+
+  Stream<Duration?> get durationStream {
+    if (_useAudioHandler) {
+      return audioHandler!.durationStream;
+    }
+    return _fallbackPlayer?.durationStream ?? const Stream.empty();
+  }
 
   // Current state getters
-  bool get isPlaying => audioHandler.isPlaying;
-  double get volume => audioHandler.volume;
-  PlayerState get playerState => audioHandler.playerState;
-  Duration get position => audioHandler.position;
-  Duration get duration => audioHandler.duration;
+  bool get isPlaying {
+    if (_useAudioHandler) {
+      return audioHandler!.isPlaying;
+    }
+    return _fallbackPlayer?.playing ?? false;
+  }
+
+  double get volume {
+    if (_useAudioHandler) {
+      return audioHandler!.volume;
+    }
+    return _fallbackPlayer?.volume ?? 1.0;
+  }
+
+  PlayerState get playerState {
+    if (_useAudioHandler) {
+      return audioHandler!.playerState;
+    }
+    return _fallbackPlayer?.playerState ?? PlayerState(false, ProcessingState.idle);
+  }
+
+  Duration get position {
+    if (_useAudioHandler) {
+      return audioHandler!.position;
+    }
+    return _fallbackPlayer?.position ?? Duration.zero;
+  }
+
+  Duration get duration {
+    if (_useAudioHandler) {
+      return audioHandler!.duration;
+    }
+    return _fallbackPlayer?.duration ?? Duration.zero;
+  }
 
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     try {
-      // Set auth headers on the audio handler
-      final headers = authManager.getStreamingHeaders();
-      if (headers.isNotEmpty) {
-        audioHandler.setAuthHeaders(headers);
+      if (_useAudioHandler) {
+        // Set auth headers on the audio handler
+        final headers = authManager.getStreamingHeaders();
+        if (headers.isNotEmpty) {
+          audioHandler!.setAuthHeaders(headers);
+        }
+        _logger.log('LocalPlayerService initialized with AudioHandler');
+      } else {
+        // Fallback: create a basic AudioPlayer
+        _fallbackPlayer = AudioPlayer();
+
+        final session = await AudioSession.instance;
+        await session.configure(const AudioSessionConfiguration.music());
+
+        await _fallbackPlayer!.setVolume(1.0);
+
+        // Handle audio interruptions
+        session.interruptionEventStream.listen((event) {
+          if (event.begin) {
+            switch (event.type) {
+              case AudioInterruptionType.duck:
+                _fallbackPlayer?.setVolume(0.5);
+                break;
+              case AudioInterruptionType.pause:
+              case AudioInterruptionType.unknown:
+                _fallbackPlayer?.pause();
+                break;
+            }
+          } else {
+            switch (event.type) {
+              case AudioInterruptionType.duck:
+                _fallbackPlayer?.setVolume(1.0);
+                break;
+              case AudioInterruptionType.pause:
+                _fallbackPlayer?.play();
+                break;
+              case AudioInterruptionType.unknown:
+                break;
+            }
+          }
+        });
+
+        _logger.log('LocalPlayerService initialized with fallback AudioPlayer (no background playback)');
       }
 
       _isInitialized = true;
-      _logger.log('LocalPlayerService initialized with AudioHandler');
     } catch (e) {
       _logger.log('Error initializing LocalPlayerService: $e');
     }
@@ -80,16 +170,26 @@ class LocalPlayerService {
         _logger.log('LocalPlayerService: No authentication needed for streaming');
       }
 
-      // Play via audio handler with metadata for notification
-      await audioHandler.playUrl(
-        url,
-        title: _currentMetadata?.title ?? 'Unknown Track',
-        artist: _currentMetadata?.artist ?? 'Unknown Artist',
-        album: _currentMetadata?.album,
-        artworkUrl: _currentMetadata?.artworkUrl,
-        duration: _currentMetadata?.duration,
-        headers: headers.isNotEmpty ? headers : null,
-      );
+      if (_useAudioHandler) {
+        // Play via audio handler with metadata for notification
+        await audioHandler!.playUrl(
+          url,
+          title: _currentMetadata?.title ?? 'Unknown Track',
+          artist: _currentMetadata?.artist ?? 'Unknown Artist',
+          album: _currentMetadata?.album,
+          artworkUrl: _currentMetadata?.artworkUrl,
+          duration: _currentMetadata?.duration,
+          headers: headers.isNotEmpty ? headers : null,
+        );
+      } else if (_fallbackPlayer != null) {
+        // Fallback: play directly
+        final source = AudioSource.uri(
+          Uri.parse(url),
+          headers: headers.isNotEmpty ? headers : null,
+        );
+        await _fallbackPlayer!.setAudioSource(source);
+        await _fallbackPlayer!.play();
+      }
     } catch (e) {
       _logger.log('LocalPlayerService: Error playing URL: $e');
       rethrow;
@@ -105,38 +205,61 @@ class LocalPlayerService {
     String? artworkUrl,
     Duration? duration,
   }) {
-    audioHandler.updateCurrentMediaItem(
-      id: id,
-      title: title,
-      artist: artist,
-      album: album,
-      artworkUrl: artworkUrl,
-      duration: duration,
-    );
+    if (_useAudioHandler) {
+      audioHandler!.updateCurrentMediaItem(
+        id: id,
+        title: title,
+        artist: artist,
+        album: album,
+        artworkUrl: artworkUrl,
+        duration: duration,
+      );
+    }
+    // No-op for fallback player (no notification support)
   }
 
   Future<void> play() async {
-    await audioHandler.play();
+    if (_useAudioHandler) {
+      await audioHandler!.play();
+    } else {
+      await _fallbackPlayer?.play();
+    }
   }
 
   Future<void> pause() async {
-    await audioHandler.pause();
+    if (_useAudioHandler) {
+      await audioHandler!.pause();
+    } else {
+      await _fallbackPlayer?.pause();
+    }
   }
 
   Future<void> stop() async {
-    await audioHandler.stop();
+    if (_useAudioHandler) {
+      await audioHandler!.stop();
+    } else {
+      await _fallbackPlayer?.stop();
+    }
   }
 
   Future<void> seek(Duration position) async {
-    await audioHandler.seek(position);
+    if (_useAudioHandler) {
+      await audioHandler!.seek(position);
+    } else {
+      await _fallbackPlayer?.seek(position);
+    }
   }
 
   /// Set volume (0.0 to 1.0)
   Future<void> setVolume(double volume) async {
-    await audioHandler.setVolume(volume);
+    if (_useAudioHandler) {
+      await audioHandler!.setVolume(volume);
+    } else {
+      await _fallbackPlayer?.setVolume(volume.clamp(0.0, 1.0));
+    }
   }
 
   void dispose() {
-    // Audio handler is managed globally, don't dispose here
+    _fallbackPlayer?.dispose();
   }
 }

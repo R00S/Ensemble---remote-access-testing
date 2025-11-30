@@ -127,16 +127,18 @@ class MusicAssistantProvider with ChangeNotifier {
     _isLocalPlayerPowered = true; // Default to powered on when enabling local playback
 
     // Wire up notification button callbacks to Music Assistant commands
-    audioHandler.onSkipToNext = () async {
-      if (_selectedPlayer != null) {
-        await nextTrack(_selectedPlayer!.playerId);
-      }
-    };
-    audioHandler.onSkipToPrevious = () async {
-      if (_selectedPlayer != null) {
-        await previousTrack(_selectedPlayer!.playerId);
-      }
-    };
+    if (audioHandler != null) {
+      audioHandler!.onSkipToNext = () async {
+        if (_selectedPlayer != null) {
+          await nextTrack(_selectedPlayer!.playerId);
+        }
+      };
+      audioHandler!.onSkipToPrevious = () async {
+        if (_selectedPlayer != null) {
+          await previousTrack(_selectedPlayer!.playerId);
+        }
+      };
+    }
 
     if (isConnected) {
       await _registerLocalPlayer();

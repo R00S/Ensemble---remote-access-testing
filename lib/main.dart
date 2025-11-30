@@ -12,13 +12,19 @@ import 'theme/system_theme_helper.dart';
 import 'widgets/global_player_overlay.dart';
 
 /// Global audio handler instance for background playback
-late MassivAudioHandler audioHandler;
+MassivAudioHandler? audioHandler;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize audio service for background playback and notifications
-  audioHandler = await initAudioHandler();
+  // Wrapped in try-catch to prevent app crash if audio service fails
+  try {
+    audioHandler = await initAudioHandler();
+  } catch (e) {
+    print('Failed to initialize audio handler: $e');
+    // App will continue without background playback
+  }
 
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([

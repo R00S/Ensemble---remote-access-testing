@@ -10,7 +10,6 @@ import '../services/debug_logger.dart';
 import '../services/error_handler.dart';
 import '../services/local_player_service.dart';
 import '../services/auth/auth_manager.dart';
-import '../main.dart' show audioHandler;
 
 class MusicAssistantProvider with ChangeNotifier {
   MusicAssistantAPI? _api;
@@ -126,19 +125,8 @@ class MusicAssistantProvider with ChangeNotifier {
     await _localPlayer.initialize();
     _isLocalPlayerPowered = true; // Default to powered on when enabling local playback
 
-    // Wire up notification button callbacks to Music Assistant commands
-    if (audioHandler != null) {
-      audioHandler!.onSkipToNext = () async {
-        if (_selectedPlayer != null) {
-          await nextTrack(_selectedPlayer!.playerId);
-        }
-      };
-      audioHandler!.onSkipToPrevious = () async {
-        if (_selectedPlayer != null) {
-          await previousTrack(_selectedPlayer!.playerId);
-        }
-      };
-    }
+    // Note: With just_audio_background, skip next/previous are handled via
+    // the notification controls automatically when we implement them
 
     if (isConnected) {
       await _registerLocalPlayer();

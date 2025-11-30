@@ -1271,11 +1271,12 @@ class MusicAssistantAPI {
         _logger.log('   - ${player.name} (${player.playerId})');
       }
 
-      // Remove each ghost player
+      // Remove each ghost player using players/remove (not builtin_player/unregister)
+      // The unregister endpoint only disconnects but doesn't delete from storage
       int removedCount = 0;
       for (final player in ghostPlayers) {
         try {
-          await unregisterBuiltinPlayer(player.playerId);
+          await removePlayer(player.playerId);
           removedCount++;
           _logger.log('✅ Removed: ${player.name}');
         } catch (e) {
@@ -1317,17 +1318,10 @@ class MusicAssistantAPI {
 
     for (final player in unavailablePlayers) {
       try {
-        _logger.log('   Removing: ${player.name} (${player.playerId})');
-        // Try unregister for builtin players
-        if (player.provider == 'builtin_player' ||
-            player.name.toLowerCase().contains('massiv') ||
-            player.name.toLowerCase().contains('this device') ||
-            player.name.toLowerCase().contains('assistant to the music')) {
-          await unregisterBuiltinPlayer(player.playerId);
-        } else {
-          // Use generic player remove for other types
-          await _removePlayer(player.playerId);
-        }
+        _logger.log('   Removing: ${player.name} (${player.playerId}) via players/remove');
+        // Use players/remove for ALL player types - this actually deletes from storage
+        // Note: builtin_player/unregister only disconnects but doesn't delete
+        await removePlayer(player.playerId);
         removedCount++;
         _logger.log('✅ Removed: ${player.name}');
       } catch (e) {
@@ -1340,13 +1334,15 @@ class MusicAssistantAPI {
     return (removedCount, failedCount);
   }
 
-  /// Generic player removal (for non-builtin players)
-  Future<void> _removePlayer(String playerId) async {
+  /// Remove a player from Music Assistant (permanently deletes from storage)
+  Future<void> removePlayer(String playerId) async {
     try {
+      _logger.log('🗑️ Removing player via players/remove: $playerId');
       await _sendCommand(
         'players/remove',
         args: {'player_id': playerId},
       );
+      _logger.log('✅ Player removed successfully');
     } catch (e) {
       _logger.log('❌ Error removing player: $e');
       rethrow;

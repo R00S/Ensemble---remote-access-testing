@@ -479,7 +479,7 @@ class MusicAssistantProvider with ChangeNotifier {
         }
       }
 
-      _pendingTrackMetadata = TrackMetadata(
+      final newMetadata = TrackMetadata(
         title: title,
         artist: artist,
         album: album,
@@ -487,7 +487,15 @@ class MusicAssistantProvider with ChangeNotifier {
         duration: durationSecs != null ? Duration(seconds: durationSecs) : null,
       );
 
+      _pendingTrackMetadata = newMetadata;
       _logger.log('📋 Captured track metadata from player_updated: $title by $artist (image: ${imageUrl ?? "none"})');
+
+      // If player is already playing (play_media arrived first due to race condition),
+      // update the notification with the correct metadata now
+      if (_localPlayer.isPlaying) {
+        _logger.log('📋 Player already playing - updating notification with late-arriving metadata');
+        await _localPlayer.updateNotificationWhilePlaying(newMetadata);
+      }
     } catch (e) {
       _logger.log('Error handling player_updated event: $e');
     }

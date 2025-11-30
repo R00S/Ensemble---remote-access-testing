@@ -202,6 +202,68 @@ class LocalPlayerService {
     _logger.log('LocalPlayerService: Metadata updated for notification');
   }
 
+  /// Update the notification while audio is already playing
+  /// This re-sets the audio source with new metadata at the current position
+  Future<void> updateNotificationWhilePlaying(TrackMetadata metadata) async {
+    if (_player == null) return;
+
+    final currentSource = _player!.audioSource;
+    if (currentSource == null) return;
+
+    // Get current playback state to restore after update
+    final wasPlaying = _player!.playing;
+    final currentPosition = _player!.position;
+
+    _logger.log('LocalPlayerService: Updating notification mid-playback: ${metadata.title} by ${metadata.artist}');
+
+    try {
+      // Get the current URL from the audio source
+      String? currentUrl;
+      if (currentSource is UriAudioSource) {
+        currentUrl = currentSource.uri.toString();
+      } else if (currentSource is ProgressiveAudioSource) {
+        currentUrl = currentSource.uri.toString();
+      }
+
+      if (currentUrl == null) {
+        _logger.log('LocalPlayerService: Cannot get current URL for notification update');
+        return;
+      }
+
+      // Get auth headers
+      final headers = authManager.getStreamingHeaders();
+
+      // Create new audio source with updated metadata
+      final newSource = AudioSource.uri(
+        Uri.parse(currentUrl),
+        headers: headers.isNotEmpty ? headers : null,
+        tag: MediaItem(
+          id: currentUrl,
+          title: metadata.title,
+          artist: metadata.artist,
+          album: metadata.album ?? '',
+          duration: metadata.duration,
+          artUri: metadata.artworkUrl != null
+              ? Uri.parse(metadata.artworkUrl!)
+              : null,
+        ),
+      );
+
+      // Set new source and seek to current position
+      await _player!.setAudioSource(newSource, initialPosition: currentPosition);
+
+      // Resume playback if was playing
+      if (wasPlaying) {
+        await _player!.play();
+      }
+
+      _currentMetadata = metadata;
+      _logger.log('LocalPlayerService: Notification updated successfully');
+    } catch (e) {
+      _logger.log('LocalPlayerService: Error updating notification: $e');
+    }
+  }
+
   Future<void> play() async {
     await _player?.play();
   }

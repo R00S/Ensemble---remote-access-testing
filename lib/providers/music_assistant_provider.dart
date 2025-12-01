@@ -152,7 +152,15 @@ class MusicAssistantProvider with ChangeNotifier {
     if (_api == null) return;
 
     try {
+      // First try the standard cleanup (for normally registered players)
       await _api!.cleanupUnavailableBuiltinPlayers();
+
+      // Then do deep cleanup via config API (for orphaned/corrupted configs)
+      // This catches entries that the standard cleanup can't remove
+      final (removed, failed) = await _api!.deepCleanupGhostPlayers();
+      if (removed > 0) {
+        _logger.log('🧹 Deep cleanup removed $removed ghost config(s)');
+      }
     } catch (e) {
       _logger.log('⚠️ Ghost player cleanup failed (non-fatal): $e');
       // Continue - this is non-critical
@@ -202,12 +210,19 @@ class MusicAssistantProvider with ChangeNotifier {
 
     try {
       _logger.log('🧹 User-triggered purge of unavailable players...');
-      final result = await _api!.purgeAllUnavailablePlayers();
+
+      // First try standard purge
+      var (removed, failed) = await _api!.purgeAllUnavailablePlayers();
+
+      // Then do deep cleanup via config API for any orphaned entries
+      final (deepRemoved, deepFailed) = await _api!.deepCleanupGhostPlayers();
+      removed += deepRemoved;
+      failed += deepFailed;
 
       // Force refresh players list after purge (bypass cache)
       await _loadAndSelectPlayers(forceRefresh: true);
 
-      return result;
+      return (removed, failed);
     } catch (e) {
       _logger.log('❌ Purge failed: $e');
       rethrow;

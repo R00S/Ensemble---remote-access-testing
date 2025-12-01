@@ -1435,6 +1435,127 @@ class MusicAssistantAPI {
     }
   }
 
+  // ============================================================================
+  // PLAYER CONFIG API (for ghost cleanup)
+  // ============================================================================
+
+  /// Get all player configs directly from MA's config storage
+  /// This includes configs for players that may not be currently registered/available
+  /// Returns raw config data - useful for finding orphaned/corrupted entries
+  Future<List<Map<String, dynamic>>> getPlayerConfigs() async {
+    try {
+      _logger.log('📋 Getting all player configs from config API...');
+      final result = await _sendCommand('config/players');
+
+      if (result is List) {
+        final configs = result.cast<Map<String, dynamic>>();
+        _logger.log('📋 Got ${configs.length} player configs');
+        return configs;
+      }
+
+      _logger.log('⚠️ Unexpected config/players response type: ${result.runtimeType}');
+      return [];
+    } catch (e) {
+      _logger.log('❌ Error getting player configs: $e');
+      return [];
+    }
+  }
+
+  /// Remove a player config directly from MA's config storage
+  /// This is more powerful than players/remove - it removes the config entry
+  /// even if the player is not currently registered
+  Future<bool> removePlayerConfig(String playerId) async {
+    try {
+      _logger.log('🗑️ Removing player config via config/players/remove: $playerId');
+      await _sendCommand(
+        'config/players/remove',
+        args: {'player_id': playerId},
+      );
+      _logger.log('✅ Player config removed successfully');
+      return true;
+    } catch (e) {
+      _logger.log('❌ Error removing player config: $e');
+      return false;
+    }
+  }
+
+  /// Deep cleanup of ghost players using the config API
+  /// This method removes player configs directly, which works even for
+  /// corrupted or orphaned entries that the regular players/remove can't handle
+  Future<(int, int)> deepCleanupGhostPlayers() async {
+    try {
+      _logger.log('🧹 Starting DEEP cleanup of ghost players via config API...');
+
+      // Get current player ID to avoid deleting ourselves
+      final currentPlayerId = await SettingsService.getBuiltinPlayerId();
+      _logger.log('🧹 Current player ID: $currentPlayerId');
+
+      // Get all player configs (includes orphaned entries)
+      final configs = await getPlayerConfigs();
+      _logger.log('🧹 Found ${configs.length} total player configs');
+
+      // Find ghost candidates - builtin_player configs that aren't our current player
+      // and are either unavailable or match ghost patterns
+      final ghostConfigs = configs.where((config) {
+        final playerId = config['player_id'] as String?;
+        final provider = config['provider'] as String?;
+        final available = config['available'] as bool? ?? false;
+        final defaultName = (config['default_name'] as String? ?? '').toLowerCase();
+        final name = (config['name'] as String? ?? '').toLowerCase();
+
+        // Skip if this is our current player
+        if (playerId == currentPlayerId) return false;
+
+        // Only target builtin_player provider
+        if (provider != 'builtin_player') return false;
+
+        // Target unavailable players
+        if (!available) return true;
+
+        // Also target available duplicates with ghost-like names
+        // (multiple "Chris' Phone" entries suggest ghost accumulation)
+        final isGhostName = defaultName.contains('phone') ||
+                           defaultName.contains('this device') ||
+                           name.contains('phone') ||
+                           name.contains('this device');
+
+        // If it's a ghost name pattern and there might be duplicates, flag it
+        // We'll be conservative and only remove unavailable ones automatically
+        return false; // Only remove unavailable by default
+      }).toList();
+
+      if (ghostConfigs.isEmpty) {
+        _logger.log('✅ No ghost player configs found');
+        return (0, 0);
+      }
+
+      _logger.log('🗑️ Found ${ghostConfigs.length} ghost config(s) to remove:');
+      for (final config in ghostConfigs) {
+        _logger.log('   - ${config['default_name'] ?? config['name']} (${config['player_id']})');
+      }
+
+      int removedCount = 0;
+      int failedCount = 0;
+
+      for (final config in ghostConfigs) {
+        final playerId = config['player_id'] as String?;
+        if (playerId == null) continue;
+
+        if (await removePlayerConfig(playerId)) {
+          removedCount++;
+        } else {
+          failedCount++;
+        }
+      }
+
+      _logger.log('✅ Deep cleanup complete - removed $removedCount, failed $failedCount');
+      return (removedCount, failedCount);
+    } catch (e) {
+      _logger.log('❌ Error during deep ghost cleanup: $e');
+      return (0, 0);
+    }
+  }
+
   /// Send player state update to server
   /// Fixed: Server expects state as a dataclass object, not a string
   /// See: music_assistant_models.builtin_player.BuiltinPlayerState

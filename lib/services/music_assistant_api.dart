@@ -1496,34 +1496,29 @@ class MusicAssistantAPI {
       final configs = await getPlayerConfigs();
       _logger.log('🧹 Found ${configs.length} total player configs');
 
-      // Find ghost candidates - builtin_player configs that aren't our current player
-      // and are either unavailable or match ghost patterns
+      // Find ghost candidates - builtin_player or ensemble_ players that aren't our current player
+      // and are unavailable
       final ghostConfigs = configs.where((config) {
         final playerId = config['player_id'] as String?;
         final provider = config['provider'] as String?;
         final available = config['available'] as bool? ?? false;
-        final defaultName = (config['default_name'] as String? ?? '').toLowerCase();
-        final name = (config['name'] as String? ?? '').toLowerCase();
+
+        if (playerId == null) return false;
 
         // Skip if this is our current player
         if (playerId == currentPlayerId) return false;
 
-        // Only target builtin_player provider
-        if (provider != 'builtin_player') return false;
+        // Target ensemble_ prefixed players (our app's players) that are unavailable
+        final isEnsemblePlayer = playerId.startsWith('ensemble_');
 
-        // Target unavailable players
-        if (!available) return true;
+        // Also target builtin_player provider
+        final isBuiltinPlayer = provider == 'builtin_player';
 
-        // Also target available duplicates with ghost-like names
-        // (multiple "Chris' Phone" entries suggest ghost accumulation)
-        final isGhostName = defaultName.contains('phone') ||
-                           defaultName.contains('this device') ||
-                           name.contains('phone') ||
-                           name.contains('this device');
+        // Must be one of our player types
+        if (!isEnsemblePlayer && !isBuiltinPlayer) return false;
 
-        // If it's a ghost name pattern and there might be duplicates, flag it
-        // We'll be conservative and only remove unavailable ones automatically
-        return false; // Only remove unavailable by default
+        // Only remove if unavailable (ghost/orphaned)
+        return !available;
       }).toList();
 
       if (ghostConfigs.isEmpty) {

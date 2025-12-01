@@ -88,16 +88,16 @@ class MusicAssistantAPI {
         useSecure = wsUrl.startsWith('wss://');
       }
 
-      // Get or generate a device-based client ID to prevent ghost players
-      // This ID is consistent across app sessions
+      // Get client ID for WebSocket connection
+      // For fresh installs, we use a temporary session ID - the real player ID
+      // will be determined after connection when we can check for adoptable ghosts
       var clientId = await SettingsService.getBuiltinPlayerId();
 
-      // ONLY generate new ID if we truly don't have one
-      // Previously, checking isUsingLegacyId() caused new IDs on every reconnect!
       if (clientId == null) {
-        _logger.log('No existing player ID found, generating new one...');
-        clientId = await DeviceIdService.migrateToDeviceId();
-        _logger.log('Generated new client ID: $clientId');
+        // Fresh install - use a temporary session ID for now
+        // The actual player ID will be set during registration after ghost adoption check
+        clientId = 'session_${_uuid.v4()}';
+        _logger.log('Fresh install - using temporary session ID: $clientId');
       } else {
         _logger.log('Using existing client ID: $clientId');
       }

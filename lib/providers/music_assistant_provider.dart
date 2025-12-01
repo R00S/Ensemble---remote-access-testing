@@ -245,13 +245,22 @@ class MusicAssistantProvider with ChangeNotifier {
   Future<void> _registerLocalPlayer() async {
     if (_api == null) return;
 
-    final playerId = await SettingsService.getBuiltinPlayerId();
-    final name = await SettingsService.getLocalPlayerName();
+    // Get or generate player ID
+    // By this point, ghost adoption has already been attempted, so if we still
+    // don't have an ID, we need to generate one
+    var playerId = await SettingsService.getBuiltinPlayerId();
 
-    if (playerId != null) {
-      await _api!.registerBuiltinPlayer(playerId, name);
-      _startReportingLocalPlayerState();
+    if (playerId == null) {
+      // No ID yet (fresh install, no ghost was adopted) - generate now
+      _logger.log('🆔 No player ID after adoption check, generating new one...');
+      playerId = await DeviceIdService.getOrCreateDevicePlayerId();
+      await SettingsService.setBuiltinPlayerId(playerId);
+      _logger.log('🆔 Generated and saved new player ID: $playerId');
     }
+
+    final name = await SettingsService.getLocalPlayerName();
+    await _api!.registerBuiltinPlayer(playerId, name);
+    _startReportingLocalPlayerState();
   }
   
   void _startReportingLocalPlayerState() {

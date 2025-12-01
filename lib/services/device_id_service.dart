@@ -79,4 +79,33 @@ class DeviceIdService {
 
     return newId;
   }
+
+  /// Adopt an existing player ID (used when claiming a ghost player)
+  /// This replaces the current installation ID with the adopted one
+  static Future<void> adoptPlayerId(String playerId) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    _logger.log('Adopting existing player ID: $playerId');
+
+    // Store as both new and legacy keys for compatibility
+    await prefs.setString(_keyLocalPlayerId, playerId);
+    await prefs.setString(_legacyKeyBuiltinPlayerId, playerId);
+
+    _logger.log('Successfully adopted player ID: $playerId');
+  }
+
+  /// Check if this is a fresh installation (no player ID stored yet)
+  static Future<bool> isFreshInstallation() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Check if ANY player ID exists
+    final localId = prefs.getString(_keyLocalPlayerId);
+    final legacyDeviceId = prefs.getString(_legacyKeyDevicePlayerId);
+    final legacyBuiltinId = prefs.getString(_legacyKeyBuiltinPlayerId);
+
+    final isFresh = localId == null && legacyDeviceId == null && legacyBuiltinId == null;
+    _logger.log('Is fresh installation: $isFresh');
+
+    return isFresh;
+  }
 }

@@ -10,6 +10,7 @@ import '../services/debug_logger.dart';
 import '../services/error_handler.dart';
 import '../services/local_player_service.dart';
 import '../services/auth/auth_manager.dart';
+import '../services/device_id_service.dart';
 import '../main.dart' show audioHandler;
 
 class MusicAssistantProvider with ChangeNotifier {
@@ -158,6 +159,42 @@ class MusicAssistantProvider with ChangeNotifier {
     }
   }
 
+  /// Try to adopt an existing ghost player instead of creating a new one
+  /// This prevents ghost player accumulation when the app is reinstalled
+  /// Returns true if a ghost was adopted, false otherwise
+  Future<bool> _tryAdoptGhostPlayer() async {
+    if (_api == null) return false;
+
+    try {
+      // Get owner name - needed to find matching ghost players
+      final ownerName = await SettingsService.getOwnerName();
+      if (ownerName == null || ownerName.isEmpty) {
+        _logger.log('👻 No owner name set, cannot adopt ghost player');
+        return false;
+      }
+
+      // Look for an adoptable ghost player matching the owner name
+      final adoptableId = await _api!.findAdoptableGhostPlayer(ownerName);
+      if (adoptableId == null) {
+        _logger.log('👻 No matching ghost player found for "$ownerName"');
+        return false;
+      }
+
+      // Found a ghost player - adopt its ID
+      _logger.log('👻 Adopting ghost player ID: $adoptableId');
+      await DeviceIdService.adoptPlayerId(adoptableId);
+
+      // Update settings service cache
+      await SettingsService.setBuiltinPlayerId(adoptableId);
+
+      _logger.log('✅ Successfully adopted ghost player, preventing new ghost creation');
+      return true;
+    } catch (e) {
+      _logger.log('⚠️ Ghost adoption failed (non-fatal): $e');
+      return false;
+    }
+  }
+
   /// Manually purge all unavailable players (user-triggered from settings)
   /// Returns a tuple of (removedCount, failedCount)
   Future<(int, int)> purgeUnavailablePlayers() async {
@@ -254,10 +291,18 @@ class MusicAssistantProvider with ChangeNotifier {
         notifyListeners();
 
         if (state == MAConnectionState.connected) {
-          // Register local player FIRST
+          // Try to adopt an existing ghost player BEFORE registering
+          // This prevents creating new ghosts when reinstalling the app
+          final isFresh = await DeviceIdService.isFreshInstallation();
+          if (isFresh) {
+            _logger.log('👻 Fresh installation detected, checking for adoptable ghost...');
+            await _tryAdoptGhostPlayer();
+          }
+
+          // Register local player (uses adopted ID if available, or generates new)
           await _registerLocalPlayer();
 
-          // Clean up ghost players AFTER registering (so we don't delete ourselves)
+          // Clean up remaining ghost players AFTER registering (so we don't delete ourselves)
           await _cleanupGhostPlayers();
 
           // Load available players and auto-select local player

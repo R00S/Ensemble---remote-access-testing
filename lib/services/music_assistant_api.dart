@@ -1236,7 +1236,7 @@ class MusicAssistantAPI {
   }
 
   /// Clean up unavailable ghost players from old app installations
-  /// Uses builtin_player/unregister which actually removes from MA storage
+  /// Tries players/remove first (permanent deletion), then builtin_player/unregister as fallback
   Future<void> cleanupUnavailableBuiltinPlayers() async {
     try {
       _logger.log('🧹 Starting auto-cleanup of ghost players...');
@@ -1282,23 +1282,40 @@ class MusicAssistantAPI {
 
       _logger.log('🗑️ Found ${ghostPlayers.length} ghost player(s) to clean up:');
       for (final player in ghostPlayers) {
-        _logger.log('   - ${player.name} (${player.playerId})');
+        _logger.log('   - ${player.name} (${player.playerId}) provider=${player.provider}');
       }
 
-      // Unregister each ghost player using builtin_player/unregister
-      // This should actually remove them from MA's storage
+      // Try to remove each ghost player using multiple methods
       int cleanedCount = 0;
       for (final player in ghostPlayers) {
+        bool removed = false;
+
+        // Method 1: Try players/remove (supposedly permanent deletion)
         try {
-          await unregisterBuiltinPlayer(player.playerId);
-          cleanedCount++;
-          _logger.log('✅ Unregistered: ${player.name}');
+          _logger.log('🗑️ Trying players/remove for ${player.name}...');
+          await removePlayer(player.playerId);
+          removed = true;
+          _logger.log('✅ Removed via players/remove: ${player.name}');
         } catch (e) {
-          _logger.log('⚠️ Failed to unregister ${player.name}: $e');
+          _logger.log('⚠️ players/remove failed for ${player.name}: $e');
         }
+
+        // Method 2: If players/remove failed, try builtin_player/unregister
+        if (!removed) {
+          try {
+            _logger.log('🗑️ Trying builtin_player/unregister for ${player.name}...');
+            await unregisterBuiltinPlayer(player.playerId);
+            removed = true;
+            _logger.log('✅ Unregistered via builtin_player/unregister: ${player.name}');
+          } catch (e) {
+            _logger.log('⚠️ builtin_player/unregister also failed for ${player.name}: $e');
+          }
+        }
+
+        if (removed) cleanedCount++;
       }
 
-      _logger.log('✅ Auto-cleanup complete - unregistered $cleanedCount ghost player(s)');
+      _logger.log('✅ Auto-cleanup complete - cleaned $cleanedCount/${ghostPlayers.length} ghost player(s)');
     } catch (e) {
       _logger.log('❌ Error during ghost player cleanup: $e');
       // Don't rethrow - cleanup should be non-fatal
@@ -1346,6 +1363,61 @@ class MusicAssistantAPI {
 
     _logger.log('✅ Purge complete - removed $removedCount, failed $failedCount');
     return (removedCount, failedCount);
+  }
+
+  /// Find an unavailable ghost player that matches the owner name pattern
+  /// Used to "adopt" a previous installation's player ID instead of creating a new ghost
+  /// Returns the player ID to adopt, or null if no match found
+  Future<String?> findAdoptableGhostPlayer(String ownerName) async {
+    try {
+      _logger.log('🔍 Looking for adoptable ghost player for owner: $ownerName');
+
+      final allPlayers = await getPlayers();
+
+      // Build the expected player name pattern (e.g., "Chris' Phone" or "Chris's Phone")
+      final expectedName1 = ownerName.endsWith('s')
+          ? "$ownerName' Phone"
+          : "$ownerName's Phone";
+      final expectedName2 = "$ownerName's Phone"; // Always check this variant too
+
+      _logger.log('🔍 Looking for players named: "$expectedName1" or "$expectedName2"');
+
+      // Find unavailable players that match the name pattern
+      // Prioritize ensemble_ prefixed IDs (our app), then any matching name
+      Player? matchedPlayer;
+
+      for (final player in allPlayers) {
+        if (!player.available) {
+          final nameMatch = player.name == expectedName1 ||
+                           player.name == expectedName2 ||
+                           player.name.toLowerCase() == expectedName1.toLowerCase() ||
+                           player.name.toLowerCase() == expectedName2.toLowerCase();
+
+          if (nameMatch) {
+            _logger.log('🔍 Found matching ghost: ${player.name} (${player.playerId})');
+
+            // Prefer ensemble_ prefixed IDs (most recent app version)
+            if (player.playerId.startsWith('ensemble_')) {
+              matchedPlayer = player;
+              break; // Perfect match, stop looking
+            } else if (matchedPlayer == null) {
+              matchedPlayer = player; // Keep looking for better match
+            }
+          }
+        }
+      }
+
+      if (matchedPlayer != null) {
+        _logger.log('✅ Found adoptable player: ${matchedPlayer.name} (${matchedPlayer.playerId})');
+        return matchedPlayer.playerId;
+      }
+
+      _logger.log('🔍 No adoptable ghost player found');
+      return null;
+    } catch (e) {
+      _logger.log('❌ Error finding adoptable ghost player: $e');
+      return null;
+    }
   }
 
   /// Remove a player from Music Assistant (permanently deletes from storage)

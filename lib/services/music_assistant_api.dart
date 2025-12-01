@@ -1437,18 +1437,53 @@ class MusicAssistantAPI {
   }
 
   /// Remove a player from Music Assistant (permanently deletes from storage)
+  /// Tries multiple methods to ensure removal
   Future<void> removePlayer(String playerId) async {
+    _logger.log('🗑️ Attempting to remove player: $playerId');
+
+    // Method 1: players/remove (standard removal)
     try {
-      _logger.log('🗑️ Removing player via players/remove: $playerId');
+      _logger.log('   Method 1: players/remove');
       await _sendCommand(
         'players/remove',
         args: {'player_id': playerId},
       );
-      _logger.log('✅ Player removed successfully');
+      _logger.log('✅ Player removed via players/remove');
+      return;
     } catch (e) {
-      _logger.log('❌ Error removing player: $e');
-      rethrow;
+      _logger.log('⚠️ players/remove failed: $e');
     }
+
+    // Method 2: builtin_player/unregister (for builtin players)
+    if (playerId.startsWith('ensemble_') || playerId.startsWith('ma_')) {
+      try {
+        _logger.log('   Method 2: builtin_player/unregister');
+        await _sendCommand(
+          'builtin_player/unregister',
+          args: {'player_id': playerId},
+        );
+        _logger.log('✅ Player unregistered via builtin_player/unregister');
+        return;
+      } catch (e) {
+        _logger.log('⚠️ builtin_player/unregister failed: $e');
+      }
+    }
+
+    // Method 3: Try remove_group_player in case it's somehow a group
+    try {
+      _logger.log('   Method 3: players/remove_group_player');
+      await _sendCommand(
+        'players/remove_group_player',
+        args: {'player_id': playerId},
+      );
+      _logger.log('✅ Player removed via remove_group_player');
+      return;
+    } catch (e) {
+      _logger.log('⚠️ remove_group_player failed: $e');
+    }
+
+    _logger.log('❌ All removal methods failed for: $playerId');
+    throw Exception('Failed to remove player $playerId - all methods failed');
   }
 
   // ============================================================================

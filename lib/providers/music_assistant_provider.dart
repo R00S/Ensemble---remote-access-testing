@@ -148,10 +148,19 @@ class MusicAssistantProvider with ChangeNotifier {
   /// Try to adopt an existing ghost player instead of creating a new one
   /// This prevents ghost player accumulation when the app is reinstalled
   /// Returns true if a ghost was adopted, false otherwise
+  ///
+  /// IMPORTANT: This should be called BEFORE DeviceIdService generates a new ID
   Future<bool> _tryAdoptGhostPlayer() async {
     if (_api == null) return false;
 
     try {
+      // Only attempt adoption on fresh installs
+      final isFresh = await DeviceIdService.isFreshInstallation();
+      if (!isFresh) {
+        _logger.log('👻 Not a fresh install, skipping ghost adoption');
+        return false;
+      }
+
       // Get owner name - needed to find matching ghost players
       final ownerName = await SettingsService.getOwnerName();
       if (ownerName == null || ownerName.isEmpty) {
@@ -160,18 +169,16 @@ class MusicAssistantProvider with ChangeNotifier {
       }
 
       // Look for an adoptable ghost player matching the owner name
+      _logger.log('👻 Fresh install detected, searching for adoptable ghost for "$ownerName"...');
       final adoptableId = await _api!.findAdoptableGhostPlayer(ownerName);
       if (adoptableId == null) {
-        _logger.log('👻 No matching ghost player found for "$ownerName"');
+        _logger.log('👻 No matching ghost player found - will generate new ID');
         return false;
       }
 
-      // Found a ghost player - adopt its ID
-      _logger.log('👻 Adopting ghost player ID: $adoptableId');
+      // Found a ghost player - adopt its ID BEFORE DeviceIdService generates one
+      _logger.log('👻 Found adoptable ghost: $adoptableId');
       await DeviceIdService.adoptPlayerId(adoptableId);
-
-      // Update settings service cache
-      await SettingsService.setBuiltinPlayerId(adoptableId);
 
       _logger.log('✅ Successfully adopted ghost player, preventing new ghost creation');
       return true;
@@ -217,22 +224,28 @@ class MusicAssistantProvider with ChangeNotifier {
   Future<void> _registerLocalPlayer() async {
     if (_api == null) return;
 
-    // Get or generate player ID
-    // By this point, ghost adoption has already been attempted, so if we still
-    // don't have an ID, we need to generate one
-    var playerId = await SettingsService.getBuiltinPlayerId();
+    try {
+      // Get or generate player ID
+      // DeviceIdService handles the lazy generation pattern
+      final playerId = await DeviceIdService.getOrCreateDevicePlayerId();
+      _logger.log('🆔 Using player ID: $playerId');
 
-    if (playerId == null) {
-      // No ID yet (fresh install, no ghost was adopted) - generate now
-      _logger.log('🆔 No player ID after adoption check, generating new one...');
-      playerId = await DeviceIdService.getOrCreateDevicePlayerId();
+      // Ensure SettingsService cache is in sync
       await SettingsService.setBuiltinPlayerId(playerId);
-      _logger.log('🆔 Generated and saved new player ID: $playerId');
-    }
 
-    final name = await SettingsService.getLocalPlayerName();
-    await _api!.registerBuiltinPlayer(playerId, name);
-    _startReportingLocalPlayerState();
+      final name = await SettingsService.getLocalPlayerName();
+
+      // Register with MA server
+      _logger.log('🎵 Registering player with MA: id=$playerId, name=$name');
+      await _api!.registerBuiltinPlayer(playerId, name);
+
+      _logger.log('✅ Player registration complete');
+      _startReportingLocalPlayerState();
+    } catch (e) {
+      _logger.log('❌ CRITICAL: Player registration failed: $e');
+      // This is a critical error - without registration, the app won't work
+      rethrow;
+    }
   }
   
   void _startReportingLocalPlayerState() {
@@ -287,24 +300,23 @@ class MusicAssistantProvider with ChangeNotifier {
         notifyListeners();
 
         if (state == MAConnectionState.connected) {
-          // Try to adopt an existing ghost player BEFORE registering
-          // This prevents creating new ghosts when reinstalling the app
-          final isFresh = await DeviceIdService.isFreshInstallation();
-          if (isFresh) {
-            _logger.log('👻 Fresh installation detected, checking for adoptable ghost...');
-            await _tryAdoptGhostPlayer();
-          }
+          _logger.log('🔗 WebSocket connected to MA server');
 
-          // Register local player (uses adopted ID if available, or generates new)
+          // STEP 1: Try to adopt an existing ghost player (fresh install only)
+          // This must happen BEFORE DeviceIdService generates a new ID
+          await _tryAdoptGhostPlayer();
+
+          // STEP 2: Register local player
+          // DeviceIdService will use adopted ID if available, or generate new
           await _registerLocalPlayer();
 
-          // Clean up remaining ghost players AFTER registering (so we don't delete ourselves)
+          // STEP 3: Clean up remaining ghost players (after registration)
           await _cleanupGhostPlayers();
 
-          // Load available players and auto-select local player
+          // STEP 4: Load available players and auto-select local player
           await _loadAndSelectPlayers();
 
-          // Auto-load library when connected
+          // STEP 5: Auto-load library when connected
           loadLibrary();
         } else if (state == MAConnectionState.disconnected) {
           _availablePlayers = [];

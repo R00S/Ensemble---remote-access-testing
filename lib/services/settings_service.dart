@@ -9,7 +9,7 @@ class SettingsService {
   static const String _keyAuthCredentials = 'auth_credentials'; // NEW: Serialized auth strategy credentials
   static const String _keyUsername = 'username';
   static const String _keyPassword = 'password';
-  static const String _keyBuiltinPlayerId = 'builtin_player_id';
+  static const String _keyBuiltinPlayerId = 'local_player_id'; // Unified with DeviceIdService
   static const String _keyThemeMode = 'theme_mode';
   static const String _keyUseMaterialTheme = 'use_material_theme';
   static const String _keyAdaptiveTheme = 'adaptive_theme';

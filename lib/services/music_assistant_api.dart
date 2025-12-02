@@ -89,18 +89,10 @@ class MusicAssistantAPI {
       }
 
       // Get client ID for WebSocket connection
-      // For fresh installs, we use a temporary session ID - the real player ID
-      // will be determined after connection when we can check for adoptable ghosts
-      var clientId = await SettingsService.getBuiltinPlayerId();
-
-      if (clientId == null) {
-        // Fresh install - use a temporary session ID for now
-        // The actual player ID will be set during registration after ghost adoption check
-        clientId = 'session_${_uuid.v4()}';
-        _logger.log('Fresh install - using temporary session ID: $clientId');
-      } else {
-        _logger.log('Using existing client ID: $clientId');
-      }
+      // Use a unique session ID for the WebSocket connection itself
+      // The player ID is separate and managed during registration
+      final clientId = 'session_${_uuid.v4()}';
+      _logger.log('Using WebSocket session ID: $clientId');
 
       // Construct WebSocket URL with proper port handling
       final uri = Uri.parse(wsUrl);
@@ -1227,17 +1219,38 @@ class MusicAssistantAPI {
   }
 
   /// Register this device as a player
+  /// CRITICAL: This creates a player config in MA's settings.json
+  /// The server expects: player_id and player_name
+  /// The server SHOULD set: provider=builtin_player, enabled=true, available=true
   Future<void> registerBuiltinPlayer(String playerId, String name) async {
     try {
       _logger.log('🎵 Registering builtin player: id=$playerId, name=$name');
-      await _sendCommand(
+
+      final response = await _sendCommand(
         'builtin_player/register',
         args: {
           'player_id': playerId,
           'player_name': name,  // Server expects 'player_name', not 'name'
         },
       );
+
       _logger.log('✅ Builtin player registered successfully');
+      _logger.log('📊 Registration response: ${response['result']}');
+
+      // VERIFICATION: Check that the player was actually created properly
+      // Wait a moment for server to process, then verify
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final players = await getPlayers();
+      final registeredPlayer = players.where((p) => p.playerId == playerId).firstOrNull;
+
+      if (registeredPlayer == null) {
+        _logger.log('⚠️ WARNING: Player was registered but not found in player list');
+      } else if (!registeredPlayer.available) {
+        _logger.log('⚠️ WARNING: Player registered but marked as unavailable');
+      } else {
+        _logger.log('✅ Verification passed: Player is available in MA');
+      }
     } catch (e) {
       _logger.log('❌ Error registering built-in player: $e');
       rethrow; // Rethrow to propagate the error up

@@ -97,7 +97,49 @@ BUT `onPressed` doesn't fire. This is very unusual - ripple and callback should 
 3. **Flutter bug**: Edge case with IconButton in animated Stack
 4. **Absorption**: Something absorbs the gesture after ripple starts but before callback
 
+### Attempt 7 Result: State context + SnackBar
+- **Result**: FAILED - no SnackBar appeared
+- **Insight**: onPressed not firing despite ripple
+
+### Attempt 8: Swap button functions
+- **Test**: Down arrow → _openQueue, Queue icon → collapse
+- **Result**: Queue icon collapse WORKS, down arrow _openQueue FAILS
+- **Insight**: The `_openQueue` function itself is the problem, not button position
+
+### Attempt 9: QueueScreen fixes (CURRENT)
+- **Root cause found**: `context.read()` called in `initState()` before widget mounted
+- **Fixes applied**:
+  1. Deferred `_loadQueue()` to `WidgetsBinding.instance.addPostFrameCallback`
+  2. Added try/catch around API call with error logging
+  3. Added `mounted` checks throughout async operations
+  4. Added error state UI with retry button
+  5. Removed ReorderableDragStartListener (from earlier)
+- **Result**: PENDING TEST
+
+## Root Cause Analysis
+The QueueScreen was crashing silently in `initState()` because:
+```dart
+// BAD - context not available in initState
+@override
+void initState() {
+  super.initState();
+  _loadQueue();  // This calls context.read() - CRASH!
+}
+```
+
+Fixed to:
+```dart
+// GOOD - defer context access until after first frame
+@override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _loadQueue();
+  });
+}
+```
+
 ## Next Steps
-1. Test SnackBar - if it shows, onPressed fires and issue is navigation
-2. If no SnackBar - need to investigate why ripple shows but callback doesn't fire
-3. Consider using raw `GestureDetector` or `InkWell` instead of `IconButton`
+1. Test the QueueScreen fixes
+2. If still failing, check API getQueue response
+3. Verify Provider is accessible from pushed route context

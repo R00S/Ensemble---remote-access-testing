@@ -170,6 +170,17 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     return '${minutes.toString().padLeft(1, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
+  void _openQueue() {
+    print('🎵 _openQueue called!');
+    // Use the State's context, not the shadowed builder context
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Queue button works!')),
+    );
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(builder: (_) => const QueueScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
@@ -661,12 +672,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                       opacity: ((t - 0.3) / 0.7).clamp(0.0, 1.0),
                       child: IconButton(
                         icon: Icon(Icons.queue_music_rounded, color: textColor, size: 24),
-                        onPressed: () {
-                          print('🎵 Queue button tapped (left side test)!');
-                          Navigator.of(context, rootNavigator: true).push(
-                            MaterialPageRoute(builder: (_) => const QueueScreen()),
-                          );
-                        },
+                        onPressed: () => _openQueue(),
                         padding: const EdgeInsets.all(12),
                       ),
                     ),

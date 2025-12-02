@@ -365,12 +365,17 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 60),
 
               // Logo
-              Center(
-                child: Image.asset(
-                  'assets/images/ensemble_logo.png',
-                  height: 160,
-                  fit: BoxFit.contain,
-                ),
+              Builder(
+                builder: (context) {
+                  final width = MediaQuery.of(context).size.width * 0.3;
+                  return Center(
+                    child: Image.asset(
+                      'assets/images/ensemble_icon_transparent.png',
+                      width: width,
+                      fit: BoxFit.contain,
+                    ),
+                  );
+                },
               ),
 
               const SizedBox(height: 48),

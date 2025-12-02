@@ -72,7 +72,32 @@ Positioned (player container)
                 └── Positioned(left: 56, right: 56) → IgnorePointer → Text (player name)
 ```
 
+### Attempt 6 Result: Left-side position test
+- **Result**: FAILED - button shows ripple but no action
+- **Insight**: Position is NOT the issue. Problem is with the button/callback itself
+
+### Attempt 7: State context + SnackBar verification
+- **Theory**: Shadowed `context` from AnimatedBuilder/Consumer might be invalid for navigation
+- **Fix**:
+  - Created `_openQueue()` method on State class using `this.context`
+  - Added SnackBar to visually confirm if `onPressed` executes at all
+- **Result**: PENDING TEST
+
+## Key Mystery
+IconButton shows ripple (Material ink effect) which means:
+- Hit testing passes
+- The button receives the tap
+- Material widget processes the touch
+
+BUT `onPressed` doesn't fire. This is very unusual - ripple and callback should be tied together.
+
+## Possible Explanations
+1. **Context issue**: Navigation fails silently due to invalid context
+2. **Async issue**: Something in the animation cycle interrupts the callback
+3. **Flutter bug**: Edge case with IconButton in animated Stack
+4. **Absorption**: Something absorbs the gesture after ripple starts but before callback
+
 ## Next Steps
-1. Test left-side position - if works, confirms right-side blocking
-2. If left works: find what's blocking right side
-3. If left doesn't work: investigate navigation/context issues
+1. Test SnackBar - if it shows, onPressed fires and issue is navigation
+2. If no SnackBar - need to investigate why ripple shows but callback doesn't fire
+3. Consider using raw `GestureDetector` or `InkWell` instead of `IconButton`

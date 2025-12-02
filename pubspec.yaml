@@ -51,6 +51,6 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: false
-  image_path: "assets/images/massiv_icon.png"
+  image_path: "assets/images/ensemble_icon.png"
   adaptive_icon_background: "#1a1a1a"
-  adaptive_icon_foreground: "assets/images/massiv_icon.png"
+  adaptive_icon_foreground: "assets/images/ensemble_icon.png"

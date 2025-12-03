@@ -160,30 +160,100 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
   }
 }
 
-/// Startup widget that checks if user is logged in and shows appropriate screen
-class AppStartup extends StatelessWidget {
+/// Startup widget that checks if user is logged in and auto-connects
+class AppStartup extends StatefulWidget {
   const AppStartup({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<String?>(
-      future: SettingsService.getServerUrl(),
-      builder: (context, snapshot) {
-        // Show loading while checking settings
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            backgroundColor: Color(0xFF1a1a1a),
-            body: Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-          );
-        }
+  State<AppStartup> createState() => _AppStartupState();
+}
 
-        // If server URL is saved, go to home screen
-        // Otherwise, show login screen
-        final hasServerUrl = snapshot.data != null && snapshot.data!.isNotEmpty;
-        return hasServerUrl ? const HomeScreen() : const LoginScreen();
-      },
-    );
+class _AppStartupState extends State<AppStartup> {
+  bool _isConnecting = false;
+  String? _savedServerUrl;
+  bool _connectionAttempted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndConnect();
+  }
+
+  Future<void> _checkAndConnect() async {
+    final serverUrl = await SettingsService.getServerUrl();
+
+    if (!mounted) return;
+
+    setState(() {
+      _savedServerUrl = serverUrl;
+    });
+
+    // If we have a saved server URL, attempt auto-connection
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      setState(() {
+        _isConnecting = true;
+      });
+
+      final provider = context.read<MusicAssistantProvider>();
+
+      // Only attempt connection if not already connected
+      if (!provider.isConnected) {
+        print('🚀 AppStartup: Auto-connecting to saved server: $serverUrl');
+        try {
+          await provider.connectToServer(serverUrl);
+          print('🚀 AppStartup: Auto-connection successful');
+        } catch (e) {
+          print('🚀 AppStartup: Auto-connection failed: $e');
+          // Connection failed, but still show home screen
+          // User can manually reconnect from there
+        }
+      } else {
+        print('🚀 AppStartup: Already connected');
+      }
+
+      if (mounted) {
+        setState(() {
+          _isConnecting = false;
+          _connectionAttempted = true;
+        });
+      }
+    } else {
+      setState(() {
+        _connectionAttempted = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Show loading while checking settings or connecting
+    if (!_connectionAttempted || _isConnecting) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF1a1a1a),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(color: Colors.white),
+              if (_isConnecting) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Connecting...',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    // If server URL is saved, go to home screen
+    // Otherwise, show login screen
+    final hasServerUrl = _savedServerUrl != null && _savedServerUrl!.isNotEmpty;
+    return hasServerUrl ? const HomeScreen() : const LoginScreen();
   }
 }

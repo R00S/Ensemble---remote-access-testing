@@ -30,6 +30,11 @@ class SettingsService {
     await prefs.setString(_keyServerUrl, url);
   }
 
+  static Future<void> clearServerUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyServerUrl);
+  }
+
   // Get authentication server URL (returns null if not set, meaning use server URL)
   static Future<String?> getAuthServerUrl() async {
     final prefs = await SharedPreferences.getInstance();

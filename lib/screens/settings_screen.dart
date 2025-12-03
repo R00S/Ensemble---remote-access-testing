@@ -48,7 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await provider.disconnect();
 
     // Clear saved server URL so login screen shows
-    await SettingsService.setServerUrl(null);
+    await SettingsService.clearServerUrl();
 
     if (mounted) {
       // Navigate to login screen and clear the navigation stack

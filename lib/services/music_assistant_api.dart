@@ -1318,41 +1318,53 @@ class MusicAssistantAPI {
     }
   }
 
-  /// Clean up unavailable ghost players
+  /// Clean up ghost players (duplicate app player registrations)
   /// Set `allUnavailable` to true to remove ALL unavailable players (user-triggered)
   /// Set `allUnavailable` to false to only remove app-specific ghosts (auto-cleanup)
+  /// Set `includeAvailable` to true to also remove available ghost players (duplicates)
   /// Returns (removedCount, failedCount)
-  Future<(int, int)> cleanupGhostPlayers({bool allUnavailable = false}) async {
+  Future<(int, int)> cleanupGhostPlayers({
+    bool allUnavailable = false,
+    bool includeAvailable = true,
+  }) async {
     try {
-      final mode = allUnavailable ? 'ALL unavailable' : 'app ghost';
-      _logger.log('🧹 Starting cleanup of $mode players...');
+      _logger.log('🧹 Starting ghost player cleanup...');
+      _logger.log('   Mode: allUnavailable=$allUnavailable, includeAvailable=$includeAvailable');
 
       final allPlayers = await getPlayers();
       final currentPlayerId = await SettingsService.getBuiltinPlayerId();
 
-      // Filter players based on mode
+      // Filter players to find ghosts
       final playersToRemove = allPlayers.where((player) {
-        // Never remove our current player or available players
-        if (player.playerId == currentPlayerId || player.available) return false;
+        // Never remove our current player
+        if (player.playerId == currentPlayerId) return false;
+
+        final id = player.playerId.toLowerCase();
+        final isAppPlayer = id.startsWith('ensemble_') ||
+                            id.startsWith('massiv_') ||
+                            id.startsWith('ma_');
 
         if (allUnavailable) {
           // Remove all unavailable players
-          return true;
+          return !player.available;
         } else {
-          // Only remove app-specific ghosts (ensemble_*, massiv_*, ma_*)
-          final id = player.playerId.toLowerCase();
-          return id.startsWith('ensemble_') ||
-                 id.startsWith('massiv_') ||
-                 id.startsWith('ma_');
+          // Only remove app-specific ghosts
+          if (!isAppPlayer) return false;
+
+          // Remove unavailable app players always
+          if (!player.available) return true;
+
+          // Remove available app players only if includeAvailable is true (duplicates)
+          return includeAvailable;
         }
       }).toList();
 
       if (playersToRemove.isEmpty) {
-        _logger.log('✅ No players to clean up');
+        _logger.log('✅ No ghost players to clean up');
         return (0, 0);
       }
 
-      _logger.log('🗑️ Found ${playersToRemove.length} player(s) to remove');
+      _logger.log('🗑️ Found ${playersToRemove.length} ghost player(s) to remove');
 
       int removedCount = 0;
       int failedCount = 0;
@@ -1360,38 +1372,51 @@ class MusicAssistantAPI {
       for (final player in playersToRemove) {
         try {
           final playerId = player.playerId;
+          _logger.log('🗑️ Removing: ${player.name} (${player.playerId})');
+
+          // For available players, first disable them via config/players/save
+          // This ensures the config is properly updated before removal
+          if (player.available) {
+            try {
+              await _sendCommand('config/players/save', args: {
+                'player_id': playerId,
+                'values': {'enabled': false},
+              });
+              _logger.log('   ✓ Disabled player config');
+            } catch (e) {
+              _logger.log('   ⚠️ Could not disable config (may be corrupt): $e');
+              // Continue anyway - the 3-step process may still work
+            }
+          }
 
           // Step 1: Unregister builtin player (disconnect it)
-          if (playerId.startsWith('ensemble_') || playerId.startsWith('ma_') || playerId.startsWith('massiv_')) {
-            try {
-              await _sendCommand('builtin_player/unregister', args: {'player_id': playerId});
-              _logger.log('   ✓ Unregistered: ${player.name}');
-            } catch (e) {
-              // May already be unregistered, continue
-            }
+          try {
+            await _sendCommand('builtin_player/unregister', args: {'player_id': playerId});
+            _logger.log('   ✓ Unregistered builtin player');
+          } catch (e) {
+            // May already be unregistered or not a builtin player
           }
 
           // Step 2: Remove from player manager (runtime)
           try {
             await _sendCommand('players/remove', args: {'player_id': playerId});
-            _logger.log('   ✓ Removed from manager: ${player.name}');
+            _logger.log('   ✓ Removed from player manager');
           } catch (e) {
-            // May not be in manager, continue
+            // May not be in manager
           }
 
-          // Step 3: Remove persistent config (this is the key step!)
+          // Step 3: Remove persistent config
           try {
             await _sendCommand('config/players/remove', args: {'player_id': playerId});
-            _logger.log('✅ Permanently deleted: ${player.name}');
+            _logger.log('   ✅ Permanently deleted from config');
             removedCount++;
           } catch (e) {
-            // config/players/remove may fail for some player types
-            _logger.log('⚠️ Could not delete config for ${player.name}: $e');
-            // Still count as removed if we got past step 1 & 2
+            _logger.log('   ⚠️ Could not delete config: $e');
+            // Count as partial success - runtime removal worked
             removedCount++;
           }
         } catch (e) {
-          _logger.log('⚠️ Failed to remove ${player.name}: $e');
+          _logger.log('   ❌ Failed to remove ${player.name}: $e');
           failedCount++;
         }
       }
@@ -1400,6 +1425,71 @@ class MusicAssistantAPI {
       return (removedCount, failedCount);
     } catch (e) {
       _logger.log('❌ Error during cleanup: $e');
+      return (0, 0);
+    }
+  }
+
+  /// Repair corrupt player configs by re-saving them with complete data
+  /// This fixes players that have incomplete configs (missing player_id, etc.)
+  /// Returns (repairedCount, failedCount)
+  Future<(int, int)> repairCorruptPlayers() async {
+    try {
+      _logger.log('🔧 Starting corrupt player repair...');
+
+      final allPlayers = await getPlayers();
+      int repairedCount = 0;
+      int failedCount = 0;
+
+      for (final player in allPlayers) {
+        final id = player.playerId.toLowerCase();
+        final isAppPlayer = id.startsWith('ensemble_') ||
+                            id.startsWith('massiv_') ||
+                            id.startsWith('ma_');
+
+        if (!isAppPlayer) continue;
+
+        // Try to save the config - this will fail with error 999 if corrupt
+        try {
+          // First try to get the current config
+          await _sendCommand('config/players/get', args: {'player_id': player.playerId});
+          // If no error, config is OK
+          _logger.log('   ✓ ${player.name}: Config OK');
+        } catch (e) {
+          if (e.toString().contains('999') || e.toString().contains('missing')) {
+            _logger.log('   ⚠️ ${player.name}: Corrupt config detected, attempting repair...');
+
+            try {
+              // Try to save a complete config
+              await _sendCommand('config/players/save', args: {
+                'player_id': player.playerId,
+                'values': {
+                  'enabled': player.available,
+                },
+              });
+              _logger.log('   ✅ ${player.name}: Repaired!');
+              repairedCount++;
+            } catch (repairError) {
+              _logger.log('   ❌ ${player.name}: Repair failed: $repairError');
+              // Try to delete the corrupt entry instead
+              try {
+                await _sendCommand('builtin_player/unregister', args: {'player_id': player.playerId});
+                await _sendCommand('players/remove', args: {'player_id': player.playerId});
+                await _sendCommand('config/players/remove', args: {'player_id': player.playerId});
+                _logger.log('   🗑️ ${player.name}: Deleted corrupt entry');
+                repairedCount++;
+              } catch (deleteError) {
+                _logger.log('   ❌ ${player.name}: Could not delete: $deleteError');
+                failedCount++;
+              }
+            }
+          }
+        }
+      }
+
+      _logger.log('✅ Repair complete - repaired $repairedCount, failed $failedCount');
+      return (repairedCount, failedCount);
+    } catch (e) {
+      _logger.log('❌ Error during repair: $e');
       return (0, 0);
     }
   }

@@ -61,6 +61,7 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
 
     try {
       final allPlayers = await maProvider.getAllPlayersUnfiltered();
+      final currentPlayerId = await maProvider.getCurrentPlayerId();
 
       if (!mounted) return;
 
@@ -68,9 +69,9 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
         context: context,
         builder: (context) => AlertDialog(
           backgroundColor: const Color(0xFF2a2a2a),
-          title: const Text(
-            'All Players (Including Hidden)',
-            style: TextStyle(color: Colors.white),
+          title: Text(
+            'All Players (${allPlayers.length})',
+            style: const TextStyle(color: Colors.white),
           ),
           content: SizedBox(
             width: double.maxFinite,
@@ -79,17 +80,50 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
               itemCount: allPlayers.length,
               itemBuilder: (context, index) {
                 final player = allPlayers[index];
-                final isGhost = player.name.toLowerCase().contains('music assistant mobile');
+                final id = player.playerId.toLowerCase();
+
+                // Detect ghost players: ensemble_*, massiv_*, ma_* prefixes
+                final isAppPlayer = id.startsWith('ensemble_') ||
+                                    id.startsWith('massiv_') ||
+                                    id.startsWith('ma_');
+                final isCurrentPlayer = player.playerId == currentPlayerId;
+                final isGhost = isAppPlayer && !isCurrentPlayer;
+                final isCorrupt = isAppPlayer && !player.available;
+
+                Color cardColor;
+                Color textColor;
+                IconData? trailingIcon;
+                Color? iconColor;
+
+                if (isCurrentPlayer) {
+                  cardColor = Colors.green.withOpacity(0.2);
+                  textColor = Colors.green[300]!;
+                  trailingIcon = Icons.check_circle;
+                  iconColor = Colors.green;
+                } else if (isCorrupt) {
+                  cardColor = Colors.orange.withOpacity(0.2);
+                  textColor = Colors.orange[300]!;
+                  trailingIcon = Icons.error;
+                  iconColor = Colors.orange;
+                } else if (isGhost) {
+                  cardColor = Colors.red.withOpacity(0.2);
+                  textColor = Colors.red[300]!;
+                  trailingIcon = Icons.warning;
+                  iconColor = Colors.red;
+                } else {
+                  cardColor = Colors.white.withOpacity(0.1);
+                  textColor = Colors.white;
+                }
 
                 return Card(
-                  color: isGhost ? Colors.red.withOpacity(0.2) : Colors.white.withOpacity(0.1),
+                  color: cardColor,
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     title: Text(
                       player.name,
                       style: TextStyle(
-                        color: isGhost ? Colors.red[300] : Colors.white,
-                        fontWeight: isGhost ? FontWeight.bold : FontWeight.normal,
+                        color: textColor,
+                        fontWeight: (isGhost || isCurrentPlayer) ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                     subtitle: Column(
@@ -100,13 +134,28 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
                           style: const TextStyle(color: Colors.white70, fontSize: 11),
                         ),
                         Text(
-                          'Available: ${player.available} | State: ${player.state}',
+                          'Available: ${player.available} | Provider: ${player.provider}',
                           style: const TextStyle(color: Colors.white70, fontSize: 11),
                         ),
+                        if (isCurrentPlayer)
+                          const Text(
+                            '← This device',
+                            style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        if (isGhost && !isCorrupt)
+                          const Text(
+                            '⚠️ Ghost player (duplicate)',
+                            style: TextStyle(color: Colors.red, fontSize: 11),
+                          ),
+                        if (isCorrupt)
+                          const Text(
+                            '⚠️ Unavailable/Corrupt',
+                            style: TextStyle(color: Colors.orange, fontSize: 11),
+                          ),
                       ],
                     ),
-                    trailing: isGhost
-                        ? const Icon(Icons.warning, color: Colors.red, size: 20)
+                    trailing: trailingIcon != null
+                        ? Icon(trailingIcon, color: iconColor, size: 20)
                         : null,
                   ),
                 );
@@ -117,7 +166,7 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
             TextButton(
               onPressed: () async {
                 final text = allPlayers.map((p) =>
-                  'Name: ${p.name}\nID: ${p.playerId}\nAvailable: ${p.available}\nState: ${p.state}\n---'
+                  'Name: ${p.name}\nID: ${p.playerId}\nAvailable: ${p.available}\nProvider: ${p.provider}\nState: ${p.state}\n---'
                 ).join('\n');
                 await Clipboard.setData(ClipboardData(text: text));
                 if (context.mounted) {
@@ -167,11 +216,71 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.speaker_group_rounded),
-            onPressed: _showAllPlayers,
-            color: Colors.white,
-            tooltip: 'View all players',
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            tooltip: 'Player tools',
+            onSelected: (value) async {
+              final maProvider = context.read<MusicAssistantProvider>();
+              switch (value) {
+                case 'show_players':
+                  _showAllPlayers();
+                  break;
+                case 'cleanup_ghosts':
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cleaning up ghost players...')),
+                  );
+                  final (removed, failed) = await maProvider.purgeUnavailablePlayers();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Removed $removed ghost(s), $failed failed'),
+                        backgroundColor: failed > 0 ? Colors.orange : Colors.green,
+                      ),
+                    );
+                  }
+                  break;
+                case 'repair_corrupt':
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Repairing corrupt players...')),
+                  );
+                  final (repaired, failedRepair) = await maProvider.repairCorruptPlayers();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Repaired $repaired, $failedRepair failed'),
+                        backgroundColor: failedRepair > 0 ? Colors.orange : Colors.green,
+                      ),
+                    );
+                  }
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'show_players',
+                child: ListTile(
+                  leading: Icon(Icons.speaker_group_rounded),
+                  title: Text('View All Players'),
+                  dense: true,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'cleanup_ghosts',
+                child: ListTile(
+                  leading: Icon(Icons.cleaning_services_rounded),
+                  title: Text('Clean Up Ghosts'),
+                  dense: true,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'repair_corrupt',
+                child: ListTile(
+                  leading: Icon(Icons.build_rounded),
+                  title: Text('Repair Corrupt'),
+                  dense: true,
+                ),
+              ),
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.copy_rounded),

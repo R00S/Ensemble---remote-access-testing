@@ -94,6 +94,17 @@ class MusicAssistantProvider with ChangeNotifier {
     return await getPlayers();
   }
 
+  // Get current device's player ID
+  Future<String?> getCurrentPlayerId() async {
+    return await SettingsService.getBuiltinPlayerId();
+  }
+
+  // Repair corrupt player configs
+  Future<(int, int)> repairCorruptPlayers() async {
+    if (_api == null) return (0, 0);
+    return await _api!.repairCorruptPlayers();
+  }
+
   // API access
   MusicAssistantAPI? get api => _api;
 

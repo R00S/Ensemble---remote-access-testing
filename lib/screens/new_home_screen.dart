@@ -150,10 +150,12 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
 
   Widget _buildConnectedView(
       BuildContext context, MusicAssistantProvider provider) {
-    // Use bounce/stretch physics for iOS-style overscroll
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-      child: Column(
+    // Use Android 12+ stretch overscroll effect
+    return ScrollConfiguration(
+      behavior: const _StretchScrollBehavior(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
         key: _refreshKey,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -189,7 +191,22 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
           ),
           SizedBox(height: BottomSpacing.withMiniPlayer), // Space for bottom nav + mini player
         ],
+        ),
       ),
+    );
+  }
+}
+
+/// Custom scroll behavior that uses Android 12+ stretch overscroll effect
+class _StretchScrollBehavior extends ScrollBehavior {
+  const _StretchScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+      BuildContext context, Widget child, ScrollableDetails details) {
+    return StretchingOverscrollIndicator(
+      axisDirection: details.direction,
+      child: child,
     );
   }
 }

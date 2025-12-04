@@ -84,27 +84,43 @@ class _ArtistRowState extends State<ArtistRow> with AutomaticKeepAliveClientMixi
                 );
               }
 
-              return ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                physics: const BouncingScrollPhysics(),
-                itemCount: artists.length,
-                itemBuilder: (context, index) {
-                  final artist = artists[index];
-                  return Container(
-                    width: 120,
-                    margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: ArtistCard(
-                      artist: artist,
-                      heroTagSuffix: widget.heroTagSuffix,
-                    ),
-                  );
-                },
+              return ScrollConfiguration(
+                behavior: const _StretchScrollBehavior(),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  itemCount: artists.length,
+                  itemBuilder: (context, index) {
+                    final artist = artists[index];
+                    return Container(
+                      width: 120,
+                      margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: ArtistCard(
+                        artist: artist,
+                        heroTagSuffix: widget.heroTagSuffix,
+                      ),
+                    );
+                  },
+                ),
               );
             },
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Custom scroll behavior that uses Android 12+ stretch overscroll effect
+class _StretchScrollBehavior extends ScrollBehavior {
+  const _StretchScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+      BuildContext context, Widget child, ScrollableDetails details) {
+    return StretchingOverscrollIndicator(
+      axisDirection: details.direction,
+      child: child,
     );
   }
 }

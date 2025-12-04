@@ -84,27 +84,43 @@ class _AlbumRowState extends State<AlbumRow> with AutomaticKeepAliveClientMixin 
                 );
               }
 
-              return ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                physics: const BouncingScrollPhysics(),
-                itemCount: albums.length,
-                itemBuilder: (context, index) {
-                  final album = albums[index];
-                  return Container(
-                    width: 150,
-                    margin: const EdgeInsets.symmetric(horizontal: 6.0),
-                    child: AlbumCard(
-                      album: album,
-                      heroTagSuffix: widget.heroTagSuffix,
-                    ),
-                  );
-                },
+              return ScrollConfiguration(
+                behavior: const _StretchScrollBehavior(),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  itemCount: albums.length,
+                  itemBuilder: (context, index) {
+                    final album = albums[index];
+                    return Container(
+                      width: 150,
+                      margin: const EdgeInsets.symmetric(horizontal: 6.0),
+                      child: AlbumCard(
+                        album: album,
+                        heroTagSuffix: widget.heroTagSuffix,
+                      ),
+                    );
+                  },
+                ),
               );
             },
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Custom scroll behavior that uses Android 12+ stretch overscroll effect
+class _StretchScrollBehavior extends ScrollBehavior {
+  const _StretchScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+      BuildContext context, Widget child, ScrollableDetails details) {
+    return StretchingOverscrollIndicator(
+      axisDirection: details.direction,
+      child: child,
     );
   }
 }

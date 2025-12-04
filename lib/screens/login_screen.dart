@@ -487,9 +487,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 24),
 
-              // Your Name - only show if NOT using MA native auth
-              // (MA auth uses display_name from user profile)
-              if (_detectedAuthStrategy?.name != 'music_assistant') ...[
+              // Your Name - only show AFTER auth detection AND only for non-MA auth
+              // (MA auth gets display_name from user profile automatically)
+              // Show for: 'none' (no auth), 'authelia', 'basic_auth', etc.
+              // Hide for: 'music_assistant' (gets name from profile)
+              if (_detectedAuthStrategy != null &&
+                  _detectedAuthStrategy!.name != 'music_assistant') ...[
                 Text(
                   'Your Name',
                   style: textTheme.titleMedium?.copyWith(

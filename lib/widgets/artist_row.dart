@@ -90,9 +90,11 @@ class _ArtistRowState extends State<ArtistRow> with AutomaticKeepAliveClientMixi
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12.0),
                   itemCount: artists.length,
+                  itemExtent: 136, // 120px width + 16px horizontal margins
                   itemBuilder: (context, index) {
                     final artist = artists[index];
                     return Container(
+                      key: ValueKey(artist.uri ?? artist.itemId),
                       width: 120,
                       margin: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: ArtistCard(

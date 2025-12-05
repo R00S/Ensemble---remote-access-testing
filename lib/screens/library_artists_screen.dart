@@ -10,7 +10,7 @@ class LibraryArtistsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<MusicAssistantProvider>();
+    // Use Selector for targeted rebuilds - only rebuild when artists or loading state changes
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -33,20 +33,26 @@ class LibraryArtistsScreen extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: _buildArtistsList(context, provider),
+      body: Selector<MusicAssistantProvider, (List<Artist>, bool)>(
+        selector: (_, provider) => (provider.artists, provider.isLoading),
+        builder: (context, data, _) {
+          final (artists, isLoading) = data;
+          return _buildArtistsList(context, artists, isLoading);
+        },
+      ),
     );
   }
 
-  Widget _buildArtistsList(BuildContext context, MusicAssistantProvider provider) {
+  Widget _buildArtistsList(BuildContext context, List<Artist> artists, bool isLoading) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (provider.isLoading) {
+    if (isLoading) {
       return Center(
         child: CircularProgressIndicator(color: colorScheme.primary),
       );
     }
 
-    if (provider.artists.isEmpty) {
+    if (artists.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -66,7 +72,9 @@ class LibraryArtistsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: provider.loadLibrary,
+              onPressed: () {
+                context.read<MusicAssistantProvider>().loadLibrary();
+              },
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Refresh'),
               style: ElevatedButton.styleFrom(
@@ -83,26 +91,40 @@ class LibraryArtistsScreen extends StatelessWidget {
       color: colorScheme.primary,
       backgroundColor: colorScheme.surface,
       onRefresh: () async {
-        await provider.loadLibrary();
+        await context.read<MusicAssistantProvider>().loadLibrary();
       },
       child: ListView.builder(
-        itemCount: provider.artists.length,
+        key: const PageStorageKey<String>('library_artists_full_list'),
+        cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+        itemCount: artists.length,
         padding: const EdgeInsets.all(8),
         itemBuilder: (context, index) {
-          final artist = provider.artists[index];
-          return _buildArtistTile(context, artist, provider);
+          final artist = artists[index];
+          return _buildArtistTile(
+            context,
+            artist,
+            key: ValueKey(artist.uri ?? artist.itemId),
+          );
         },
       ),
     );
   }
 
-  Widget _buildArtistTile(BuildContext context, Artist artist, MusicAssistantProvider provider) {
+  Widget _buildArtistTile(
+    BuildContext context,
+    Artist artist, {
+    Key? key,
+  }) {
+    final provider = context.read<MusicAssistantProvider>();
     final imageUrl = provider.getImageUrl(artist, size: 128);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return ListTile(
-      leading: CircleAvatar(
+    // RepaintBoundary isolates repaints to individual tiles
+    return RepaintBoundary(
+      child: ListTile(
+        key: key,
+        leading: CircleAvatar(
         radius: 24,
         backgroundColor: colorScheme.surfaceVariant,
         backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
@@ -119,17 +141,18 @@ class LibraryArtistsScreen extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      onTap: () {
-        Navigator.push(
-          context,
-          FadeSlidePageRoute(
-            child: ArtistDetailsScreen(
-              artist: artist,
-              heroTagSuffix: 'library',
+        onTap: () {
+          Navigator.push(
+            context,
+            FadeSlidePageRoute(
+              child: ArtistDetailsScreen(
+                artist: artist,
+                heroTagSuffix: 'library',
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

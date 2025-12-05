@@ -9,7 +9,7 @@ class LibraryAlbumsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<MusicAssistantProvider>();
+    // Use Selector for targeted rebuilds - only rebuild when albums or loading state changes
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -32,20 +32,26 @@ class LibraryAlbumsScreen extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: _buildAlbumsList(context, provider),
+      body: Selector<MusicAssistantProvider, (List<Album>, bool)>(
+        selector: (_, provider) => (provider.albums, provider.isLoading),
+        builder: (context, data, _) {
+          final (albums, isLoading) = data;
+          return _buildAlbumsList(context, albums, isLoading);
+        },
+      ),
     );
   }
 
-  Widget _buildAlbumsList(BuildContext context, MusicAssistantProvider provider) {
+  Widget _buildAlbumsList(BuildContext context, List<Album> albums, bool isLoading) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (provider.isLoading) {
+    if (isLoading) {
       return Center(
         child: CircularProgressIndicator(color: colorScheme.primary),
       );
     }
 
-    if (provider.albums.isEmpty) {
+    if (albums.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -65,7 +71,9 @@ class LibraryAlbumsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: provider.loadLibrary,
+              onPressed: () {
+                context.read<MusicAssistantProvider>().loadLibrary();
+              },
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Refresh'),
               style: ElevatedButton.styleFrom(
@@ -82,9 +90,11 @@ class LibraryAlbumsScreen extends StatelessWidget {
       color: colorScheme.primary,
       backgroundColor: colorScheme.surface,
       onRefresh: () async {
-        await provider.loadLibrary();
+        await context.read<MusicAssistantProvider>().loadLibrary();
       },
       child: GridView.builder(
+        key: const PageStorageKey<String>('library_albums_full_grid'),
+        cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           childAspectRatio: 0.75,
@@ -92,10 +102,11 @@ class LibraryAlbumsScreen extends StatelessWidget {
           mainAxisSpacing: 12,
         ),
         padding: const EdgeInsets.all(12),
-        itemCount: provider.albums.length,
+        itemCount: albums.length,
         itemBuilder: (context, index) {
-          final album = provider.albums[index];
+          final album = albums[index];
           return AlbumCard(
+            key: ValueKey(album.uri ?? album.itemId),
             album: album,
             heroTagSuffix: 'library',
           );

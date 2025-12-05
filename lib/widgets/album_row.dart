@@ -90,9 +90,11 @@ class _AlbumRowState extends State<AlbumRow> with AutomaticKeepAliveClientMixin 
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12.0),
                   itemCount: albums.length,
+                  itemExtent: 162, // 150px width + 12px horizontal margins
                   itemBuilder: (context, index) {
                     final album = albums[index];
                     return Container(
+                      key: ValueKey(album.uri ?? album.itemId),
                       width: 150,
                       margin: const EdgeInsets.symmetric(horizontal: 6.0),
                       child: AlbumCard(

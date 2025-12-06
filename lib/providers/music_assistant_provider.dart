@@ -1482,9 +1482,11 @@ class MusicAssistantProvider with ChangeNotifier {
         _logger.log('   - ${p.name} (${p.playerId}) available=${p.available} powered=${p.powered}');
       }
 
-      // Filter out unavailable players and legacy ghosts
-      // Unavailable players are ghost players from old installations that clutter the list
-      // Users can still see them in MA's web UI if needed
+      // Filter out:
+      // 1. Other devices' ensemble players (only show THIS device's local player)
+      // 2. Unavailable players (ghost players from old installations)
+      // 3. Legacy "Music Assistant Mobile" ghosts
+      // Users can still see all players in MA's web UI if needed
 
       int filteredCount = 0;
 
@@ -1495,6 +1497,18 @@ class MusicAssistantProvider with ChangeNotifier {
         if (nameLower.contains('music assistant mobile')) {
           filteredCount++;
           return false;
+        }
+
+        // Filter out OTHER ensemble players (not this device)
+        // This prevents controlling someone else's phone from your phone
+        if (player.playerId.startsWith('ensemble_')) {
+          if (builtinPlayerId == null || player.playerId != builtinPlayerId) {
+            // This is another device's ensemble player - hide it
+            _logger.log('🚫 Filtering out other device\'s player: ${player.name} (${player.playerId})');
+            filteredCount++;
+            return false;
+          }
+          // This is OUR ensemble player - keep it
         }
 
         // Filter out unavailable players (ghost players from old installations)

@@ -1861,12 +1861,14 @@ class MusicAssistantProvider with ChangeNotifier {
       _selectedPlayer = updatedPlayer;
       stateChanged = true;
 
-      // Only show tracks if player is available and not idle
-      final shouldShowTrack = _selectedPlayer!.available &&
-                             (_selectedPlayer!.state == 'playing' || _selectedPlayer!.state == 'paused');
+      // Show tracks if player is available and has content (playing, paused, or idle with queue)
+      // MA uses 'idle' for paused cast-based players but they still have queue content
+      final isPlayingOrPaused = _selectedPlayer!.state == 'playing' || _selectedPlayer!.state == 'paused';
+      final isIdleWithContent = _selectedPlayer!.state == 'idle' && _selectedPlayer!.powered;
+      final shouldShowTrack = _selectedPlayer!.available && (isPlayingOrPaused || isIdleWithContent);
 
       if (!shouldShowTrack) {
-        // Clear track if player is unavailable or idle
+        // Clear track if player is unavailable or truly off
         if (_currentTrack != null) {
           _currentTrack = null;
           stateChanged = true;

@@ -1710,8 +1710,10 @@ class MusicAssistantProvider with ChangeNotifier {
     if (_api == null) return;
 
     try {
-      // Only fetch if player is playing or paused
-      if (player.state != 'playing' && player.state != 'paused') {
+      // Fetch track info for players that are playing, paused, or idle
+      // MA uses 'idle' for paused cast-based players, but they still have queue info
+      // Only skip if player is explicitly off/unavailable
+      if (!player.available || !player.powered) {
         _playerTrackCache[player.playerId] = null;
         return;
       }

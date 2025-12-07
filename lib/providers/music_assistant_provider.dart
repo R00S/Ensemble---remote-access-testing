@@ -1561,8 +1561,23 @@ class MusicAssistantProvider with ChangeNotifier {
 
         // Only auto-select if NO player is currently selected
         if (playerToSelect == null) {
-          // Priority 1: Local player (this device) - always prefer this
-          if (builtinPlayerId != null) {
+          // Get last selected player from persistent storage
+          final lastSelectedPlayerId = await SettingsService.getLastSelectedPlayerId();
+
+          // Priority 1: Last selected player (persistent across sessions)
+          if (lastSelectedPlayerId != null) {
+            try {
+              playerToSelect = _availablePlayers.firstWhere(
+                (p) => p.playerId == lastSelectedPlayerId && p.available,
+              );
+              _logger.log('🔄 Auto-selected last used player: ${playerToSelect?.name}');
+            } catch (e) {
+              // Last selected player not found or not available
+            }
+          }
+
+          // Priority 2: Local player (this device) - only if no last selection
+          if (playerToSelect == null && builtinPlayerId != null) {
             try {
               playerToSelect = _availablePlayers.firstWhere(
                 (p) => p.playerId == builtinPlayerId && p.available,
@@ -1573,7 +1588,7 @@ class MusicAssistantProvider with ChangeNotifier {
             }
           }
 
-          // Priority 2: A currently playing player
+          // Priority 3: A currently playing player
           if (playerToSelect == null) {
             try {
               playerToSelect = _availablePlayers.firstWhere(
@@ -1584,7 +1599,7 @@ class MusicAssistantProvider with ChangeNotifier {
             }
           }
 
-          // Priority 3: First available player
+          // Priority 4: First available player
           if (playerToSelect == null) {
             playerToSelect = _availablePlayers.firstWhere(
               (p) => p.available,
@@ -1605,6 +1620,9 @@ class MusicAssistantProvider with ChangeNotifier {
   /// Select a player for playback
   void selectPlayer(Player player, {bool skipNotify = false}) {
     _selectedPlayer = player;
+
+    // Persist the selection for next app launch
+    SettingsService.setLastSelectedPlayerId(player.playerId);
 
     // Start polling for player state
     _startPlayerStatePolling();

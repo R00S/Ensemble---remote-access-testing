@@ -239,9 +239,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
           builder: (context, child) {
             return Consumer<MusicAssistantProvider>(
               builder: (context, maProvider, _) {
-                // Only show player if connected and has a track
+                // Only show player if connected and has a selected player
+                // Mini player is now permanent - shows device selector even without a track
                 if (!maProvider.isConnected ||
-                    maProvider.currentTrack == null ||
                     maProvider.selectedPlayer == null) {
                   return const SizedBox.shrink();
                 }

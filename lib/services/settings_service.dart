@@ -20,6 +20,7 @@ class SettingsService {
   static const String _keyEnableLocalPlayback = 'enable_local_playback';
   static const String _keyLocalPlayerName = 'local_player_name';
   static const String _keyOwnerName = 'owner_name';
+  static const String _keyLastSelectedPlayerId = 'last_selected_player_id';
 
   static Future<String?> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
@@ -281,6 +282,21 @@ class SettingsService {
   static Future<void> setOwnerName(String name) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyOwnerName, name.trim());
+  }
+
+  // Last selected player ID - persists user's player selection across sessions
+  static Future<String?> getLastSelectedPlayerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLastSelectedPlayerId);
+  }
+
+  static Future<void> setLastSelectedPlayerId(String? playerId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (playerId == null || playerId.isEmpty) {
+      await prefs.remove(_keyLastSelectedPlayerId);
+    } else {
+      await prefs.setString(_keyLastSelectedPlayerId, playerId);
+    }
   }
 
   // Helper to create player name with possessive apostrophe

@@ -252,6 +252,21 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
   bool get isQueuePanelOpen => _queuePanelController.value > 0.5;
 
+  /// Cycle to the next available player (for swipe gesture)
+  void _cycleToNextPlayer(MusicAssistantProvider maProvider, {bool reverse = false}) {
+    final players = maProvider.availablePlayers.where((p) => p.available).toList();
+    if (players.length <= 1) return;
+
+    final currentIndex = players.indexWhere((p) => p.playerId == maProvider.selectedPlayer?.playerId);
+    int nextIndex;
+    if (reverse) {
+      nextIndex = currentIndex <= 0 ? players.length - 1 : currentIndex - 1;
+    } else {
+      nextIndex = currentIndex >= players.length - 1 ? 0 : currentIndex + 1;
+    }
+    maProvider.selectPlayer(players[nextIndex]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
@@ -261,12 +276,14 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         final selectedPlayer = maProvider.selectedPlayer;
         final currentTrack = maProvider.currentTrack;
 
-        // Don't show if no track or player
-        if (currentTrack == null || selectedPlayer == null) {
+        // Don't show if no player selected
+        if (selectedPlayer == null) {
           return const SizedBox.shrink();
         }
 
-        final imageUrl = maProvider.getImageUrl(currentTrack, size: 512);
+        final imageUrl = currentTrack != null
+            ? maProvider.getImageUrl(currentTrack, size: 512)
+            : null;
 
         // Extract colors for adaptive theme
         if (themeProvider.adaptiveTheme && imageUrl != null) {
@@ -276,6 +293,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         return AnimatedBuilder(
           animation: Listenable.merge([_expandAnimation, _queuePanelAnimation]),
           builder: (context, _) {
+            // If no track is playing, show a compact device selector bar
+            if (currentTrack == null) {
+              return _buildDeviceSelectorBar(context, maProvider, selectedPlayer, themeProvider);
+            }
             return _buildMorphingPlayer(
               context,
               maProvider,
@@ -288,6 +309,151 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         );
       },
     );
+  }
+
+  /// Build a compact device selector bar when no track is playing
+  Widget _buildDeviceSelectorBar(
+    BuildContext context,
+    MusicAssistantProvider maProvider,
+    dynamic selectedPlayer,
+    ThemeProvider themeProvider,
+  ) {
+    final screenSize = MediaQuery.of(context).size;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Get adaptive colors if available
+    final adaptiveScheme = themeProvider.adaptiveTheme
+        ? (isDark ? _darkColorScheme : _lightColorScheme)
+        : null;
+
+    final backgroundColor = themeProvider.adaptiveTheme && adaptiveScheme != null
+        ? adaptiveScheme.primaryContainer
+        : colorScheme.primaryContainer;
+    final textColor = themeProvider.adaptiveTheme && adaptiveScheme != null
+        ? adaptiveScheme.onPrimaryContainer
+        : colorScheme.onPrimaryContainer;
+
+    final bottomNavSpace = _bottomNavHeight + bottomPadding;
+    final bottomOffset = bottomNavSpace + _collapsedMargin;
+    final width = screenSize.width - (_collapsedMargin * 2);
+
+    // Apply slide offset for hiding
+    final slideDownAmount = widget.slideOffset * (_collapsedHeight + bottomOffset + 20);
+    final adjustedBottomOffset = bottomOffset - slideDownAmount;
+
+    final availablePlayers = maProvider.availablePlayers.where((p) => p.available).toList();
+    final hasMultiplePlayers = availablePlayers.length > 1;
+
+    return Positioned(
+      left: _collapsedMargin,
+      right: _collapsedMargin,
+      bottom: adjustedBottomOffset,
+      child: GestureDetector(
+        onHorizontalDragEnd: hasMultiplePlayers ? (details) {
+          if (details.primaryVelocity != null) {
+            if (details.primaryVelocity! < -300) {
+              // Swipe left - next device
+              _cycleToNextPlayer(maProvider);
+            } else if (details.primaryVelocity! > 300) {
+              // Swipe right - previous device
+              _cycleToNextPlayer(maProvider, reverse: true);
+            }
+          }
+        } : null,
+        child: Material(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(_collapsedBorderRadius),
+          elevation: 4,
+          shadowColor: Colors.black.withOpacity(0.3),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: width,
+            height: _collapsedHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  // Device icon
+                  Icon(
+                    _getPlayerIcon(selectedPlayer.name),
+                    color: textColor,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  // Device name and swipe hint
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          selectedPlayer.name,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (hasMultiplePlayers)
+                          Text(
+                            'Swipe to switch device',
+                            style: TextStyle(
+                              color: textColor.withOpacity(0.6),
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Player indicator dots (if multiple players)
+                  if (hasMultiplePlayers) ...[
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(
+                        availablePlayers.length.clamp(0, 5), // Max 5 dots
+                        (index) {
+                          final isSelected = availablePlayers[index].playerId == selectedPlayer.playerId;
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            width: isSelected ? 8 : 6,
+                            height: isSelected ? 8 : 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: textColor.withOpacity(isSelected ? 1.0 : 0.3),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Get appropriate icon for player based on name
+  IconData _getPlayerIcon(String playerName) {
+    final nameLower = playerName.toLowerCase();
+    if (nameLower.contains('phone') || nameLower.contains('ensemble')) {
+      return Icons.phone_android_rounded;
+    } else if (nameLower.contains('group')) {
+      return Icons.speaker_group_rounded;
+    } else if (nameLower.contains('tv') || nameLower.contains('television')) {
+      return Icons.tv_rounded;
+    } else if (nameLower.contains('cast') || nameLower.contains('chromecast')) {
+      return Icons.cast_rounded;
+    } else {
+      return Icons.speaker_rounded;
+    }
   }
 
   Widget _buildMorphingPlayer(
@@ -446,6 +612,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     // Queue panel slide amount (0 = hidden, 1 = fully visible)
     final queueT = _queuePanelAnimation.value;
 
+    // Check if we have multiple players for swipe gesture
+    final availablePlayers = maProvider.availablePlayers.where((p) => p.available).toList();
+    final hasMultiplePlayers = availablePlayers.length > 1;
+
     return Positioned(
       left: horizontalMargin,
       right: horizontalMargin,
@@ -463,10 +633,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             collapse();
           }
         },
-        onHorizontalDragStart: isExpanded ? (details) {
+        onHorizontalDragStart: (details) {
           _horizontalDragStartX = details.globalPosition.dx;
-        } : null,
-        onHorizontalDragEnd: isExpanded ? (details) {
+        },
+        onHorizontalDragEnd: (details) {
           // Ignore swipes that started near the right edge (Android back gesture zone)
           final screenWidth = MediaQuery.of(context).size.width;
           final startedInDeadZone = _horizontalDragStartX != null &&
@@ -475,15 +645,24 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
           if (startedInDeadZone) return;
 
-          // Swipe left to open queue, swipe right to close
           if (details.primaryVelocity != null) {
-            if (details.primaryVelocity! < -300 && !isQueuePanelOpen) {
-              _toggleQueuePanel();
-            } else if (details.primaryVelocity! > 300 && isQueuePanelOpen) {
-              _toggleQueuePanel();
+            if (isExpanded) {
+              // Expanded mode: swipe to open/close queue
+              if (details.primaryVelocity! < -300 && !isQueuePanelOpen) {
+                _toggleQueuePanel();
+              } else if (details.primaryVelocity! > 300 && isQueuePanelOpen) {
+                _toggleQueuePanel();
+              }
+            } else if (hasMultiplePlayers) {
+              // Collapsed mode: swipe to switch devices
+              if (details.primaryVelocity! < -300) {
+                _cycleToNextPlayer(maProvider);
+              } else if (details.primaryVelocity! > 300) {
+                _cycleToNextPlayer(maProvider, reverse: true);
+              }
             }
           }
-        } : null,
+        },
         child: Material(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(borderRadius),
@@ -800,6 +979,42 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                    ),
+                  ),
+
+                // Device indicator dots (collapsed only, when multiple players)
+                if (t < 0.3 && hasMultiplePlayers)
+                  Positioned(
+                    bottom: 6,
+                    left: _collapsedArtSize + 8,
+                    child: Opacity(
+                      opacity: (1 - t * 3).clamp(0.0, 1.0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _getPlayerIcon(selectedPlayer.name),
+                            color: textColor.withOpacity(0.5),
+                            size: 12,
+                          ),
+                          const SizedBox(width: 4),
+                          ...List.generate(
+                            availablePlayers.length.clamp(0, 5),
+                            (index) {
+                              final isSelected = availablePlayers[index].playerId == selectedPlayer.playerId;
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                width: isSelected ? 6 : 4,
+                                height: isSelected ? 6 : 4,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: textColor.withOpacity(isSelected ? 0.8 : 0.25),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   ),

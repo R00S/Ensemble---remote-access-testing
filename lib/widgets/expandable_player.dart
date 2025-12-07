@@ -984,37 +984,30 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   ),
 
                 // Device indicator dots (collapsed only, when multiple players)
+                // Positioned below controls on the right side
                 if (t < 0.3 && hasMultiplePlayers)
                   Positioned(
-                    bottom: 6,
-                    left: _collapsedArtSize + 8,
+                    bottom: 4,
+                    right: 12,
                     child: Opacity(
                       opacity: (1 - t * 3).clamp(0.0, 1.0),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _getPlayerIcon(selectedPlayer.name),
-                            color: textColor.withOpacity(0.5),
-                            size: 12,
-                          ),
-                          const SizedBox(width: 4),
-                          ...List.generate(
-                            availablePlayers.length.clamp(0, 5),
-                            (index) {
-                              final isSelected = availablePlayers[index].playerId == selectedPlayer.playerId;
-                              return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                width: isSelected ? 6 : 4,
-                                height: isSelected ? 6 : 4,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: textColor.withOpacity(isSelected ? 0.8 : 0.25),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
+                        children: List.generate(
+                          availablePlayers.length.clamp(0, 5),
+                          (index) {
+                            final isSelected = availablePlayers[index].playerId == selectedPlayer.playerId;
+                            return Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                              width: isSelected ? 6 : 4,
+                              height: isSelected ? 6 : 4,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: textColor.withOpacity(isSelected ? 0.8 : 0.25),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),

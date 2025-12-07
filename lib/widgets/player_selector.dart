@@ -121,69 +121,69 @@ class _PlayerSelectorSheetState extends State<_PlayerSelectorSheet> {
         final textTheme = Theme.of(context).textTheme;
         final currentTrack = maProvider.currentTrack;
 
+        final screenHeight = MediaQuery.of(context).size.height;
+        final sheetHeight = screenHeight * 0.7; // Fixed 70% height
+
         return GestureDetector(
           onTap: () => Navigator.pop(context), // Tap outside to dismiss
           behavior: HitTestBehavior.opaque,
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.6,
-            minChildSize: 0.3,
-            maxChildSize: 0.85,
-            builder: (context, scrollController) {
-              return GestureDetector(
-                onTap: () {}, // Prevent taps on sheet from dismissing
-                child: Container(
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Column(
-                children: [
-                  const SizedBox(height: 12),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: colorScheme.onSurface.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(2),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: GestureDetector(
+              onTap: () {}, // Prevent taps on sheet from dismissing
+              child: Container(
+                height: sheetHeight,
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurface.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [
-                        Icon(Icons.speaker_group_rounded, color: colorScheme.onSurface),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Select Player',
-                          style: textTheme.titleLarge?.copyWith(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        // Show last refresh indicator
-                        Icon(
-                          Icons.sync,
-                          color: colorScheme.onSurfaceVariant.withOpacity(0.5),
-                          size: 16,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: currentPlayers.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No players available',
-                              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.54)),
+                    const SizedBox(height: 20),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          Icon(Icons.speaker_group_rounded, color: colorScheme.onSurface),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Select Player',
+                            style: textTheme.titleLarge?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.bold,
                             ),
-                          )
-                        : ListView.builder(
-                            controller: scrollController,
-                            padding: EdgeInsets.fromLTRB(12, 8, 12, BottomSpacing.navBarOnly),
-                            itemCount: currentPlayers.length,
+                          ),
+                          const Spacer(),
+                          // Show last refresh indicator
+                          Icon(
+                            Icons.sync,
+                            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: currentPlayers.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No players available',
+                                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.54)),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: EdgeInsets.fromLTRB(12, 8, 12, BottomSpacing.navBarOnly),
+                              itemCount: currentPlayers.length,
                             itemBuilder: (context, index) {
                               final player = currentPlayers[index];
                               final isSelected = player.playerId == maProvider.selectedPlayer?.playerId;
@@ -362,12 +362,11 @@ class _PlayerSelectorSheetState extends State<_PlayerSelectorSheet> {
                               );
                             },
                           ),
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            );
-          },
           ),
         );
       },

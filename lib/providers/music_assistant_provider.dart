@@ -1535,6 +1535,9 @@ class MusicAssistantProvider with ChangeNotifier {
         return true;
       }).toList();
 
+      // Sort players alphabetically by name
+      _availablePlayers.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
       _playersLastFetched = DateTime.now();
 
       _logger.log('🎛️ After filtering: ${_availablePlayers.length} players available');

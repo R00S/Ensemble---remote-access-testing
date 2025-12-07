@@ -703,67 +703,18 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
     final maProvider = context.read<MusicAssistantProvider>();
     final players = maProvider.availablePlayers;
 
-    // Slide mini player down out of the way
-    GlobalPlayerOverlay.hidePlayer();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 16),
-            Text(
-              'Play on...',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            if (players.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32.0),
-                child: Text('No players available'),
-              )
-            else
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: players.length,
-                  itemBuilder: (context, index) {
-                    final player = players[index];
-                    return ListTile(
-                      leading: Icon(
-                        Icons.speaker,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      title: Text(player.name),
-                      onTap: () {
-                        Navigator.pop(context);
-                        // Set this as the active player
-                        maProvider.selectPlayer(player);
-                        // Play album from this track onwards
-                        maProvider.playTracks(
-                          player.playerId,
-                          _tracks,
-                          startIndex: startIndex,
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    ).whenComplete(() {
-      // Slide mini player back up when sheet is dismissed
-      GlobalPlayerOverlay.showPlayer();
-    });
+    _showPlayOnSheet(
+      context,
+      players,
+      onPlayerSelected: (player) {
+        maProvider.selectPlayer(player);
+        maProvider.playTracks(
+          player.playerId,
+          _tracks,
+          startIndex: startIndex,
+        );
+      },
+    );
   }
 
   void _showPlayRadioMenu(BuildContext context, int trackIndex) {
@@ -771,85 +722,53 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
     final players = maProvider.availablePlayers;
     final track = _tracks[trackIndex];
 
-    // Slide mini player down out of the way
-    GlobalPlayerOverlay.hidePlayer();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 16),
-            Text(
-              'Play on...',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            if (players.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32.0),
-                child: Text('No players available'),
-              )
-            else
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: players.length,
-                  itemBuilder: (context, index) {
-                    final player = players[index];
-                    return ListTile(
-                      leading: Icon(
-                        Icons.speaker,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      title: Text(player.name),
-                      onTap: () {
-                        Navigator.pop(context);
-                        // Set this as the active player
-                        maProvider.selectPlayer(player);
-                        // Play radio based on this track
-                        maProvider.playRadio(
-                          player.playerId,
-                          track,
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    ).whenComplete(() {
-      // Slide mini player back up when sheet is dismissed
-      GlobalPlayerOverlay.showPlayer();
-    });
+    _showPlayOnSheet(
+      context,
+      players,
+      onPlayerSelected: (player) {
+        maProvider.selectPlayer(player);
+        maProvider.playRadio(player.playerId, track);
+      },
+    );
   }
 
   void _showPlayOnMenu(BuildContext context) {
     final maProvider = context.read<MusicAssistantProvider>();
     final players = maProvider.availablePlayers;
 
+    _showPlayOnSheet(
+      context,
+      players,
+      onPlayerSelected: (player) {
+        maProvider.selectPlayer(player);
+        maProvider.playTracks(player.playerId, _tracks);
+      },
+    );
+  }
+
+  /// Shared "Play on..." bottom sheet with fixed height and scrollable list
+  void _showPlayOnSheet(
+    BuildContext context,
+    List players, {
+    required void Function(dynamic player) onPlayerSelected,
+  }) {
     // Slide mini player down out of the way
     GlobalPlayerOverlay.hidePlayer();
+
+    final screenHeight = MediaQuery.of(context).size.height;
+    final sheetHeight = screenHeight * 0.45; // Fixed 45% height for play-on sheets
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
+        height: sheetHeight,
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 16),
             Text(
@@ -857,35 +776,29 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
-            if (players.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32.0),
-                child: Text('No players available'),
-              )
-            else
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: players.length,
-                  itemBuilder: (context, index) {
-                    final player = players[index];
-                    return ListTile(
-                      leading: Icon(
-                        Icons.speaker,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      title: Text(player.name),
-                      onTap: () {
-                        Navigator.pop(context);
-                        // Set this as the active player
-                        maProvider.selectPlayer(player);
-                        // Play on this specific player
-                        maProvider.playTracks(player.playerId, _tracks);
+            Expanded(
+              child: players.isEmpty
+                  ? const Center(
+                      child: Text('No players available'),
+                    )
+                  : ListView.builder(
+                      itemCount: players.length,
+                      itemBuilder: (context, index) {
+                        final player = players[index];
+                        return ListTile(
+                          leading: Icon(
+                            Icons.speaker,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                          title: Text(player.name),
+                          onTap: () {
+                            Navigator.pop(context);
+                            onPlayerSelected(player);
+                          },
+                        );
                       },
-                    );
-                  },
-                ),
-              ),
+                    ),
+            ),
             const SizedBox(height: 16),
           ],
         ),

@@ -312,21 +312,27 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final slideOutTarget = direction.toDouble(); // Where current content goes
     final slideInStart = -direction.toDouble(); // Where new content comes from
 
+    // Use easing curves for smoother feel
+    const outCurve = Curves.easeInCubic; // Accelerate out
+    const inCurve = Curves.easeOutCubic; // Decelerate in
+
     // Phase 1: Slide out current content
     _slideOffset = 0.0;
     _slideController.reset();
 
     void animateOut() {
       if (!mounted) return;
+      final curvedValue = outCurve.transform(_slideController.value);
       setState(() {
-        _slideOffset = slideOutTarget * _slideController.value;
+        _slideOffset = slideOutTarget * curvedValue;
       });
     }
 
     void animateIn() {
       if (!mounted) return;
+      final curvedValue = inCurve.transform(_slideController.value);
       setState(() {
-        _slideOffset = slideInStart * (1.0 - _slideController.value);
+        _slideOffset = slideInStart * (1.0 - curvedValue);
       });
     }
 
@@ -769,12 +775,16 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(artBorderRadius),
                       child: imageUrl != null
-                          ? Image.network(
-                              imageUrl,
+                          ? CachedNetworkImage(
+                              imageUrl: imageUrl,
                               fit: BoxFit.cover,
-                              cacheWidth: t > 0.5 ? 1024 : 128,
-                              cacheHeight: t > 0.5 ? 1024 : 128,
-                              errorBuilder: (_, __, ___) => _buildPlaceholderArt(colorScheme, t),
+                              memCacheWidth: t > 0.5 ? 1024 : 256,
+                              memCacheHeight: t > 0.5 ? 1024 : 256,
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              placeholderFadeInDuration: Duration.zero,
+                              placeholder: (_, __) => _buildPlaceholderArt(colorScheme, t),
+                              errorWidget: (_, __, ___) => _buildPlaceholderArt(colorScheme, t),
                             )
                           : _buildPlaceholderArt(colorScheme, t),
                     ),

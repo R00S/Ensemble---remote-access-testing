@@ -1629,6 +1629,10 @@ class MusicAssistantProvider with ChangeNotifier {
         selectPlayer(playerToSelect);
       }
 
+      // Preload all players' track info in background for smooth swipe transitions
+      // Don't await - let it happen in background
+      _preloadAdjacentPlayers(preloadAll: true);
+
       // Don't call notifyListeners here - selectPlayer already does it
     } catch (e) {
       ErrorHandler.logError('Load and select players', e);
@@ -1654,11 +1658,26 @@ class MusicAssistantProvider with ChangeNotifier {
   }
 
   /// Preload track info for adjacent players (next/prev in list)
-  Future<void> _preloadAdjacentPlayers() async {
-    if (_selectedPlayer == null || _api == null) return;
+  /// If [preloadAll] is true, preloads all players instead of just adjacent ones
+  Future<void> _preloadAdjacentPlayers({bool preloadAll = false}) async {
+    if (_api == null) return;
 
     // Get sorted available players
     final players = _availablePlayers.where((p) => p.available).toList();
+    if (players.isEmpty) return;
+
+    if (preloadAll) {
+      // Preload all players in parallel for initial load
+      _logger.log('🖼️ Preloading track info for all ${players.length} players...');
+      await Future.wait(
+        players.map((player) => _preloadPlayerTrack(player)),
+      );
+      _logger.log('🖼️ Preloading complete');
+      return;
+    }
+
+    // Only preload adjacent when we have a selected player
+    if (_selectedPlayer == null) return;
     if (players.length <= 1) return;
 
     final currentIndex = players.indexWhere((p) => p.playerId == _selectedPlayer!.playerId);
@@ -1694,11 +1713,10 @@ class MusicAssistantProvider with ChangeNotifier {
         final track = queue.currentItem!.track;
         _playerTrackCache[player.playerId] = track;
 
-        // Preload the artwork into Flutter's image cache
-        final artworkUrl = getImageUrl(track, size: 512);
-        if (artworkUrl != null) {
-          // Trigger image precache (fire and forget)
-          _precacheImage(artworkUrl);
+        // Preload the artwork into image cache at both sizes used in UI
+        final artworkUrl512 = getImageUrl(track, size: 512);
+        if (artworkUrl512 != null) {
+          await _precacheImage(artworkUrl512);
         }
       } else {
         _playerTrackCache[player.playerId] = null;
@@ -1708,17 +1726,19 @@ class MusicAssistantProvider with ChangeNotifier {
     }
   }
 
-  /// Precache an image URL
-  void _precacheImage(String url) {
-    // Use a microtask to avoid blocking
-    Future.microtask(() {
-      try {
-        // This triggers the image to be downloaded and cached
-        NetworkImage(url).resolve(const ImageConfiguration());
-      } catch (e) {
-        // Ignore errors - this is just a cache warm-up
-      }
-    });
+  /// Precache an image URL - actually downloads and caches the image
+  Future<void> _precacheImage(String url) async {
+    try {
+      // Create an ImageStreamCompleter that downloads the image
+      final imageProvider = NetworkImage(url);
+      final completer = imageProvider.resolve(const ImageConfiguration());
+
+      // Wait for the image to actually load into memory
+      await completer.stream.first;
+    } catch (e) {
+      // Ignore errors - this is just a cache warm-up
+      _logger.log('Image precache failed for $url: $e');
+    }
   }
 
   /// Preload track info for all available players (for device selector popup)

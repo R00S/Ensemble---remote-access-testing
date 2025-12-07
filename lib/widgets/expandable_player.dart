@@ -65,6 +65,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   // Track horizontal drag start position
   double? _horizontalDragStartX;
 
+  // Slide animation for device switching
+  late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
+  int _slideDirection = 0; // -1 = left, 0 = none, 1 = right
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +96,19 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
+
+    // Slide animation for device switching
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: Offset.zero,
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.forward) {
@@ -134,6 +152,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   void dispose() {
     _controller.dispose();
     _queuePanelController.dispose();
+    _slideController.dispose();
     _progressTimer?.cancel();
     _queueRefreshTimer?.cancel();
     super.dispose();
@@ -283,7 +302,43 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
     // Haptic feedback on device switch
     HapticFeedback.mediumImpact();
-    maProvider.selectPlayer(players[nextIndex]);
+
+    // Animate slide transition
+    _animateSlide(reverse ? 1 : -1, () {
+      maProvider.selectPlayer(players[nextIndex]);
+    });
+  }
+
+  /// Animate the slide transition when switching devices
+  void _animateSlide(int direction, VoidCallback onComplete) {
+    _slideDirection = direction;
+
+    // Set up the animation: slide out in the swipe direction
+    _slideAnimation = Tween<Offset>(
+      begin: Offset.zero,
+      end: Offset(direction.toDouble(), 0),
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeInCubic,
+    ));
+
+    _slideController.forward().then((_) {
+      // Switch player at the midpoint
+      onComplete();
+
+      // Reverse: slide in from opposite side
+      _slideAnimation = Tween<Offset>(
+        begin: Offset(-direction.toDouble(), 0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(
+        parent: _slideController,
+        curve: Curves.easeOutCubic,
+      ));
+
+      _slideController.reverse().then((_) {
+        _slideDirection = 0;
+      });
+    });
   }
 
   @override
@@ -364,7 +419,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
     final availablePlayers = _getAvailablePlayersSorted(maProvider);
     final hasMultiplePlayers = availablePlayers.length > 1;
-    final selectedPlayerId = selectedPlayer.playerId;
 
     return Positioned(
       left: _collapsedMargin,
@@ -374,10 +428,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         onHorizontalDragEnd: hasMultiplePlayers ? (details) {
           if (details.primaryVelocity != null) {
             if (details.primaryVelocity! < -300) {
-              // Swipe left - next device
               _cycleToNextPlayer(maProvider);
             } else if (details.primaryVelocity! > 300) {
-              // Swipe right - previous device
               _cycleToNextPlayer(maProvider, reverse: true);
             }
           }
@@ -391,45 +443,53 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           child: SizedBox(
             width: width,
             height: _collapsedHeight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  // Device icon
-                  Icon(
-                    _getPlayerIcon(selectedPlayer.name),
-                    color: textColor,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  // Device name and swipe hint
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          selectedPlayer.name,
-                          style: TextStyle(
+            child: ClipRect(
+              child: AnimatedBuilder(
+                animation: _slideController,
+                builder: (context, child) {
+                  return SlideTransition(
+                    position: _slideAnimation,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _getPlayerIcon(selectedPlayer.name),
                             color: textColor,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
+                            size: 24,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (hasMultiplePlayers)
-                          Text(
-                            'Swipe to switch device',
-                            style: TextStyle(
-                              color: textColor.withOpacity(0.6),
-                              fontSize: 12,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  selectedPlayer.name,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (hasMultiplePlayers)
+                                  Text(
+                                    'Swipe to switch device',
+                                    style: TextStyle(
+                                      color: textColor.withOpacity(0.6),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ),

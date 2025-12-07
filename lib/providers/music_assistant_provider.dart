@@ -1793,17 +1793,32 @@ class MusicAssistantProvider with ChangeNotifier {
 
       if (queue != null && queue.currentItem != null) {
         final track = queue.currentItem!.track;
-        _playerTrackCache[player.playerId] = track;
-        _logger.log('🔍 Preload ${player.name}: CACHED track "${track.name}"');
+
+        // Check if we already have a cached track with image metadata (from player_updated)
+        // If so, don't overwrite it with queue data that lacks images
+        final existingTrack = _playerTrackCache[player.playerId];
+        final existingHasImage = existingTrack?.metadata?['images'] != null;
+        final newHasImage = track.metadata?['images'] != null;
+
+        if (existingHasImage && !newHasImage) {
+          _logger.log('🔍 Preload ${player.name}: SKIPPED - keeping cached track with image');
+        } else {
+          _playerTrackCache[player.playerId] = track;
+          _logger.log('🔍 Preload ${player.name}: CACHED track "${track.name}"');
+        }
 
         // Preload the artwork into image cache at both sizes used in UI
-        final artworkUrl512 = getImageUrl(track, size: 512);
+        final artworkUrl512 = getImageUrl(existingHasImage ? existingTrack! : track, size: 512);
         if (artworkUrl512 != null) {
           await _precacheImage(artworkUrl512);
         }
       } else {
         _logger.log('🔍 Preload ${player.name}: NO TRACK - queue empty or no current item');
-        _playerTrackCache[player.playerId] = null;
+        // Only clear cache if there's no existing track with image
+        final existingTrack = _playerTrackCache[player.playerId];
+        if (existingTrack?.metadata?['images'] == null) {
+          _playerTrackCache[player.playerId] = null;
+        }
       }
     } catch (e) {
       _logger.log('Error preloading player track for ${player.name}: $e');

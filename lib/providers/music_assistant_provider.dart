@@ -1081,6 +1081,13 @@ class MusicAssistantProvider with ChangeNotifier {
             metadata: metadata,
           );
           _playerTrackCache[playerId] = trackFromEvent;
+
+          // Also update _currentTrack if this is for the selected player
+          // This ensures the UI shows the track with image immediately
+          if (_selectedPlayer != null && playerId == _selectedPlayer!.playerId) {
+            _currentTrack = trackFromEvent;
+          }
+
           _logger.log('📋 Cached track for $playerName from player_updated: ${trackFromEvent.name} (image: ${imageUrl != null})');
           notifyListeners(); // Update UI with new track info
         }

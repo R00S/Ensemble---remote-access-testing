@@ -685,6 +685,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final hasMultiplePlayers = availablePlayers.length > 1;
     final selectedPlayerId = selectedPlayer.playerId;
 
+    // Calculate slide offset for mini player content (only when collapsed)
+    final miniPlayerSlideOffset = t < 0.1 ? _slideOffset * collapsedWidth : 0.0;
+
     return Positioned(
       left: horizontalMargin,
       right: horizontalMargin,
@@ -744,9 +747,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // Album art
+                // Album art - with slide animation when collapsed
                 Positioned(
-                  left: artLeft,
+                  left: artLeft + miniPlayerSlideOffset,
                   top: artTop,
                   child: Container(
                     width: artSize,
@@ -778,9 +781,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   ),
                 ),
 
-                // Track title
+                // Track title - with slide animation when collapsed
                 Positioned(
-                  left: titleLeft,
+                  left: titleLeft + miniPlayerSlideOffset,
                   top: titleTop,
                   child: SizedBox(
                     width: titleWidth,
@@ -800,9 +803,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   ),
                 ),
 
-                // Artist name
+                // Artist name - with slide animation when collapsed
                 Positioned(
-                  left: titleLeft,
+                  left: titleLeft + miniPlayerSlideOffset,
                   top: artistTop,
                   child: SizedBox(
                     width: titleWidth,
@@ -914,10 +917,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     ),
                   ),
 
-                // Playback controls
+                // Playback controls - with slide animation when collapsed
                 Positioned(
                   left: t > 0.5 ? 0 : null,
-                  right: t > 0.5 ? 0 : collapsedControlsRight,
+                  right: t > 0.5 ? 0 : collapsedControlsRight - miniPlayerSlideOffset,
                   top: controlsTop,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

@@ -1014,15 +1014,23 @@ class MusicAssistantProvider with ChangeNotifier {
     }
   }
 
-  /// Handle player_updated events to capture track metadata for notifications
+  /// Handle player_updated events to capture track metadata and update UI
   Future<void> _handlePlayerUpdatedEvent(Map<String, dynamic> event) async {
     try {
-      // Get our builtin player ID
+      final playerId = event['player_id'] as String?;
+      if (playerId == null) return;
+
+      // If this update is for the selected player, trigger a state update
+      // This ensures UI updates immediately when track changes or after seeks
+      if (_selectedPlayer != null && playerId == _selectedPlayer!.playerId) {
+        _updatePlayerState();
+      }
+
+      // Get our builtin player ID for notification handling
       final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
       if (builtinPlayerId == null) return;
 
-      // Check if this update is for our player
-      final playerId = event['player_id'] as String?;
+      // Check if this update is for our local player (for notification metadata)
       if (playerId != builtinPlayerId) return;
 
       // Extract current_media metadata
@@ -1812,14 +1820,10 @@ class MusicAssistantProvider with ChangeNotifier {
         orElse: () => _selectedPlayer!,
       );
 
-      // Check if player state actually changed
-      if (updatedPlayer.state != _selectedPlayer!.state ||
-          updatedPlayer.volumeLevel != _selectedPlayer!.volumeLevel ||
-          updatedPlayer.volumeMuted != _selectedPlayer!.volumeMuted ||
-          updatedPlayer.available != _selectedPlayer!.available) {
-        _selectedPlayer = updatedPlayer;
-        stateChanged = true;
-      }
+      // Always update the player to get fresh elapsed time
+      // This is critical for seek operations where only elapsed_time changes
+      _selectedPlayer = updatedPlayer;
+      stateChanged = true;
 
       // Only show tracks if player is available and not idle
       final shouldShowTrack = _selectedPlayer!.available &&
@@ -1973,7 +1977,8 @@ class MusicAssistantProvider with ChangeNotifier {
       _logger.log('🔄 Already connected, verifying connection...');
       try {
         await refreshPlayers();
-        _logger.log('🔄 Connection verified, players refreshed');
+        await _updatePlayerState();
+        _logger.log('🔄 Connection verified, players and state refreshed');
       } catch (e) {
         _logger.log('🔄 Connection verification failed, reconnecting: $e');
         // Connection might be stale, try reconnecting

@@ -13,6 +13,7 @@ import '../theme/theme_provider.dart';
 import 'animated_icon_button.dart';
 import 'global_player_overlay.dart';
 import 'volume_control.dart';
+import 'player/player_widgets.dart';
 
 /// A unified player widget that seamlessly expands from mini to full-screen.
 ///
@@ -454,8 +455,16 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       left: _collapsedMargin,
       right: _collapsedMargin,
       bottom: adjustedBottomOffset,
-      child: GestureDetector(
-        onHorizontalDragEnd: hasMultiplePlayers ? (details) {
+      child: DeviceSelectorBar(
+        selectedPlayer: selectedPlayer,
+        hasMultiplePlayers: hasMultiplePlayers,
+        backgroundColor: backgroundColor,
+        textColor: textColor,
+        width: width,
+        height: _collapsedHeight,
+        borderRadius: _collapsedBorderRadius,
+        slideOffset: _slideOffset,
+        onHorizontalDragEnd: (details) {
           if (details.primaryVelocity != null) {
             if (details.primaryVelocity! < -300) {
               _cycleToNextPlayer(maProvider);
@@ -463,80 +472,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
               _cycleToNextPlayer(maProvider, reverse: true);
             }
           }
-        } : null,
-        child: Material(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(_collapsedBorderRadius),
-          elevation: 4,
-          shadowColor: Colors.black.withOpacity(0.3),
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            width: width,
-            height: _collapsedHeight,
-            child: ClipRect(
-              child: Transform.translate(
-                offset: Offset(_slideOffset * width, 0),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _getPlayerIcon(selectedPlayer.name),
-                        color: textColor,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              selectedPlayer.name,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (hasMultiplePlayers)
-                              Text(
-                                'Swipe to switch device',
-                                style: TextStyle(
-                                  color: textColor.withOpacity(0.6),
-                                  fontSize: 12,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+        },
       ),
     );
-  }
-
-  /// Get appropriate icon for player based on name
-  IconData _getPlayerIcon(String playerName) {
-    final nameLower = playerName.toLowerCase();
-    if (nameLower.contains('phone') || nameLower.contains('ensemble')) {
-      return Icons.phone_android_rounded;
-    } else if (nameLower.contains('group')) {
-      return Icons.speaker_group_rounded;
-    } else if (nameLower.contains('tv') || nameLower.contains('television')) {
-      return Icons.tv_rounded;
-    } else if (nameLower.contains('cast') || nameLower.contains('chromecast')) {
-      return Icons.cast_rounded;
-    } else {
-      return Icons.speaker_rounded;
-    }
   }
 
   Widget _buildMorphingPlayer(
@@ -1096,13 +1034,16 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                           begin: const Offset(1, 0),
                           end: Offset.zero,
                         ).animate(_queuePanelAnimation),
-                        child: _buildQueuePanel(
-                          maProvider,
-                          selectedPlayer,
-                          textColor,
-                          primaryColor,
-                          topPadding,
-                          expandedBg,
+                        child: QueuePanel(
+                          maProvider: maProvider,
+                          queue: _queue,
+                          isLoading: _isLoadingQueue,
+                          textColor: textColor,
+                          primaryColor: primaryColor,
+                          backgroundColor: expandedBg,
+                          topPadding: topPadding,
+                          onClose: _toggleQueuePanel,
+                          onRefresh: _loadQueue,
                         ),
                       ),
                     ),
@@ -1112,161 +1053,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildQueuePanel(
-    MusicAssistantProvider maProvider,
-    dynamic selectedPlayer,
-    Color textColor,
-    Color primaryColor,
-    double topPadding,
-    Color backgroundColor,
-  ) {
-    return Container(
-      color: backgroundColor,
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: EdgeInsets.only(top: topPadding + 4, left: 4, right: 16),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(Icons.arrow_back_rounded, color: textColor, size: 24),
-                  onPressed: _toggleQueuePanel,
-                  padding: const EdgeInsets.all(12),
-                ),
-                const Spacer(),
-                Text(
-                  'Queue',
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(Icons.refresh_rounded, color: textColor.withOpacity(0.7), size: 22),
-                  onPressed: _loadQueue,
-                  padding: const EdgeInsets.all(12),
-                ),
-              ],
-            ),
-          ),
-
-          // Queue content
-          Expanded(
-            child: _isLoadingQueue
-                ? Center(child: CircularProgressIndicator(color: primaryColor))
-                : _queue == null || _queue!.items.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.queue_music, size: 64, color: textColor.withOpacity(0.3)),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Queue is empty',
-                              style: TextStyle(color: textColor.withOpacity(0.5), fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _buildQueueList(maProvider, textColor, primaryColor),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQueueList(
-    MusicAssistantProvider maProvider,
-    Color textColor,
-    Color primaryColor,
-  ) {
-    final currentIndex = _queue!.currentIndex ?? 0;
-    final items = _queue!.items;
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      cacheExtent: 500, // Pre-render items off-screen for smoother scrolling
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        final isCurrentItem = index == currentIndex;
-        final isPastItem = index < currentIndex;
-        final imageUrl = maProvider.api?.getImageUrl(item.track, size: 80);
-
-        return Opacity(
-          opacity: isPastItem ? 0.5 : 1.0,
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 2),
-            decoration: BoxDecoration(
-              color: isCurrentItem ? primaryColor.withOpacity(0.15) : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: ListTile(
-              dense: true,
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: imageUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: textColor.withOpacity(0.1),
-                            child: Icon(Icons.music_note, color: textColor.withOpacity(0.3), size: 20),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: textColor.withOpacity(0.1),
-                            child: Icon(Icons.music_note, color: textColor.withOpacity(0.3), size: 20),
-                          ),
-                        )
-                      : Container(
-                          color: textColor.withOpacity(0.1),
-                          child: Icon(Icons.music_note, color: textColor.withOpacity(0.3), size: 20),
-                        ),
-                ),
-              ),
-              title: Text(
-                item.track.name,
-                style: TextStyle(
-                  color: isCurrentItem ? primaryColor : textColor,
-                  fontSize: 14,
-                  fontWeight: isCurrentItem ? FontWeight.w600 : FontWeight.normal,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: item.track.artists != null && item.track.artists!.isNotEmpty
-                  ? Text(
-                      item.track.artists!.first.name,
-                      style: TextStyle(
-                        color: textColor.withOpacity(0.6),
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  : null,
-              trailing: isCurrentItem
-                  ? Icon(Icons.play_arrow_rounded, color: primaryColor, size: 20)
-                  : null,
-              onTap: () {
-                // TODO: Jump to this track in queue
-                // Music Assistant API doesn't currently expose a skip_to_index or play_queue_item endpoint
-                // Would need to add API method like skipToQueueIndex(queueId, index) if MA supports it
-                // Alternative: Could use multiple next() calls but that's inefficient and unreliable
-              },
-            ),
-          ),
-        );
-      },
     );
   }
 

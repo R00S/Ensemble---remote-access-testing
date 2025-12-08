@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/debug_logger.dart';
 import '../providers/music_assistant_provider.dart';
-import '../models/player.dart';
 import '../widgets/global_player_overlay.dart';
 
 class DebugLogScreen extends StatefulWidget {

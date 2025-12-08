@@ -35,9 +35,13 @@
 ## Phase 3: Dead Code Cleanup (1 day)
 *Consolidate and remove unused files*
 
-- [ ] Delete or consolidate `new_home_screen.dart` and `new_library_screen.dart`
-- [ ] Remove unused `PlayerStateService` (`player_state_service.dart`)
-- [ ] Verify and remove unused imports (`debug_log_screen.dart:5-6`)
+- [x] Delete unused `library_screen.dart` (old version, `new_library_screen.dart` is active)
+- [x] Remove unused `PlayerStateService` (`player_state_service.dart`)
+- [x] Remove unused `Player` import from `debug_log_screen.dart`
+
+Note: `new_home_screen.dart` and `new_library_screen.dart` are NOT dead code - they are
+the active screens used in `home_screen.dart`. The naming suggests they replaced older
+versions during a refactor.
 
 ---
 
@@ -116,7 +120,7 @@
 |-------|--------|----------------|
 | Phase 1 | **COMPLETED** | 2025-12-08 |
 | Phase 2 | **COMPLETED** | 2025-12-08 |
-| Phase 3 | Not Started | - |
+| Phase 3 | **COMPLETED** | 2025-12-08 |
 | Phase 4 | Not Started | - |
 | Phase 5 | Not Started | - |
 | Phase 6 | Not Started | - |

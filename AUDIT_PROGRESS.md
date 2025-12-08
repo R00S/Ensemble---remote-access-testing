@@ -126,9 +126,9 @@ and DisconnectedState (3 usages, ~140 lines removed). Total ~367 lines of duplic
 - [ ] Add Semantics labels for accessibility
 - [ ] Implement localization (i18n)
 - [ ] Add test coverage
-- [ ] Implement WebSocket heartbeat
+- [x] Implement WebSocket heartbeat (`music_assistant_api.dart` - ping every 30s)
 - [ ] Add responsive grid layouts for tablets
-- [ ] Add completer guards to prevent double-completion
+- [x] Add completer guards to prevent double-completion (`music_assistant_api.dart`, `music_assistant_provider.dart`, `player_provider.dart`)
 
 ---
 
@@ -143,7 +143,7 @@ and DisconnectedState (3 usages, ~140 lines removed). Total ~367 lines of duplic
 | Phase 5 | **PARTIAL** | 2025-12-08 |
 | Phase 6 | **PARTIAL** | 2025-12-08 |
 | Phase 7 | **PARTIAL** | 2025-12-08 |
-| Phase 8 | Not Started | - |
+| Phase 8 | **PARTIAL** | 2025-12-08 |
 
 ---
 

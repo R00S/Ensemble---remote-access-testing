@@ -41,6 +41,9 @@ class MusicAssistantAPI {
 
   Completer<void>? _connectionCompleter;
 
+  // Heartbeat timer to keep WebSocket connection alive
+  Timer? _heartbeatTimer;
+
   // Cached custom port setting
   int? _cachedCustomPort;
 
@@ -195,7 +198,9 @@ class MusicAssistantAPI {
         onDone: () {
           _logger.log('WebSocket connection closed');
           _updateConnectionState(MAConnectionState.disconnected);
-          _connectionCompleter?.completeError(Exception('Connection closed'));
+          if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
+            _connectionCompleter!.completeError(Exception('Connection closed'));
+          }
           _reconnect();
         },
       );
@@ -209,12 +214,16 @@ class MusicAssistantAPI {
       );
 
       _logger.log('Connection: Connected to server');
-      _connectionInProgress?.complete();
+      if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
+        _connectionInProgress!.complete();
+      }
       _connectionInProgress = null;
     } catch (e) {
       _logger.log('Connection: Failed - $e');
       _updateConnectionState(MAConnectionState.error);
-      _connectionInProgress?.completeError(e);
+      if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
+        _connectionInProgress!.completeError(e);
+      }
       _connectionInProgress = null;
       rethrow;
     }
@@ -247,7 +256,10 @@ class MusicAssistantAPI {
         }
 
         _updateConnectionState(MAConnectionState.connected);
-        _connectionCompleter?.complete();
+        if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
+          _connectionCompleter!.complete();
+        }
+        _startHeartbeat();
 
         return;
       }
@@ -1919,6 +1931,45 @@ class MusicAssistantAPI {
     _connectionStateController.add(state);
   }
 
+  /// Start heartbeat timer to keep WebSocket connection alive
+  void _startHeartbeat() {
+    _stopHeartbeat();
+    _heartbeatTimer = Timer.periodic(Timings.heartbeatInterval, (_) {
+      _sendHeartbeat();
+    });
+  }
+
+  /// Stop heartbeat timer
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  /// Send a ping message to keep the connection alive
+  Future<void> _sendHeartbeat() async {
+    if (_currentState != MAConnectionState.connected &&
+        _currentState != MAConnectionState.authenticated) {
+      return;
+    }
+
+    try {
+      // Send a lightweight ping command
+      // Music Assistant servers respond to 'ping' with 'pong'
+      await _sendCommand('ping').timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          _logger.log('Heartbeat timeout - connection may be stale');
+          return <String, dynamic>{};
+        },
+      );
+    } catch (e) {
+      _logger.log('Heartbeat failed: $e');
+      // Connection may be dead, trigger reconnect
+      _updateConnectionState(MAConnectionState.error);
+      _reconnect();
+    }
+  }
+
   Future<void> _reconnect() async {
     await Future.delayed(Timings.reconnectDelay);
     if (_currentState != MAConnectionState.connected) {
@@ -1931,6 +1982,7 @@ class MusicAssistantAPI {
   }
 
   Future<void> disconnect() async {
+    _stopHeartbeat();
     _updateConnectionState(MAConnectionState.disconnected);
     await _channel?.sink.close();
     _channel = null;
@@ -1938,6 +1990,7 @@ class MusicAssistantAPI {
   }
 
   void dispose() {
+    _stopHeartbeat();
     disconnect();
     _connectionStateController.close();
     for (final stream in _eventStreams.values) {

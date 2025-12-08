@@ -167,7 +167,9 @@ class PlayerProvider with ChangeNotifier {
       if (existingPlayer != null && existingPlayer.available) {
         _logger.log('✅ Player already registered and available: $playerId');
         _startReportingLocalPlayerState();
-        _registrationInProgress?.complete();
+        if (_registrationInProgress != null && !_registrationInProgress!.isCompleted) {
+          _registrationInProgress!.complete();
+        }
         _registrationInProgress = null;
         return;
       } else if (existingPlayer != null && !existingPlayer.available) {
@@ -182,11 +184,15 @@ class PlayerProvider with ChangeNotifier {
       _logger.log('✅ Player registration complete');
       _startReportingLocalPlayerState();
 
-      _registrationInProgress?.complete();
+      if (_registrationInProgress != null && !_registrationInProgress!.isCompleted) {
+        _registrationInProgress!.complete();
+      }
       _registrationInProgress = null;
     } catch (e) {
       _logger.log('❌ CRITICAL: Player registration failed: $e');
-      _registrationInProgress?.completeError(e);
+      if (_registrationInProgress != null && !_registrationInProgress!.isCompleted) {
+        _registrationInProgress!.completeError(e);
+      }
       _registrationInProgress = null;
       rethrow;
     }

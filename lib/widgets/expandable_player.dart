@@ -99,7 +99,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
     // Slide animation for device switching
     _slideController = AnimationController(
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 75),
       vsync: this,
     );
 

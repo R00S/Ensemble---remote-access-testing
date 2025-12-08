@@ -869,7 +869,9 @@ class MusicAssistantProvider with ChangeNotifier {
     try {
       _logger.log('🔄 Fetching albums for artist "$artistName"...');
 
-      final libraryAlbums = await _api!.getAlbums();
+      // Fetch all library albums (with high limit to get full library)
+      final libraryAlbums = await _api!.getAlbums(limit: LibraryConstants.maxLibraryItems);
+      _logger.log('📚 Fetched ${libraryAlbums.length} total library albums');
       final artistAlbums = libraryAlbums.where((album) {
         final albumArtists = album.artists;
         if (albumArtists == null || albumArtists.isEmpty) return false;

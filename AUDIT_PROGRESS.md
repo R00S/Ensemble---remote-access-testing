@@ -90,9 +90,12 @@ split deferred as lower priority.
 
 - [ ] Create `MediaItemTile` (consolidate 3 list tile builders)
 - [ ] Create `PlayOnBottomSheet` (consolidate 4 implementations)
-- [ ] Create `EmptyState` (consolidate 6+ implementations)
+- [x] Create `EmptyState` (consolidate 6+ implementations) → `lib/widgets/common/empty_state.dart`
 - [ ] Create `FilterChipRow` (consolidate 3 implementations)
-- [ ] Create `DisconnectedState` (consolidate 3 implementations)
+- [x] Create `DisconnectedState` (consolidate 3 implementations) → `lib/widgets/common/disconnected_state.dart`
+
+**Note:** Phase 6 partial completion - extracted EmptyState (8 usages, ~227 lines removed)
+and DisconnectedState (3 usages, ~140 lines removed). Total ~367 lines of duplicate code removed.
 
 ---
 
@@ -128,7 +131,7 @@ split deferred as lower priority.
 | Phase 3 | **COMPLETED** | 2025-12-08 |
 | Phase 4 | **PARTIAL** | 2025-12-08 |
 | Phase 5 | **PARTIAL** | 2025-12-08 |
-| Phase 6 | Not Started | - |
+| Phase 6 | **PARTIAL** | 2025-12-08 |
 | Phase 7 | Not Started | - |
 | Phase 8 | Not Started | - |
 

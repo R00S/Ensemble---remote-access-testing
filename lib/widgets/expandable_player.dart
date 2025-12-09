@@ -474,20 +474,31 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           _peekImageUrl = null;
         });
       } else {
-        // Switching to non-playing player - use a short delay to ensure
-        // the DeviceSelectorBar renders before we clear peek state.
-        // This prevents a flash of grey placeholder during the transition.
-        _logger.log('🎬 COMMIT: No track, delaying state cleanup by 50ms');
-        Future.delayed(const Duration(milliseconds: 50), () {
+        // Switching to non-playing player - DeviceSelectorBar will show.
+        // Keep slideOffset at 1.0 and peekPlayer set so the DeviceSelectorBar
+        // shows peek content (new player name) at center position.
+        // After two frames, clear everything - this ensures the DeviceSelectorBar
+        // has fully rendered before we remove the peek content.
+        _logger.log('🎬 COMMIT: No track, keeping peek visible for DeviceSelectorBar');
+        setState(() {
+          _isSliding = false;
+          // Keep _slideOffset at 1.0 so peek shows at center in DeviceSelectorBar
+          // Keep _peekPlayer so DeviceSelectorBar can show it
+        });
+
+        // Wait two frames to ensure DeviceSelectorBar has rendered, then clean up
+        WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          _logger.log('🎬 COMMIT: Delayed cleanup executing now');
-          setState(() {
-            _slideOffset = 0.0;
-            _isSliding = false;
-            _inTransition = false;
-            _peekPlayer = null;
-            _peekTrack = null;
-            _peekImageUrl = null;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _logger.log('🎬 COMMIT: Clearing all transition state');
+            setState(() {
+              _slideOffset = 0.0;
+              _inTransition = false;
+              _peekPlayer = null;
+              _peekTrack = null;
+              _peekImageUrl = null;
+            });
           });
         });
       }

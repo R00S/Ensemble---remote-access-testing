@@ -427,6 +427,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     if (_isSliding) return;
     _isSliding = true;
 
+    // Mark transition BEFORE animation - this keeps peek content visible
+    // and hides main content to prevent any flash
+    _inTransition = true;
+
     final startOffset = _slideOffset;
     final targetOffset = direction < 0 ? -1.0 : 1.0;
 
@@ -448,51 +452,102 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
       _slideController.removeListener(animateToTarget);
 
-      // Switch the player FIRST - this now immediately sets currentTrack from cache
-      // in the provider, so the data is ready before we rebuild
+      // Cache the peek data BEFORE switching - we'll use this to crossfade
+      final cachedPeekPlayer = _peekPlayer;
+      final cachedPeekTrack = _peekTrack;
+      final cachedPeekImageUrl = _peekImageUrl;
+
+      // Switch the player - this sets currentTrack from cache in the provider
       onSwitch();
 
-      // Get the new track state to determine cleanup timing
+      // Get the new track state
       final maProvider = context.read<MusicAssistantProvider>();
       final newTrack = maProvider.currentTrack;
 
-      if (newTrack != null) {
-        // Switching to a playing player - clear immediately since we have track data
-        setState(() {
-          _slideOffset = 0.0;
-          _isSliding = false;
-          _inTransition = false;
-          _peekPlayer = null;
-          _peekTrack = null;
-          _peekImageUrl = null;
-        });
-      } else {
-        // Switching to non-playing player - DeviceSelectorBar will show.
-        // Keep slideOffset at 1.0 and peekPlayer set so the DeviceSelectorBar
-        // shows peek content (new player name) at center position.
-        // After two frames, clear everything - this ensures the DeviceSelectorBar
-        // has fully rendered before we remove the peek content.
-        setState(() {
-          _isSliding = false;
-        });
+      // Move peek content to center position (slideOffset = 0) while keeping it visible.
+      // The main content is hidden via _inTransition flag.
+      // This creates a seamless visual - peek content is already at center.
+      setState(() {
+        _slideOffset = 0.0;
+        _isSliding = false;
+        // Keep _inTransition = true and peek data intact
+      });
 
-        // Wait two frames to ensure DeviceSelectorBar has rendered, then clean up
+      if (newTrack != null) {
+        // Switching to a playing player - need to wait for image to be ready
+        // before showing main content and hiding peek
+        final newImageUrl = maProvider.getImageUrl(newTrack, size: 512);
+
+        if (newImageUrl != null && newImageUrl == cachedPeekImageUrl) {
+          // Same image - can transition immediately
+          _completeTransition();
+        } else if (newImageUrl != null) {
+          // Different image - precache it first, then transition
+          _precacheAndTransition(newImageUrl);
+        } else {
+          // No image - transition after frame
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _completeTransition();
+          });
+        }
+      } else {
+        // Switching to non-playing player - DeviceSelectorBar will show
+        // Wait for it to render, then complete transition
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            setState(() {
-              _slideOffset = 0.0;
-              _inTransition = false;
-              _peekPlayer = null;
-              _peekTrack = null;
-              _peekImageUrl = null;
-            });
+            if (mounted) _completeTransition();
           });
         });
       }
 
       _slideController.duration = const Duration(milliseconds: 250); // Reset default
+    });
+  }
+
+  /// Precache an image and then complete the transition
+  void _precacheAndTransition(String imageUrl) {
+    // Use CachedNetworkImage's cache to ensure image is ready
+    final imageProvider = CachedNetworkImageProvider(imageUrl);
+    final imageStream = imageProvider.resolve(const ImageConfiguration());
+    late ImageStreamListener listener;
+
+    listener = ImageStreamListener(
+      (ImageInfo info, bool synchronousCall) {
+        imageStream.removeListener(listener);
+        if (mounted) {
+          // Image is now in memory cache - safe to transition
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _completeTransition();
+          });
+        }
+      },
+      onError: (exception, stackTrace) {
+        imageStream.removeListener(listener);
+        // Even on error, complete the transition
+        if (mounted) _completeTransition();
+      },
+    );
+
+    imageStream.addListener(listener);
+
+    // Safety timeout - don't wait forever
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted && _inTransition) {
+        imageStream.removeListener(listener);
+        _completeTransition();
+      }
+    });
+  }
+
+  /// Complete the transition by hiding peek content and showing main content
+  void _completeTransition() {
+    if (!mounted) return;
+    setState(() {
+      _inTransition = false;
+      _peekPlayer = null;
+      _peekTrack = null;
+      _peekImageUrl = null;
     });
   }
 
@@ -890,7 +945,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
               clipBehavior: Clip.none,
               children: [
                 // Peek player content (shows when dragging OR during transition)
-                if (t < 0.1 && ((_slideOffset.abs() > 0.01 && _peekPlayer != null) || _inTransition))
+                // Show when: actively dragging (slideOffset != 0) OR in transition state
+                // Must have peek data to render
+                if (t < 0.1 && _peekPlayer != null && (_slideOffset.abs() > 0.01 || _inTransition))
                   _buildPeekContent(
                     maProvider: maProvider,
                     peekPlayer: _peekPlayer,
@@ -1294,21 +1351,26 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     required ColorScheme colorScheme,
   }) {
     // Calculate sliding position
-    // During transition, slideOffset is 0 so peek shows at center
+    // During transition (_inTransition = true), peek should be at center (offset 0)
     // When sliding left (negative offset), peek comes from right
     // When sliding right (positive offset), peek comes from left
-    final isFromRight = slideOffset < 0;
 
-    // The peek content starts off-screen and slides in as the main content slides out
-    // peekOffset: 0 = fully off-screen, 1 = fully on-screen
-    final peekProgress = slideOffset.abs();
+    double peekBaseOffset;
 
-    // Position calculation:
-    // From right: starts at containerWidth (off right edge), moves to 0 as progress increases
-    // From left: starts at -containerWidth (off left edge), moves to 0 as progress increases
-    final peekBaseOffset = isFromRight
-        ? containerWidth * (1 - peekProgress)  // Slides in from right
-        : -containerWidth * (1 - peekProgress); // Slides in from left
+    if (_inTransition && slideOffset.abs() < 0.01) {
+      // During transition with slideOffset at 0, show peek at center
+      peekBaseOffset = 0.0;
+    } else {
+      final isFromRight = slideOffset < 0;
+      final peekProgress = slideOffset.abs();
+
+      // Position calculation:
+      // From right: starts at containerWidth (off right edge), moves to 0 as progress increases
+      // From left: starts at -containerWidth (off left edge), moves to 0 as progress increases
+      peekBaseOffset = isFromRight
+          ? containerWidth * (1 - peekProgress)  // Slides in from right
+          : -containerWidth * (1 - peekProgress); // Slides in from left
+    }
 
     // Check if peek player has a track - if not, show device info instead
     final hasTrack = _peekTrack != null && peekImageUrl != null;

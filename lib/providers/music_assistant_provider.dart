@@ -47,6 +47,7 @@ class MusicAssistantProvider with ChangeNotifier {
 
   // Local player state
   bool _isLocalPlayerPowered = true;
+  bool _builtinPlayerAvailable = true; // False on MA 2.7.0b20+ (uses Sendspin instead)
   StreamSubscription? _localPlayerEventSubscription;
   StreamSubscription? _playerUpdatedEventSubscription;
   Timer? _localPlayerStateReportTimer;
@@ -442,7 +443,20 @@ class MusicAssistantProvider with ChangeNotifier {
       }
       _registrationInProgress = null;
     } catch (e) {
-      _logger.log('❌ CRITICAL: Player registration failed: $e');
+      // Check if this is because builtin_player API is not available (MA 2.7.0b20+)
+      final errorStr = e.toString();
+      if (errorStr.contains('Invalid command') && errorStr.contains('builtin_player')) {
+        _logger.log('⚠️ Builtin player API not available (MA 2.7.0b20+ uses Sendspin)');
+        _logger.log('ℹ️ Local player registration skipped - use other players (Chromecast, etc)');
+        _builtinPlayerAvailable = false;
+        if (_registrationInProgress != null && !_registrationInProgress!.isCompleted) {
+          _registrationInProgress!.complete();
+        }
+        _registrationInProgress = null;
+        return; // Non-fatal, continue without local player
+      }
+
+      _logger.log('❌ Player registration failed: $e');
       if (_registrationInProgress != null && !_registrationInProgress!.isCompleted) {
         _registrationInProgress!.completeError(e);
       }
@@ -464,6 +478,7 @@ class MusicAssistantProvider with ChangeNotifier {
 
   Future<void> _reportLocalPlayerState() async {
     if (_api == null) return;
+    if (!_builtinPlayerAvailable) return; // Skip on MA 2.7.0b20+ (no builtin_player API)
 
     final playerId = await SettingsService.getBuiltinPlayerId();
     if (playerId == null) return;

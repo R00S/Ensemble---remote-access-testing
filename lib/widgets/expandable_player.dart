@@ -452,16 +452,36 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       // in the provider, so the data is ready before we rebuild
       onSwitch();
 
-      // Now we can safely exit transition - the provider has the correct data
-      // because selectPlayer() now immediately sets currentTrack from cache
-      setState(() {
-        _slideOffset = 0.0;
-        _isSliding = false;
-        _inTransition = false;
-        _peekPlayer = null;
-        _peekTrack = null;
-        _peekImageUrl = null;
-      });
+      // Get the new track state to determine cleanup timing
+      final maProvider = context.read<MusicAssistantProvider>();
+      final newTrack = maProvider.currentTrack;
+
+      if (newTrack != null) {
+        // Switching to a playing player - clear immediately since we have track data
+        setState(() {
+          _slideOffset = 0.0;
+          _isSliding = false;
+          _inTransition = false;
+          _peekPlayer = null;
+          _peekTrack = null;
+          _peekImageUrl = null;
+        });
+      } else {
+        // Switching to non-playing player - use a short delay to ensure
+        // the DeviceSelectorBar renders before we clear peek state.
+        // This prevents a flash of grey placeholder during the transition.
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (!mounted) return;
+          setState(() {
+            _slideOffset = 0.0;
+            _isSliding = false;
+            _inTransition = false;
+            _peekPlayer = null;
+            _peekTrack = null;
+            _peekImageUrl = null;
+          });
+        });
+      }
 
       _slideController.duration = const Duration(milliseconds: 250); // Reset default
     });

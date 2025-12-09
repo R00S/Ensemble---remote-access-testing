@@ -448,29 +448,19 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
       _slideController.removeListener(animateToTarget);
 
-      // Keep the peek data - it has the correct track info for the incoming player
-      // We'll show this at center while hiding the stale main content
-      setState(() {
-        _inTransition = true;
-        _slideOffset = 0.0; // Peek is now at center
-        _isSliding = false;
-      });
-
-      // Switch the player
+      // Switch the player FIRST - this now immediately sets currentTrack from cache
+      // in the provider, so the data is ready before we rebuild
       onSwitch();
 
-      // Wait a couple frames for the provider to update, then exit transition
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          setState(() {
-            _inTransition = false;
-            _peekPlayer = null;
-            _peekTrack = null;
-            _peekImageUrl = null;
-          });
-        });
+      // Now we can safely exit transition - the provider has the correct data
+      // because selectPlayer() now immediately sets currentTrack from cache
+      setState(() {
+        _slideOffset = 0.0;
+        _isSliding = false;
+        _inTransition = false;
+        _peekPlayer = null;
+        _peekTrack = null;
+        _peekImageUrl = null;
       });
 
       _slideController.duration = const Duration(milliseconds: 250); // Reset default

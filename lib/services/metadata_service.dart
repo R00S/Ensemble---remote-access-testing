@@ -218,16 +218,25 @@ class MetadataService {
     // Check cache first
     final cacheKey = 'artistImage:$artistName';
     if (_artistImageCache.containsKey(cacheKey)) {
+      print('🎨 Artist image cache hit for "$artistName": ${_artistImageCache[cacheKey]}');
       return _artistImageCache[cacheKey];
     }
 
+    print('🎨 Fetching artist image for "$artistName"...');
+
     // Try Fanart.tv first (best source, free API key)
     final fanartKey = await SettingsService.getFanartTvApiKey();
+    print('🎨 Fanart.tv key: ${fanartKey != null ? "${fanartKey.substring(0, 4)}..." : "null"}');
+
     if (fanartKey != null && fanartKey.isNotEmpty) {
       // First get MusicBrainz ID (free, no key needed)
       final mbid = await _getMusicBrainzArtistId(artistName);
+      print('🎨 MusicBrainz ID for "$artistName": $mbid');
+
       if (mbid != null) {
         final imageUrl = await _fetchArtistImageFromFanartTv(mbid, fanartKey);
+        print('🎨 Fanart.tv result for "$artistName": $imageUrl');
+
         if (imageUrl != null) {
           _artistImageCache[cacheKey] = imageUrl;
           return imageUrl;
@@ -239,6 +248,8 @@ class MetadataService {
     final audioDbKey = await SettingsService.getTheAudioDbApiKey();
     if (audioDbKey != null && audioDbKey.isNotEmpty) {
       final imageUrl = await _fetchArtistImageFromTheAudioDb(artistName, audioDbKey);
+      print('🎨 TheAudioDB result for "$artistName": $imageUrl');
+
       if (imageUrl != null) {
         _artistImageCache[cacheKey] = imageUrl;
         return imageUrl;
@@ -246,6 +257,7 @@ class MetadataService {
     }
 
     // Cache the null result to avoid repeated failed lookups
+    print('🎨 No image found for "$artistName"');
     _artistImageCache[cacheKey] = null;
     return null;
   }

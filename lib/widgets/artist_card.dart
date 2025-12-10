@@ -43,7 +43,10 @@ class _ArtistCardState extends State<ArtistCard> {
     // Try to fetch fallback image if MA doesn't have one and we haven't tried yet
     if (maImageUrl == null && !_triedFallback) {
       _triedFallback = true;
+      print('🎨 No MA image for "${widget.artist.name}", trying fallback...');
       _fetchFallbackImage();
+    } else if (maImageUrl != null && !_triedFallback) {
+      print('🎨 MA has image for "${widget.artist.name}": $maImageUrl');
     }
 
     return RepaintBoundary(
@@ -114,6 +117,7 @@ class _ArtistCardState extends State<ArtistCard> {
 
   Future<void> _fetchFallbackImage() async {
     final fallbackUrl = await MetadataService.getArtistImageUrl(widget.artist.name);
+    print('🎨 Fallback result for "${widget.artist.name}": $fallbackUrl');
     if (fallbackUrl != null && mounted) {
       setState(() {
         _fallbackImageUrl = fallbackUrl;

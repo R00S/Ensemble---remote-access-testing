@@ -106,7 +106,9 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Recently played albums (with caching)
+          // Stable keys prevent widget recreation on parent rebuilds
           AlbumRow(
+            key: const ValueKey('recent-albums'),
             title: 'Recently Played',
             loadAlbums: () => provider.getRecentAlbumsWithCache(),
           ),
@@ -114,6 +116,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
 
           // Discover Artists (with caching)
           ArtistRow(
+            key: const ValueKey('discover-artists'),
             title: 'Discover Artists',
             loadArtists: () => provider.getDiscoverArtistsWithCache(),
           ),
@@ -121,6 +124,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
 
           // Discover Albums (with caching)
           AlbumRow(
+            key: const ValueKey('discover-albums'),
             title: 'Discover Albums',
             loadAlbums: () => provider.getDiscoverAlbumsWithCache(),
           ),

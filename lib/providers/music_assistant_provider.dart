@@ -174,7 +174,9 @@ class MusicAssistantProvider with ChangeNotifier {
           } else if (state == MAConnectionState.disconnected) {
             _availablePlayers = [];
             _selectedPlayer = null;
-            _cacheService.clearAll();
+            // Only clear detail caches on disconnect, NOT home screen caches
+            // Home screen data should persist across reconnects for better UX
+            _cacheService.clearAllDetailCaches();
           }
         },
         onError: (error) {

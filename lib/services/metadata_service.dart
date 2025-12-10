@@ -6,6 +6,9 @@ class MetadataService {
   // Cache to avoid repeated API calls for the same artist/album
   static final Map<String, String> _cache = {};
 
+  // Cache for artist images
+  static final Map<String, String?> _artistImageCache = {};
+
   /// Fetches artist biography/description with fallback chain:
   /// 1. Music Assistant metadata (passed in)
   /// 2. Last.fm API (if key configured)
@@ -204,8 +207,119 @@ class MetadataService {
     return text.trim();
   }
 
+  /// Fetches artist image URL with fallback to Last.fm and TheAudioDB
+  /// Returns the image URL if found, null otherwise
+  static Future<String?> getArtistImageUrl(String artistName) async {
+    // Check cache first
+    final cacheKey = 'artistImage:$artistName';
+    if (_artistImageCache.containsKey(cacheKey)) {
+      return _artistImageCache[cacheKey];
+    }
+
+    // Try Last.fm API first (free, no key required for basic info)
+    final lastFmKey = await SettingsService.getLastFmApiKey();
+    if (lastFmKey != null && lastFmKey.isNotEmpty) {
+      final imageUrl = await _fetchArtistImageFromLastFm(artistName, lastFmKey);
+      if (imageUrl != null) {
+        _artistImageCache[cacheKey] = imageUrl;
+        return imageUrl;
+      }
+    }
+
+    // Try TheAudioDB API
+    final audioDbKey = await SettingsService.getTheAudioDbApiKey();
+    if (audioDbKey != null && audioDbKey.isNotEmpty) {
+      final imageUrl = await _fetchArtistImageFromTheAudioDb(artistName, audioDbKey);
+      if (imageUrl != null) {
+        _artistImageCache[cacheKey] = imageUrl;
+        return imageUrl;
+      }
+    }
+
+    // Cache the null result to avoid repeated failed lookups
+    _artistImageCache[cacheKey] = null;
+    return null;
+  }
+
+  /// Fetch artist image from Last.fm
+  static Future<String?> _fetchArtistImageFromLastFm(
+    String artistName,
+    String apiKey,
+  ) async {
+    try {
+      final params = {
+        'method': 'artist.getinfo',
+        'artist': artistName,
+        'api_key': apiKey,
+        'format': 'json',
+      };
+
+      final uri = Uri.https('ws.audioscrobbler.com', '/2.0/', params);
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final artist = data['artist'];
+        if (artist != null) {
+          // Last.fm returns images array with different sizes
+          final images = artist['image'] as List?;
+          if (images != null && images.isNotEmpty) {
+            // Find 'extralarge' or 'large' size image
+            for (var img in images.reversed) {
+              final size = img['size'] as String?;
+              final url = img['#text'] as String?;
+              if (url != null &&
+                  url.isNotEmpty &&
+                  !url.contains('2a96cbd8b46e442fc41c2b86b821562f') && // Default blank image
+                  (size == 'extralarge' || size == 'large' || size == 'medium')) {
+                return url;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('⚠️ Last.fm artist image error: $e');
+    }
+    return null;
+  }
+
+  /// Fetch artist image from TheAudioDB
+  static Future<String?> _fetchArtistImageFromTheAudioDb(
+    String artistName,
+    String apiKey,
+  ) async {
+    try {
+      final uri = Uri.https(
+        'theaudiodb.com',
+        '/api/v1/json/$apiKey/search.php',
+        {'s': artistName},
+      );
+
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final artists = data['artists'];
+
+        if (artists != null && artists.isNotEmpty) {
+          final artist = artists[0];
+          // Try different image fields in order of preference
+          return artist['strArtistThumb'] ??
+              artist['strArtistFanart'] ??
+              artist['strArtistFanart2'] ??
+              artist['strArtistFanart3'];
+        }
+      }
+    } catch (e) {
+      print('⚠️ TheAudioDB artist image error: $e');
+    }
+    return null;
+  }
+
   /// Clears the metadata cache
   static void clearCache() {
     _cache.clear();
+    _artistImageCache.clear();
   }
 }

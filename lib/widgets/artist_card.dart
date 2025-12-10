@@ -6,8 +6,9 @@ import '../screens/artist_details_screen.dart';
 import '../constants/hero_tags.dart';
 import '../theme/theme_provider.dart';
 import '../utils/page_transitions.dart';
+import '../services/metadata_service.dart';
 
-class ArtistCard extends StatelessWidget {
+class ArtistCard extends StatefulWidget {
   final Artist artist;
   final VoidCallback? onTap;
   final String? heroTagSuffix;
@@ -20,25 +21,42 @@ class ArtistCard extends StatelessWidget {
   });
 
   @override
+  State<ArtistCard> createState() => _ArtistCardState();
+}
+
+class _ArtistCardState extends State<ArtistCard> {
+  String? _fallbackImageUrl;
+  bool _triedFallback = false;
+
+  @override
   Widget build(BuildContext context) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final imageUrl = maProvider.api?.getImageUrl(artist, size: 256);
+    final maImageUrl = maProvider.api?.getImageUrl(widget.artist, size: 256);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    final suffix = heroTagSuffix != null ? '_$heroTagSuffix' : '';
+    final suffix = widget.heroTagSuffix != null ? '_${widget.heroTagSuffix}' : '';
+
+    // Use MA image if available, otherwise try fallback
+    final imageUrl = maImageUrl ?? _fallbackImageUrl;
+
+    // Try to fetch fallback image if MA doesn't have one and we haven't tried yet
+    if (maImageUrl == null && !_triedFallback) {
+      _triedFallback = true;
+      _fetchFallbackImage();
+    }
 
     return RepaintBoundary(
       child: GestureDetector(
-        onTap: onTap ?? () {
+        onTap: widget.onTap ?? () {
           // Update adaptive colors immediately on tap
           updateAdaptiveColorsFromImage(context, imageUrl);
           Navigator.push(
             context,
             FadeSlidePageRoute(
               child: ArtistDetailsScreen(
-                artist: artist,
-                heroTagSuffix: heroTagSuffix,
+                artist: widget.artist,
+                heroTagSuffix: widget.heroTagSuffix,
               ),
             ),
           );
@@ -48,7 +66,7 @@ class ArtistCard extends StatelessWidget {
           children: [
             // Artist image - circular
             Hero(
-              tag: HeroTags.artistImage + (artist.uri ?? artist.itemId) + suffix,
+              tag: HeroTags.artistImage + (widget.artist.uri ?? widget.artist.itemId) + suffix,
               child: ClipOval(
                 child: Container(
                   width: 110,
@@ -73,11 +91,11 @@ class ArtistCard extends StatelessWidget {
           const SizedBox(height: 12),
           // Artist name
           Hero(
-            tag: HeroTags.artistName + (artist.uri ?? artist.itemId) + suffix,
+            tag: HeroTags.artistName + (widget.artist.uri ?? widget.artist.itemId) + suffix,
             child: Material(
               color: Colors.transparent,
               child: Text(
-                artist.name,
+                widget.artist.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -92,5 +110,14 @@ class ArtistCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _fetchFallbackImage() async {
+    final fallbackUrl = await MetadataService.getArtistImageUrl(widget.artist.name);
+    if (fallbackUrl != null && mounted) {
+      setState(() {
+        _fallbackImageUrl = fallbackUrl;
+      });
+    }
   }
 }

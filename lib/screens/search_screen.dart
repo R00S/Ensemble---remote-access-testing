@@ -1,8 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../constants/timings.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
 import '../services/debug_logger.dart';
@@ -59,7 +57,6 @@ class SearchScreenState extends State<SearchScreen> {
   final _logger = DebugLogger();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  Timer? _debounceTimer;
   Map<String, List<MediaItem>> _searchResults = {
     'artists': [],
     'albums': [],
@@ -91,17 +88,14 @@ class SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
     _searchController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged(String query) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(Timings.searchDebounce, () {
-      _performSearch(query);
-    });
+  void _onSearchSubmitted(String query) {
+    // Only search when user explicitly submits (presses Enter/Done)
+    _performSearch(query);
   }
 
   Future<void> _performSearch(String query) async {
@@ -157,6 +151,7 @@ class SearchScreenState extends State<SearchScreen> {
           focusNode: _focusNode,
           style: TextStyle(color: colorScheme.onSurface),
           cursorColor: colorScheme.primary,
+          textInputAction: TextInputAction.search,
           decoration: InputDecoration(
             hintText: 'Search music...',
             hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
@@ -166,15 +161,20 @@ class SearchScreenState extends State<SearchScreen> {
                     icon: Icon(Icons.clear_rounded, color: colorScheme.onSurface.withOpacity(0.5)),
                     onPressed: () {
                       _searchController.clear();
-                      _performSearch('');
+                      setState(() {
+                        _searchResults = {'artists': [], 'albums': [], 'tracks': []};
+                        _hasSearched = false;
+                        _searchError = null;
+                      });
                     },
                   )
                 : null,
           ),
           onChanged: (value) {
-            _onSearchChanged(value);
+            // Just trigger rebuild to show/hide clear button
+            setState(() {});
           },
-          onSubmitted: _performSearch,
+          onSubmitted: _onSearchSubmitted,
         ),
       ),
       body: !maProvider.isConnected

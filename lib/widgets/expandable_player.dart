@@ -844,7 +844,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         (currentTrack.album != null ? artistToAlbumGap + albumHeight : 0.0);
 
     // Define where progress bar should be (fixed position from bottom of expanded area)
-    final expandedProgressTop = screenSize.height - 220; // Fixed distance from bottom
+    // Need space for: progress bar (~70) + controls (~70) + volume (~50) + padding (~30) = ~220
+    // Plus some extra room = 290 from bottom
+    final expandedProgressTop = screenSize.height - 290;
 
     // Calculate available space between art bottom and progress bar
     final artBottom = expandedArtTop + expandedArtSize;

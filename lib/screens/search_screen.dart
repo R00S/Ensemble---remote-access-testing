@@ -100,11 +100,11 @@ class SearchScreenState extends State<SearchScreen> {
   void _onSearchChanged(String query) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(Timings.searchDebounce, () {
-      _performSearch(query);
+      _performSearch(query, keepFocus: true);
     });
   }
 
-  Future<void> _performSearch(String query) async {
+  Future<void> _performSearch(String query, {bool keepFocus = false}) async {
     if (query.isEmpty) {
       setState(() {
         _searchResults = {'artists': [], 'albums': [], 'tracks': []};
@@ -129,6 +129,10 @@ class SearchScreenState extends State<SearchScreen> {
           _isSearching = false;
           _hasSearched = true;
         });
+        // Keep keyboard open if user is still typing
+        if (keepFocus && _focusNode.hasFocus) {
+          _focusNode.requestFocus();
+        }
       }
     } catch (e) {
       _logger.log('Search error: $e');
@@ -138,6 +142,9 @@ class SearchScreenState extends State<SearchScreen> {
           _hasSearched = true;
           _searchError = 'Search failed. Please check your connection.';
         });
+        if (keepFocus && _focusNode.hasFocus) {
+          _focusNode.requestFocus();
+        }
       }
     }
   }
@@ -157,6 +164,7 @@ class SearchScreenState extends State<SearchScreen> {
           focusNode: _focusNode,
           style: TextStyle(color: colorScheme.onSurface),
           cursorColor: colorScheme.primary,
+          textInputAction: TextInputAction.search,
           decoration: InputDecoration(
             hintText: 'Search music...',
             hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
@@ -166,15 +174,20 @@ class SearchScreenState extends State<SearchScreen> {
                     icon: Icon(Icons.clear_rounded, color: colorScheme.onSurface.withOpacity(0.5)),
                     onPressed: () {
                       _searchController.clear();
-                      _performSearch('');
+                      setState(() {
+                        _searchResults = {'artists': [], 'albums': [], 'tracks': []};
+                        _hasSearched = false;
+                        _searchError = null;
+                      });
                     },
                   )
                 : null,
           ),
           onChanged: (value) {
+            setState(() {}); // Update clear button visibility
             _onSearchChanged(value);
           },
-          onSubmitted: _performSearch,
+          onSubmitted: (query) => _performSearch(query),
         ),
       ),
       body: !maProvider.isConnected

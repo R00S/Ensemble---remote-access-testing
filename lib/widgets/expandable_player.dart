@@ -1096,37 +1096,40 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                               final currentProgress = seekPosition ?? elapsedTime.toDouble();
                               return Column(
                                 children: [
-                                  SliderTheme(
-                                    data: SliderThemeData(
-                                      trackHeight: 4,
-                                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                                      trackShape: const RoundedRectSliderTrackShape(),
-                                    ),
-                                    child: Slider(
-                                      value: currentProgress.clamp(0.0, currentTrack.duration!.inSeconds.toDouble()).toDouble(),
-                                      max: currentTrack.duration!.inSeconds.toDouble(),
-                                      onChanged: (value) => _seekPositionNotifier.value = value,
-                                      onChangeStart: (value) => _seekPositionNotifier.value = value,
-                                      onChangeEnd: (value) async {
-                                        try {
-                                          await maProvider.seek(selectedPlayer.playerId, value.round());
-                                          await Future.delayed(const Duration(milliseconds: 200));
-                                        } catch (e) {
-                                          if (mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(content: Text('Error seeking: $e')),
-                                            );
+                                  SizedBox(
+                                    height: 48, // Increase touch target height
+                                    child: SliderTheme(
+                                      data: SliderThemeData(
+                                        trackHeight: 4,
+                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+                                        trackShape: const RoundedRectSliderTrackShape(),
+                                      ),
+                                      child: Slider(
+                                        value: currentProgress.clamp(0.0, currentTrack.duration!.inSeconds.toDouble()).toDouble(),
+                                        max: currentTrack.duration!.inSeconds.toDouble(),
+                                        onChanged: (value) => _seekPositionNotifier.value = value,
+                                        onChangeStart: (value) => _seekPositionNotifier.value = value,
+                                        onChangeEnd: (value) async {
+                                          try {
+                                            await maProvider.seek(selectedPlayer.playerId, value.round());
+                                            await Future.delayed(const Duration(milliseconds: 200));
+                                          } catch (e) {
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('Error seeking: $e')),
+                                              );
+                                            }
+                                          } finally {
+                                            if (mounted) {
+                                              _seekPositionNotifier.value = null;
+                                              _seekPosition = null;
+                                            }
                                           }
-                                        } finally {
-                                          if (mounted) {
-                                            _seekPositionNotifier.value = null;
-                                            _seekPosition = null;
-                                          }
-                                        }
-                                      },
-                                      activeColor: primaryColor,
-                                      inactiveColor: primaryColor.withOpacity(0.2),
+                                        },
+                                        activeColor: primaryColor,
+                                        inactiveColor: primaryColor.withOpacity(0.2),
+                                      ),
                                     ),
                                   ),
                                   Padding(

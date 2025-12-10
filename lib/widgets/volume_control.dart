@@ -109,17 +109,19 @@ class _VolumeControlState extends State<VolumeControl> {
           },
         ),
         Expanded(
-          child: SliderTheme(
-            data: SliderThemeData(
-              trackHeight: 2,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-              activeTrackColor: Colors.white,
-              inactiveTrackColor: Colors.white.withOpacity(0.3),
-              thumbColor: Colors.white,
-              overlayColor: Colors.white.withOpacity(0.2),
-            ),
-            child: Slider(
+          child: SizedBox(
+            height: 48, // Increase touch target height
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withOpacity(0.3),
+                thumbColor: Colors.white,
+                overlayColor: Colors.white.withOpacity(0.2),
+              ),
+              child: Slider(
               value: currentVolume.clamp(0.0, 1.0),
               onChanged: (value) {
                 setState(() {
@@ -162,6 +164,7 @@ class _VolumeControlState extends State<VolumeControl> {
                   }
                 }
               },
+            ),
             ),
           ),
         ),

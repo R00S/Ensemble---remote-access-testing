@@ -63,15 +63,24 @@ class MusicAssistantAPI {
 
   // Guard to prevent multiple simultaneous connection attempts
   Completer<void>? _connectionInProgress;
+  bool _isDisposed = false;
 
   Future<void> connect() async {
-    // If already connected, nothing to do
-    if (_currentState == MAConnectionState.connected) {
+    // If disposed, don't try to connect
+    if (_isDisposed) {
+      _logger.log('Connection: API disposed, skipping connect');
+      return;
+    }
+
+    // If already connected or authenticated, nothing to do
+    if (_currentState == MAConnectionState.connected ||
+        _currentState == MAConnectionState.authenticated) {
+      _logger.log('Connection: Already connected, skipping');
       return;
     }
 
     // If connection is in progress, wait for it instead of starting another
-    if (_connectionInProgress != null) {
+    if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
       _logger.log('Connection already in progress, waiting...');
       return _connectionInProgress!.future;
     }
@@ -1975,13 +1984,39 @@ class MusicAssistantAPI {
   }
 
   Future<void> _reconnect() async {
+    // Don't reconnect if disposed
+    if (_isDisposed) {
+      _logger.log('Reconnect: API disposed, skipping');
+      return;
+    }
+
+    // Don't reconnect if already connected or connecting
+    if (_currentState == MAConnectionState.connected ||
+        _currentState == MAConnectionState.authenticated ||
+        _currentState == MAConnectionState.connecting) {
+      _logger.log('Reconnect: Already connected/connecting, skipping');
+      return;
+    }
+
+    // Don't reconnect if another connection is in progress
+    if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
+      _logger.log('Reconnect: Connection already in progress, skipping');
+      return;
+    }
+
     await Future.delayed(Timings.reconnectDelay);
-    if (_currentState != MAConnectionState.connected) {
-      try {
-        await connect();
-      } catch (e) {
-        _logger.log('Reconnection failed: $e');
-      }
+
+    // Check again after delay
+    if (_isDisposed ||
+        _currentState == MAConnectionState.connected ||
+        _currentState == MAConnectionState.authenticated) {
+      return;
+    }
+
+    try {
+      await connect();
+    } catch (e) {
+      _logger.log('Reconnection failed: $e');
     }
   }
 
@@ -1994,7 +2029,13 @@ class MusicAssistantAPI {
   }
 
   void dispose() {
+    _isDisposed = true;
     _stopHeartbeat();
+    // Complete any pending connection to prevent hanging futures
+    if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
+      _connectionInProgress!.completeError(Exception('API disposed'));
+    }
+    _connectionInProgress = null;
     disconnect();
     _connectionStateController.close();
     for (final stream in _eventStreams.values) {

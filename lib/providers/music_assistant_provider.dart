@@ -141,7 +141,8 @@ class MusicAssistantProvider with ChangeNotifier {
       _serverUrl = serverUrl;
       await SettingsService.setServerUrl(serverUrl);
 
-      await _api?.disconnect();
+      // Dispose the old API to stop any pending reconnects
+      _api?.dispose();
 
       _api = MusicAssistantAPI(serverUrl, _authManager);
 

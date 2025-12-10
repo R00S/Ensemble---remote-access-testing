@@ -511,8 +511,6 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   // ============ TRACKS TAB (favorites only) ============
   Widget _buildTracksTab(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final maProvider = context.read<MusicAssistantProvider>();
 
     if (_isLoadingTracks) {
       return Center(child: CircularProgressIndicator(color: colorScheme.primary));
@@ -526,17 +524,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       );
     }
 
-    // Group tracks by artist, then by album
-    final tracksByArtistAlbum = <String, Map<String, List<Track>>>{};
-    for (final track in _favoriteTracks) {
-      final artistKey = track.artistsString.isNotEmpty ? track.artistsString : 'Unknown Artist';
-      final albumKey = track.album?.name ?? 'Unknown Album';
-      tracksByArtistAlbum.putIfAbsent(artistKey, () => {});
-      tracksByArtistAlbum[artistKey]!.putIfAbsent(albumKey, () => []).add(track);
-    }
-
-    // Sort artists alphabetically
-    final sortedArtists = tracksByArtistAlbum.keys.toList()..sort();
+    // Sort tracks by artist name, then track name
+    final sortedTracks = List<Track>.from(_favoriteTracks)
+      ..sort((a, b) {
+        final artistCompare = a.artistsString.compareTo(b.artistsString);
+        if (artistCompare != 0) return artistCompare;
+        return a.name.compareTo(b.name);
+      });
 
     return RefreshIndicator(
       color: colorScheme.primary,
@@ -546,86 +540,10 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         key: const PageStorageKey<String>('library_tracks_list'),
         cacheExtent: 500,
         padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
-        itemCount: sortedArtists.length,
+        itemCount: sortedTracks.length,
         itemBuilder: (context, index) {
-          final artistName = sortedArtists[index];
-          final albumsMap = tracksByArtistAlbum[artistName]!;
-          final sortedAlbums = albumsMap.keys.toList()..sort();
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Artist header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                child: Text(
-                  artistName,
-                  style: textTheme.titleLarge?.copyWith(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Albums under this artist
-              ...sortedAlbums.map((albumName) {
-                final tracks = albumsMap[albumName]!;
-                final firstTrack = tracks.first;
-                final albumImageUrl = firstTrack.album != null
-                    ? maProvider.api?.getImageUrl(firstTrack.album!, size: 128)
-                    : null;
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Album header with art
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Row(
-                        children: [
-                          // Album art
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: colorScheme.surfaceVariant,
-                              borderRadius: BorderRadius.circular(6),
-                              image: albumImageUrl != null
-                                  ? DecorationImage(
-                                      image: CachedNetworkImageProvider(albumImageUrl),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
-                            ),
-                            child: albumImageUrl == null
-                                ? Icon(Icons.album, color: colorScheme.onSurfaceVariant, size: 24)
-                                : null,
-                          ),
-                          const SizedBox(width: 12),
-                          // Album name
-                          Expanded(
-                            child: Text(
-                              albumName,
-                              style: textTheme.titleSmall?.copyWith(
-                                color: colorScheme.onSurface.withOpacity(0.8),
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Tracks under this album
-                    ...tracks.map((track) => _buildTrackTile(context, track)),
-                  ],
-                );
-              }),
-              const Divider(height: 16),
-            ],
-          );
+          final track = sortedTracks[index];
+          return _buildTrackTile(context, track);
         },
       ),
     );
@@ -636,11 +554,30 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
+    // Get image URL from track itself
+    final imageUrl = maProvider.api?.getImageUrl(track, size: 128);
+
     return ListTile(
-      contentPadding: const EdgeInsets.only(left: 76, right: 16),
-      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceVariant,
+          borderRadius: BorderRadius.circular(6),
+          image: imageUrl != null
+              ? DecorationImage(
+                  image: CachedNetworkImageProvider(imageUrl),
+                  fit: BoxFit.cover,
+                )
+              : null,
+        ),
+        child: imageUrl == null
+            ? Icon(Icons.music_note, color: colorScheme.onSurfaceVariant, size: 24)
+            : null,
+      ),
       title: Text(
-        track.name,
+        track.artistsString,
         style: textTheme.bodyMedium?.copyWith(
           color: colorScheme.onSurface,
           fontWeight: FontWeight.w500,
@@ -648,10 +585,18 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
+      subtitle: Text(
+        track.name,
+        style: textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurface.withOpacity(0.7),
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       trailing: const Icon(
         Icons.favorite,
         color: Colors.red,
-        size: 18,
+        size: 20,
       ),
       onTap: () async {
         final player = maProvider.selectedPlayer;

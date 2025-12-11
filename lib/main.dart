@@ -90,21 +90,27 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
   }
 
   Future<void> _initHardwareVolumeControl() async {
-    _logger.log('🔊 Initializing hardware volume control...');
-    await _hardwareVolumeService.init();
-    _logger.log('🔊 Hardware volume service initialized, setting up listeners...');
+    try {
+      _logger.log('🔊 [1/4] Starting hardware volume control initialization...');
 
-    _volumeUpSub = _hardwareVolumeService.onVolumeUp.listen((_) {
-      _logger.log('🔊 Volume UP event received in main.dart');
-      _adjustVolume(_volumeStep);
-    });
+      _logger.log('🔊 [2/4] Calling HardwareVolumeService.init()...');
+      await _hardwareVolumeService.init();
+      _logger.log('🔊 [3/4] HardwareVolumeService.init() completed, isListening=${_hardwareVolumeService.isListening}');
 
-    _volumeDownSub = _hardwareVolumeService.onVolumeDown.listen((_) {
-      _logger.log('🔊 Volume DOWN event received in main.dart');
-      _adjustVolume(-_volumeStep);
-    });
+      _volumeUpSub = _hardwareVolumeService.onVolumeUp.listen((_) {
+        _logger.log('🔊 Volume UP event received in main.dart');
+        _adjustVolume(_volumeStep);
+      });
 
-    _logger.log('🔊 Hardware volume control fully initialized');
+      _volumeDownSub = _hardwareVolumeService.onVolumeDown.listen((_) {
+        _logger.log('🔊 Volume DOWN event received in main.dart');
+        _adjustVolume(-_volumeStep);
+      });
+
+      _logger.log('🔊 [4/4] Hardware volume control fully initialized');
+    } catch (e, stack) {
+      _logger.error('Hardware volume control initialization FAILED', context: 'VolumeInit', error: e, stackTrace: stack);
+    }
   }
 
   Future<void> _adjustVolume(int delta) async {

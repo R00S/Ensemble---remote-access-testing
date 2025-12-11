@@ -23,28 +23,38 @@ class HardwareVolumeService {
 
   /// Initialize the service and start listening for volume button events
   Future<void> init() async {
-    if (_isListening) return;
+    _logger.log('🔊 HardwareVolumeService.init() called, _isListening=$_isListening');
 
+    if (_isListening) {
+      _logger.log('🔊 HardwareVolumeService.init() - already listening, returning early');
+      return;
+    }
+
+    _logger.log('🔊 Setting up MethodChannel handler for volume events...');
     _channel.setMethodCallHandler((call) async {
+      _logger.log('🔊 MethodChannel received call: ${call.method}');
       switch (call.method) {
         case 'volumeUp':
-          _logger.log('🔊 Hardware VOLUME UP pressed');
+          _logger.log('🔊 Hardware VOLUME UP pressed - broadcasting event');
           _volumeUpController.add(null);
           break;
         case 'volumeDown':
-          _logger.log('🔊 Hardware VOLUME DOWN pressed');
+          _logger.log('🔊 Hardware VOLUME DOWN pressed - broadcasting event');
           _volumeDownController.add(null);
           break;
+        default:
+          _logger.log('🔊 Unknown method call: ${call.method}');
       }
     });
+    _logger.log('🔊 MethodChannel handler set up');
 
     try {
-      _logger.log('🔊 Calling startListening on native channel...');
+      _logger.log('🔊 Invoking startListening on native channel...');
       await _channel.invokeMethod('startListening');
       _isListening = true;
-      _logger.log('🔊 Hardware volume button listening STARTED successfully');
+      _logger.log('🔊 Native startListening succeeded, _isListening=$_isListening');
     } catch (e) {
-      _logger.log('🔊 ERROR: Failed to start volume button listening: $e');
+      _logger.error('Failed to start volume button listening', context: 'VolumeService', error: e);
     }
   }
 

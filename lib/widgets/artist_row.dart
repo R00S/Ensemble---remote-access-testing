@@ -52,78 +52,83 @@ class _ArtistRowState extends State<ArtistRow> with AutomaticKeepAliveClientMixi
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 8.0),
-          child: Text(
-            widget.title,
-            style: textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onBackground,
+    // Total row height includes title + content
+    final totalHeight = widget.rowHeight ?? 207.0; // Default: 44 title + 163 content
+    const titleHeight = 44.0; // 12 top padding + ~24 text + 8 bottom padding
+    final contentHeight = totalHeight - titleHeight;
+
+    return SizedBox(
+      height: totalHeight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 8.0),
+            child: Text(
+              widget.title,
+              style: textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onBackground,
+              ),
             ),
           ),
-        ),
-        SizedBox(
-          height: widget.rowHeight ?? 163,
-          child: FutureBuilder<List<Artist>>(
-            future: _artistsFuture,
-            builder: (context, snapshot) {
-              // Use cached data immediately if available (prevents flash on rebuild)
-              final artists = snapshot.data ?? _cachedArtists;
+          Expanded(
+            child: FutureBuilder<List<Artist>>(
+              future: _artistsFuture,
+              builder: (context, snapshot) {
+                // Use cached data immediately if available (prevents flash on rebuild)
+                final artists = snapshot.data ?? _cachedArtists;
 
-              // Only show loading if we have no data at all
-              if (artists == null && snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+                // Only show loading if we have no data at all
+                if (artists == null && snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              if (snapshot.hasError && artists == null) {
-                return Center(
-                  child: Text('Error: ${snapshot.error}'),
-                );
-              }
+                if (snapshot.hasError && artists == null) {
+                  return Center(
+                    child: Text('Error: ${snapshot.error}'),
+                  );
+                }
 
-              if (artists == null || artists.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No artists found',
-                    style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+                if (artists == null || artists.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No artists found',
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+                    ),
+                  );
+                }
+
+                // Scale card width based on content height
+                final cardWidth = contentHeight * 0.74;
+                final itemExtent = cardWidth + 16; // width + horizontal margins
+
+                return ScrollConfiguration(
+                  behavior: const _StretchScrollBehavior(),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    itemCount: artists.length,
+                    itemExtent: itemExtent,
+                    itemBuilder: (context, index) {
+                      final artist = artists[index];
+                      return Container(
+                        key: ValueKey(artist.uri ?? artist.itemId),
+                        width: cardWidth,
+                        margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: ArtistCard(
+                          artist: artist,
+                          heroTagSuffix: widget.heroTagSuffix,
+                        ),
+                      );
+                    },
                   ),
                 );
-              }
-
-              // Scale card width based on row height (maintains aspect ratio)
-              final height = widget.rowHeight ?? 163;
-              final cardWidth = height * 0.74; // Maintains roughly same proportions
-              final itemExtent = cardWidth + 16; // width + horizontal margins
-
-              return ScrollConfiguration(
-                behavior: const _StretchScrollBehavior(),
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                  itemCount: artists.length,
-                  itemExtent: itemExtent,
-                  itemBuilder: (context, index) {
-                    final artist = artists[index];
-                    return Container(
-                      key: ValueKey(artist.uri ?? artist.itemId),
-                      width: cardWidth,
-                      margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: ArtistCard(
-                        artist: artist,
-                        heroTagSuffix: widget.heroTagSuffix,
-                        imageSize: height * 0.67, // Scale image with row height
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

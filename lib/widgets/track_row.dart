@@ -50,76 +50,82 @@ class _TrackRowState extends State<TrackRow> with AutomaticKeepAliveClientMixin 
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 8.0),
-          child: Text(
-            widget.title,
-            style: textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onBackground,
+    // Total row height includes title + content
+    final totalHeight = widget.rowHeight ?? 224.0; // Default: 44 title + 180 content
+    const titleHeight = 44.0; // 12 top padding + ~24 text + 8 bottom padding
+    final contentHeight = totalHeight - titleHeight;
+
+    return SizedBox(
+      height: totalHeight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 8.0),
+            child: Text(
+              widget.title,
+              style: textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onBackground,
+              ),
             ),
           ),
-        ),
-        SizedBox(
-          height: widget.rowHeight ?? 180,
-          child: FutureBuilder<List<Track>>(
-            future: _tracksFuture,
-            builder: (context, snapshot) {
-              final tracks = snapshot.data ?? _cachedTracks;
+          Expanded(
+            child: FutureBuilder<List<Track>>(
+              future: _tracksFuture,
+              builder: (context, snapshot) {
+                final tracks = snapshot.data ?? _cachedTracks;
 
-              if (tracks == null && snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+                if (tracks == null && snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              if (snapshot.hasError && tracks == null) {
-                return Center(
-                  child: Text('Error: ${snapshot.error}'),
-                );
-              }
+                if (snapshot.hasError && tracks == null) {
+                  return Center(
+                    child: Text('Error: ${snapshot.error}'),
+                  );
+                }
 
-              if (tracks == null || tracks.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No tracks found',
-                    style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+                if (tracks == null || tracks.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No tracks found',
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+                    ),
+                  );
+                }
+
+                // Scale card width based on content height
+                final cardWidth = contentHeight * 0.78;
+                final itemExtent = cardWidth + 12;
+
+                return ScrollConfiguration(
+                  behavior: const _StretchScrollBehavior(),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    itemCount: tracks.length,
+                    itemExtent: itemExtent,
+                    itemBuilder: (context, index) {
+                      final track = tracks[index];
+                      return Container(
+                        key: ValueKey(track.uri ?? track.itemId),
+                        width: cardWidth,
+                        margin: const EdgeInsets.symmetric(horizontal: 6.0),
+                        child: _TrackCard(
+                          track: track,
+                          tracks: tracks,
+                          index: index,
+                        ),
+                      );
+                    },
                   ),
                 );
-              }
-
-              // Scale card width based on row height
-              final height = widget.rowHeight ?? 180;
-              final cardWidth = height * 0.78;
-              final itemExtent = cardWidth + 12;
-
-              return ScrollConfiguration(
-                behavior: const _StretchScrollBehavior(),
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                  itemCount: tracks.length,
-                  itemExtent: itemExtent,
-                  itemBuilder: (context, index) {
-                    final track = tracks[index];
-                    return Container(
-                      key: ValueKey(track.uri ?? track.itemId),
-                      width: cardWidth,
-                      margin: const EdgeInsets.symmetric(horizontal: 6.0),
-                      child: _TrackCard(
-                        track: track,
-                        tracks: tracks,
-                        index: index,
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

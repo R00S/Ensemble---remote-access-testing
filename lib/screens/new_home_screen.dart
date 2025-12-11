@@ -155,38 +155,16 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
 
   Widget _buildConnectedView(
       BuildContext context, MusicAssistantProvider provider) {
-    // Count enabled rows
-    final totalEnabledRows = (_showRecentAlbums ? 1 : 0) +
-                             (_showDiscoverArtists ? 1 : 0) +
-                             (_showDiscoverAlbums ? 1 : 0) +
-                             (_showFavoriteAlbums ? 1 : 0) +
-                             (_showFavoriteArtists ? 1 : 0) +
-                             (_showFavoriteTracks ? 1 : 0);
-
-    // Use LayoutBuilder to adapt to available screen height
+    // Use LayoutBuilder to get available screen height
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Always calculate heights based on fitting exactly 3 rows (2 album + 1 artist)
-        // This ensures consistent sizing regardless of how many rows are enabled
+        // Simple calculation: available height divided by 3 rows
+        // Each row includes its title, artwork, and info
         final availableHeight = constraints.maxHeight - BottomSpacing.withMiniPlayer;
+        final rowHeight = availableHeight / 3;
 
-        // Fixed layout: 3 rows with 2 spacings of 8px each, 3 titles
-        const numRowsForCalc = 3;
-        const totalSpacing = (numRowsForCalc - 1) * 8.0; // 16px total spacing
-        const titleHeight = 44.0; // Height for title text + padding per row
-
-        // Content height for 3 rows (2 album-type + 1 artist-type)
-        final contentHeight = availableHeight - totalSpacing - (titleHeight * numRowsForCalc);
-
-        // Distribute: 2 album rows + 1 artist row with ratio 1.18:1
-        // totalRatio = (2 * 1.18) + (1 * 1.0) = 3.36
-        const totalRatio = 3.36;
-        final unitHeight = contentHeight / totalRatio;
-        final artistRowHeight = unitHeight.clamp(120.0, 180.0);
-        final albumRowHeight = (unitHeight * 1.18).clamp(140.0, 210.0);
-
-        // Build favorites rows in random order with calculated heights
-        final favoritesWidgets = _buildFavoritesRows(provider, albumRowHeight, artistRowHeight);
+        // Build favorites rows in random order
+        final favoritesWidgets = _buildFavoritesRows(provider, rowHeight);
 
         // Use Android 12+ stretch overscroll effect
         return ScrollConfiguration(
@@ -194,43 +172,39 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
-            key: _refreshKey,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Recently played albums (optional)
-              if (_showRecentAlbums) ...[
-                AlbumRow(
-                  key: const ValueKey('recent-albums'),
-                  title: 'Recently Played',
-                  loadAlbums: () => provider.getRecentAlbumsWithCache(),
-                  rowHeight: albumRowHeight,
-                ),
-                if (_showDiscoverArtists || _showDiscoverAlbums) const SizedBox(height: 8),
+              key: _refreshKey,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Recently played albums (optional)
+                if (_showRecentAlbums)
+                  AlbumRow(
+                    key: const ValueKey('recent-albums'),
+                    title: 'Recently Played',
+                    loadAlbums: () => provider.getRecentAlbumsWithCache(),
+                    rowHeight: rowHeight,
+                  ),
+
+                // Discover Artists (optional)
+                if (_showDiscoverArtists)
+                  ArtistRow(
+                    key: const ValueKey('discover-artists'),
+                    title: 'Discover Artists',
+                    loadArtists: () => provider.getDiscoverArtistsWithCache(),
+                    rowHeight: rowHeight,
+                  ),
+
+                // Discover Albums (optional)
+                if (_showDiscoverAlbums)
+                  AlbumRow(
+                    key: const ValueKey('discover-albums'),
+                    title: 'Discover Albums',
+                    loadAlbums: () => provider.getDiscoverAlbumsWithCache(),
+                    rowHeight: rowHeight,
+                  ),
+
+                // Favorites rows in random order
+                ...favoritesWidgets,
               ],
-
-              // Discover Artists (optional)
-              if (_showDiscoverArtists) ...[
-                ArtistRow(
-                  key: const ValueKey('discover-artists'),
-                  title: 'Discover Artists',
-                  loadArtists: () => provider.getDiscoverArtistsWithCache(),
-                  rowHeight: artistRowHeight,
-                ),
-                if (_showDiscoverAlbums) const SizedBox(height: 8),
-              ],
-
-              // Discover Albums (optional)
-              if (_showDiscoverAlbums)
-                AlbumRow(
-                  key: const ValueKey('discover-albums'),
-                  title: 'Discover Albums',
-                  loadAlbums: () => provider.getDiscoverAlbumsWithCache(),
-                  rowHeight: albumRowHeight,
-                ),
-
-              // Favorites rows in random order (with same calculated heights)
-              ...favoritesWidgets,
-            ],
             ),
           ),
         );
@@ -239,9 +213,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
   }
 
   /// Build favorites rows in random order (order set once per session)
-  List<Widget> _buildFavoritesRows(MusicAssistantProvider provider, double albumRowHeight, double artistRowHeight) {
-    final widgets = <Widget>[];
-
+  List<Widget> _buildFavoritesRows(MusicAssistantProvider provider, double rowHeight) {
     // Create list of enabled favorites with their order index
     final enabledFavorites = <MapEntry<int, Widget>>[];
 
@@ -252,7 +224,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
           key: const ValueKey('favorite-albums'),
           title: 'Favorite Albums',
           loadAlbums: () => provider.getFavoriteAlbums(),
-          rowHeight: albumRowHeight,
+          rowHeight: rowHeight,
         ),
       ));
     }
@@ -264,7 +236,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
           key: const ValueKey('favorite-artists'),
           title: 'Favorite Artists',
           loadArtists: () => provider.getFavoriteArtists(),
-          rowHeight: artistRowHeight,
+          rowHeight: rowHeight,
         ),
       ));
     }
@@ -276,7 +248,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
           key: const ValueKey('favorite-tracks'),
           title: 'Favorite Tracks',
           loadTracks: () => provider.getFavoriteTracks(),
-          rowHeight: albumRowHeight, // Track row uses album-like sizing
+          rowHeight: rowHeight,
         ),
       ));
     }
@@ -284,15 +256,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
     // Sort by the random order index
     enabledFavorites.sort((a, b) => a.key.compareTo(b.key));
 
-    // Add widgets with spacing (no spacer before first row)
-    for (var i = 0; i < enabledFavorites.length; i++) {
-      if (i > 0) {
-        widgets.add(const SizedBox(height: 8));
-      }
-      widgets.add(enabledFavorites[i].value);
-    }
-
-    return widgets;
+    return enabledFavorites.map((e) => e.value).toList();
   }
 }
 

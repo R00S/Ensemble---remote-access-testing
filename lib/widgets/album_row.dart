@@ -52,77 +52,83 @@ class _AlbumRowState extends State<AlbumRow> with AutomaticKeepAliveClientMixin 
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 8.0),
-          child: Text(
-            widget.title,
-            style: textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onBackground,
+    // Total row height includes title + content
+    final totalHeight = widget.rowHeight ?? 237.0; // Default: 44 title + 193 content
+    const titleHeight = 44.0; // 12 top padding + ~24 text + 8 bottom padding
+    final contentHeight = totalHeight - titleHeight;
+
+    return SizedBox(
+      height: totalHeight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 8.0),
+            child: Text(
+              widget.title,
+              style: textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onBackground,
+              ),
             ),
           ),
-        ),
-        SizedBox(
-          height: widget.rowHeight ?? 193,
-          child: FutureBuilder<List<Album>>(
-            future: _albumsFuture,
-            builder: (context, snapshot) {
-              // Use cached data immediately if available (prevents flash on rebuild)
-              final albums = snapshot.data ?? _cachedAlbums;
+          Expanded(
+            child: FutureBuilder<List<Album>>(
+              future: _albumsFuture,
+              builder: (context, snapshot) {
+                // Use cached data immediately if available (prevents flash on rebuild)
+                final albums = snapshot.data ?? _cachedAlbums;
 
-              // Only show loading if we have no data at all
-              if (albums == null && snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+                // Only show loading if we have no data at all
+                if (albums == null && snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              if (snapshot.hasError && albums == null) {
-                return Center(
-                  child: Text('Error: ${snapshot.error}'),
-                );
-              }
+                if (snapshot.hasError && albums == null) {
+                  return Center(
+                    child: Text('Error: ${snapshot.error}'),
+                  );
+                }
 
-              if (albums == null || albums.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No albums found',
-                    style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+                if (albums == null || albums.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No albums found',
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+                    ),
+                  );
+                }
+
+                // Scale card width based on content height (maintains aspect ratio)
+                final cardWidth = contentHeight * 0.78;
+                final itemExtent = cardWidth + 12; // width + horizontal margins
+
+                return ScrollConfiguration(
+                  behavior: const _StretchScrollBehavior(),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    itemCount: albums.length,
+                    itemExtent: itemExtent,
+                    itemBuilder: (context, index) {
+                      final album = albums[index];
+                      return Container(
+                        key: ValueKey(album.uri ?? album.itemId),
+                        width: cardWidth,
+                        margin: const EdgeInsets.symmetric(horizontal: 6.0),
+                        child: AlbumCard(
+                          album: album,
+                          heroTagSuffix: widget.heroTagSuffix,
+                        ),
+                      );
+                    },
                   ),
                 );
-              }
-
-              // Scale card width based on row height (maintains aspect ratio)
-              final height = widget.rowHeight ?? 193;
-              final cardWidth = height * 0.78; // Maintains roughly same proportions
-              final itemExtent = cardWidth + 12; // width + horizontal margins
-
-              return ScrollConfiguration(
-                behavior: const _StretchScrollBehavior(),
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                  itemCount: albums.length,
-                  itemExtent: itemExtent,
-                  itemBuilder: (context, index) {
-                    final album = albums[index];
-                    return Container(
-                      key: ValueKey(album.uri ?? album.itemId),
-                      width: cardWidth,
-                      margin: const EdgeInsets.symmetric(horizontal: 6.0),
-                      child: AlbumCard(
-                        album: album,
-                        heroTagSuffix: widget.heroTagSuffix,
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

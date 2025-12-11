@@ -89,6 +89,8 @@ class QueuePanel extends StatelessWidget {
     return ListView.builder(
       padding: Spacing.paddingH8,
       cacheExtent: 500,
+      addAutomaticKeepAlives: false, // Items don't need individual keep-alive
+      addRepaintBoundaries: false, // We add RepaintBoundary manually
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
@@ -96,7 +98,8 @@ class QueuePanel extends StatelessWidget {
         final isPastItem = index < currentIndex;
         final imageUrl = maProvider.api?.getImageUrl(item.track, size: 80);
 
-        return Opacity(
+        return RepaintBoundary(
+          child: Opacity(
           opacity: isPastItem ? 0.5 : 1.0,
           child: Container(
             margin: EdgeInsets.symmetric(vertical: Spacing.xxs),
@@ -161,6 +164,7 @@ class QueuePanel extends StatelessWidget {
                 // Alternative: Could use multiple next() calls but that's inefficient and unreliable
               },
             ),
+          ),
           ),
         );
       },

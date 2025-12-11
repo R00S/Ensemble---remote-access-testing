@@ -54,6 +54,9 @@ class LibraryTracksScreen extends StatelessWidget {
     return ListView.builder(
       itemCount: provider.tracks.length,
       padding: const EdgeInsets.all(8),
+      cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+      addAutomaticKeepAlives: false, // Tiles don't need individual keep-alive
+      addRepaintBoundaries: false, // We add RepaintBoundary manually to tiles
       itemBuilder: (context, index) {
         final track = provider.tracks[index];
         return _buildTrackTile(context, track, provider, index);
@@ -73,43 +76,46 @@ class LibraryTracksScreen extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return ListTile(
-      leading: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(8),
-          image: imageUrl != null
-              ? DecorationImage(
-                  image: CachedNetworkImageProvider(imageUrl),
-                  fit: BoxFit.cover,
-                )
+    return RepaintBoundary(
+      child: ListTile(
+        key: ValueKey(track.uri ?? track.itemId),
+        leading: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceVariant,
+            borderRadius: BorderRadius.circular(8),
+            image: imageUrl != null
+                ? DecorationImage(
+                    image: CachedNetworkImageProvider(imageUrl),
+                    fit: BoxFit.cover,
+                  )
+                : null,
+          ),
+          child: imageUrl == null
+              ? Icon(Icons.music_note_rounded, color: colorScheme.onSurfaceVariant)
               : null,
         ),
-        child: imageUrl == null
-            ? Icon(Icons.music_note_rounded, color: colorScheme.onSurfaceVariant)
+        title: Text(
+          track.name,
+          style: textTheme.bodyLarge?.copyWith(color: colorScheme.onSurface),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          track.artistsString,
+          style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: track.duration != null
+            ? Text(
+                _formatDuration(track.duration!),
+                style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.54)),
+              )
             : null,
+        onTap: () => _playTrack(context, maProvider, index),
       ),
-      title: Text(
-        track.name,
-        style: textTheme.bodyLarge?.copyWith(color: colorScheme.onSurface),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        track.artistsString,
-        style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: track.duration != null
-          ? Text(
-              _formatDuration(track.duration!),
-              style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.54)),
-            )
-          : null,
-      onTap: () => _playTrack(context, maProvider, index),
     );
   }
 

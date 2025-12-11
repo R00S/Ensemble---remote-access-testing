@@ -289,6 +289,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           child: ListView.builder(
             key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}'),
             cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+            addAutomaticKeepAlives: false, // Tiles have their own keep-alive
+            addRepaintBoundaries: false, // Tiles have RepaintBoundary
             itemCount: artists.length,
             padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
             itemBuilder: (context, index) {
@@ -395,6 +397,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           child: GridView.builder(
             key: PageStorageKey<String>('library_albums_grid_${_showFavoritesOnly ? 'fav' : 'all'}'),
             cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+            addAutomaticKeepAlives: false, // Cards have their own keep-alive
+            addRepaintBoundaries: false, // Cards have RepaintBoundary
             padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -443,6 +447,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       child: ListView.builder(
         key: PageStorageKey<String>('library_playlists_list_${_showFavoritesOnly ? 'fav' : 'all'}'),
         cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+        addAutomaticKeepAlives: false, // Tiles don't need individual keep-alive
+        addRepaintBoundaries: false, // We add RepaintBoundary manually to tiles
         itemCount: _playlists.length,
         padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
         itemBuilder: (context, index) {
@@ -459,8 +465,10 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return ListTile(
-      leading: Container(
+    return RepaintBoundary(
+      child: ListTile(
+        key: ValueKey(playlist.itemId),
+        leading: Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
@@ -491,21 +499,22 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: playlist.favorite == true
-          ? const Icon(Icons.favorite, color: Colors.red, size: 20)
-          : null,
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PlaylistDetailsScreen(
-              playlist: playlist,
-              provider: playlist.provider,
-              itemId: playlist.itemId,
+        trailing: playlist.favorite == true
+            ? const Icon(Icons.favorite, color: Colors.red, size: 20)
+            : null,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PlaylistDetailsScreen(
+                playlist: playlist,
+                provider: playlist.provider,
+                itemId: playlist.itemId,
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -540,6 +549,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       child: ListView.builder(
         key: const PageStorageKey<String>('library_tracks_list'),
         cacheExtent: 500,
+        addAutomaticKeepAlives: false, // Tiles don't need individual keep-alive
+        addRepaintBoundaries: false, // We add RepaintBoundary manually to tiles
         padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
         itemCount: sortedTracks.length,
         itemBuilder: (context, index) {
@@ -558,9 +569,11 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     // Get image URL from track itself
     final imageUrl = maProvider.api?.getImageUrl(track, size: 128);
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Container(
+    return RepaintBoundary(
+      child: ListTile(
+        key: ValueKey(track.uri ?? track.itemId),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
@@ -619,6 +632,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           }
         }
       },
+      ),
     );
   }
 }

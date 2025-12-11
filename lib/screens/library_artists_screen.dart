@@ -69,6 +69,8 @@ class LibraryArtistsScreen extends StatelessWidget {
       child: ListView.builder(
         key: const PageStorageKey<String>('library_artists_full_list'),
         cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+        addAutomaticKeepAlives: false, // Tiles have their own keep-alive
+        addRepaintBoundaries: false, // Tiles have RepaintBoundary
         itemCount: artists.length,
         padding: const EdgeInsets.all(8),
         itemBuilder: (context, index) {

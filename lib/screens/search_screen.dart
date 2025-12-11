@@ -299,6 +299,9 @@ class SearchScreenState extends State<SearchScreen> {
               final listItems = _buildListItems(artists, albums, tracks);
               return ListView.builder(
                 padding: EdgeInsets.fromLTRB(16, 8, 16, BottomSpacing.navBarOnly),
+                cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+                addAutomaticKeepAlives: false, // Tiles don't need individual keep-alive
+                addRepaintBoundaries: false, // We add RepaintBoundary manually to tiles
                 itemCount: listItems.length,
                 itemBuilder: (context, index) {
                   final item = listItems[index];
@@ -407,7 +410,9 @@ class SearchScreenState extends State<SearchScreen> {
     final maProvider = context.read<MusicAssistantProvider>();
     final imageUrl = maProvider.getImageUrl(artist, size: 256);
 
-    return ListTile(
+    return RepaintBoundary(
+      child: ListTile(
+        key: ValueKey(artist.uri ?? artist.itemId),
       leading: ArtistAvatar(
         artist: artist,
         radius: 24,
@@ -426,17 +431,18 @@ class SearchScreenState extends State<SearchScreen> {
         'Artist',
         style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
       ),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ArtistDetailsScreen(
-              artist: artist,
-              initialImageUrl: imageUrl,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ArtistDetailsScreen(
+                artist: artist,
+                initialImageUrl: imageUrl,
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -445,8 +451,10 @@ class SearchScreenState extends State<SearchScreen> {
     final imageUrl = maProvider.getImageUrl(album, size: 128);
     final colorScheme = Theme.of(context).colorScheme;
 
-    return ListTile(
-      leading: Container(
+    return RepaintBoundary(
+      child: ListTile(
+        key: ValueKey(album.uri ?? album.itemId),
+        leading: Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
@@ -478,14 +486,15 @@ class SearchScreenState extends State<SearchScreen> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AlbumDetailsScreen(album: album),
-          ),
-        );
-      },
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AlbumDetailsScreen(album: album),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -496,8 +505,10 @@ class SearchScreenState extends State<SearchScreen> {
         : null;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return ListTile(
-      leading: Container(
+    return RepaintBoundary(
+      child: ListTile(
+        key: ValueKey(track.uri ?? track.itemId),
+        leading: Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
@@ -529,13 +540,14 @@ class SearchScreenState extends State<SearchScreen> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: track.duration != null
-          ? Text(
-              _formatDuration(track.duration!),
-              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5), fontSize: 12),
-            )
-          : null,
-      onTap: () => _playTrack(track),
+        trailing: track.duration != null
+            ? Text(
+                _formatDuration(track.duration!),
+                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5), fontSize: 12),
+              )
+            : null,
+        onTap: () => _playTrack(track),
+      ),
     );
   }
 

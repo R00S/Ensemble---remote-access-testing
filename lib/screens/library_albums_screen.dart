@@ -67,6 +67,8 @@ class LibraryAlbumsScreen extends StatelessWidget {
       child: GridView.builder(
         key: const PageStorageKey<String>('library_albums_full_grid'),
         cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+        addAutomaticKeepAlives: false, // Cards have their own keep-alive
+        addRepaintBoundaries: false, // Cards have RepaintBoundary
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           childAspectRatio: 0.75,

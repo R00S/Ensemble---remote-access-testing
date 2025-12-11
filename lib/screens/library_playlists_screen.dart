@@ -91,6 +91,9 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
       child: ListView.builder(
         itemCount: _playlists.length,
         padding: const EdgeInsets.all(8),
+        cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
+        addAutomaticKeepAlives: false, // Tiles don't need individual keep-alive
+        addRepaintBoundaries: false, // We add RepaintBoundary manually to tiles
         itemBuilder: (context, index) {
           final playlist = _playlists[index];
           return _buildPlaylistTile(context, playlist, provider);
@@ -104,8 +107,9 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return Builder(
-      builder: (context) => ListTile(
+    return RepaintBoundary(
+      child: ListTile(
+        key: ValueKey(playlist.itemId),
         leading: Container(
           width: 48,
           height: 48,

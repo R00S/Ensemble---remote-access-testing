@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import '../providers/music_assistant_provider.dart';
 import '../services/settings_service.dart';
+import '../services/debug_logger.dart';
 import '../widgets/global_player_overlay.dart';
 import '../widgets/player_selector.dart';
 import '../widgets/album_row.dart';
@@ -19,6 +21,7 @@ class NewHomeScreen extends StatefulWidget {
 }
 
 class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+  static final _logger = DebugLogger();
   Key _refreshKey = UniqueKey();
   // Main rows (default on)
   bool _showRecentAlbums = true;
@@ -166,8 +169,22 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
         final favoritesWidgets = _buildFavoritesRows(provider, rowHeight);
 
         // Use Android 12+ stretch overscroll effect
-        // Note: Performance logging removed - it was adding 2-3ms overhead per frame
-        return ScrollConfiguration(
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollStartNotification) {
+              _logger.resetFrameStats();
+              _logger.perf('SCROLL START', context: 'HomeScreen');
+            } else if (notification is ScrollUpdateNotification) {
+              _logger.startFrame();
+              SchedulerBinding.instance.addPostFrameCallback((_) {
+                _logger.endFrame();
+              });
+            } else if (notification is ScrollEndNotification) {
+              _logger.perf('SCROLL END', context: 'HomeScreen');
+            }
+            return false;
+          },
+          child: ScrollConfiguration(
             behavior: const _StretchScrollBehavior(),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -208,6 +225,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
                 ],
               ),
             ),
+          ),
         );
       },
     );

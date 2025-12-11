@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import '../models/media_item.dart';
 import '../models/player.dart';
 import '../services/music_assistant_api.dart';
@@ -50,6 +51,7 @@ class MusicAssistantProvider with ChangeNotifier {
 
   // Local player state
   bool _isLocalPlayerPowered = true;
+  int _localPlayerVolume = 100; // Tracked MA volume for builtin player (0-100)
   bool _builtinPlayerAvailable = true; // False on MA 2.7.0b20+ (uses Sendspin instead)
   StreamSubscription? _localPlayerEventSubscription;
   StreamSubscription? _playerUpdatedEventSubscription;
@@ -491,7 +493,9 @@ class MusicAssistantProvider with ChangeNotifier {
 
     final isPlaying = _localPlayer.isPlaying;
     final position = _localPlayer.position.inSeconds;
-    final volume = (_localPlayer.volume * 100).round();
+    // Use tracked MA volume instead of just_audio player volume
+    // just_audio volume is for local playback, MA volume is for server sync
+    final volume = _localPlayerVolume;
     final isPaused = !isPlaying && position > 0;
 
     await _api!.updateBuiltinPlayerState(
@@ -501,7 +505,7 @@ class MusicAssistantProvider with ChangeNotifier {
       paused: isPaused,
       position: position,
       volume: volume,
-      muted: _localPlayer.volume == 0.0,
+      muted: _localPlayerVolume == 0,
     );
   }
 
@@ -590,9 +594,14 @@ class MusicAssistantProvider with ChangeNotifier {
           break;
 
         case 'volume_set':
-          final volume = event['volume_level'] as int?;
+        case 'set_volume':
+          // MA sends 'set_volume' in event type but 'volume' in data
+          final volume = event['volume_level'] as int? ?? event['volume'] as int?;
           if (volume != null) {
-            await _localPlayer.setVolume(volume / 100.0);
+            _localPlayerVolume = volume; // Track MA volume
+            // Use device media volume (FlutterVolumeController), NOT just_audio software volume
+            await FlutterVolumeController.setVolume(volume / 100.0);
+            _logger.log('🔊 Builtin player DEVICE volume set to ${(volume / 100.0).toStringAsFixed(2)} from server event');
           }
           break;
 
@@ -1700,7 +1709,19 @@ class MusicAssistantProvider with ChangeNotifier {
 
   Future<void> setVolume(String playerId, int volumeLevel) async {
     try {
-      await _api?.setVolume(playerId, volumeLevel);
+      // Check if this is the builtin player
+      final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
+      if (builtinPlayerId != null && playerId == builtinPlayerId) {
+        // For builtin player, control device media volume directly
+        _localPlayerVolume = volumeLevel;
+        await FlutterVolumeController.setVolume(volumeLevel / 100.0);
+        _logger.log('🔊 Builtin player DEVICE volume set to $volumeLevel%');
+        // Also notify MA server about the volume change
+        await _api?.setVolume(playerId, volumeLevel);
+      } else {
+        // For MA players, just send to MA server
+        await _api?.setVolume(playerId, volumeLevel);
+      }
     } catch (e) {
       ErrorHandler.logError('Set volume', e);
       rethrow;

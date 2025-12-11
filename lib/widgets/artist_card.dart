@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../providers/music_assistant_provider.dart';
 import '../screens/artist_details_screen.dart';
@@ -31,11 +32,36 @@ class _ArtistCardState extends State<ArtistCard> {
   static final _logger = DebugLogger();
   String? _fallbackImageUrl;
   bool _triedFallback = false;
+  String? _cachedMaImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetch fallback image once in initState, not during build
+    _initFallbackImage();
+  }
+
+  void _initFallbackImage() {
+    // We'll check if MA has an image after first build, then fetch fallback if needed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final maProvider = context.read<MusicAssistantProvider>();
+      final maImageUrl = maProvider.api?.getImageUrl(widget.artist, size: 256);
+      _cachedMaImageUrl = maImageUrl;
+
+      if (maImageUrl == null && !_triedFallback) {
+        _triedFallback = true;
+        _logger.debug('No MA image for "${widget.artist.name}", trying fallback', context: 'ArtistCard');
+        _fetchFallbackImage();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final maImageUrl = maProvider.api?.getImageUrl(widget.artist, size: 256);
+    // Use cached URL if available, otherwise get fresh (but don't trigger fetches during build)
+    final maImageUrl = _cachedMaImageUrl ?? maProvider.api?.getImageUrl(widget.artist, size: 256);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -43,13 +69,6 @@ class _ArtistCardState extends State<ArtistCard> {
 
     // Use MA image if available, otherwise try fallback
     final imageUrl = maImageUrl ?? _fallbackImageUrl;
-
-    // Try to fetch fallback image if MA doesn't have one and we haven't tried yet
-    if (maImageUrl == null && !_triedFallback) {
-      _triedFallback = true;
-      _logger.debug('No MA image for "${widget.artist.name}", trying fallback', context: 'ArtistCard');
-      _fetchFallbackImage();
-    }
 
     return RepaintBoundary(
       child: GestureDetector(
@@ -87,12 +106,14 @@ class _ArtistCardState extends State<ArtistCard> {
                           height: size,
                           color: colorScheme.surfaceVariant,
                           child: imageUrl != null
-                              ? Image.network(
-                                  imageUrl,
+                              ? CachedNetworkImage(
+                                  imageUrl: imageUrl,
                                   fit: BoxFit.cover,
-                                  cacheWidth: 256,
-                                  cacheHeight: 256,
-                                  errorBuilder: (_, __, ___) => Icon(
+                                  memCacheWidth: 256,
+                                  memCacheHeight: 256,
+                                  fadeInDuration: const Duration(milliseconds: 150),
+                                  placeholder: (context, url) => const SizedBox(),
+                                  errorWidget: (context, url, error) => Icon(
                                     Icons.person_rounded,
                                     size: size * 0.55,
                                     color: colorScheme.onSurfaceVariant,

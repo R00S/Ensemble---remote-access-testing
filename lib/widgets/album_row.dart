@@ -118,6 +118,9 @@ class _AlbumRowState extends State<AlbumRow> with AutomaticKeepAliveClientMixin 
                     padding: const EdgeInsets.symmetric(horizontal: 12.0),
                     itemCount: albums.length,
                     itemExtent: itemExtent,
+                    cacheExtent: 500, // Preload ~3 items ahead for smoother scrolling
+                    addAutomaticKeepAlives: false, // Row already uses AutomaticKeepAliveClientMixin
+                    addRepaintBoundaries: false, // Cards already have RepaintBoundary
                     itemBuilder: (context, index) {
                       final album = albums[index];
                       return Container(

@@ -114,6 +114,9 @@ class _TrackRowState extends State<TrackRow> with AutomaticKeepAliveClientMixin 
                     padding: const EdgeInsets.symmetric(horizontal: 12.0),
                     itemCount: tracks.length,
                     itemExtent: itemExtent,
+                    cacheExtent: 500, // Preload ~3 items ahead for smoother scrolling
+                    addAutomaticKeepAlives: false, // Row already uses AutomaticKeepAliveClientMixin
+                    addRepaintBoundaries: false, // Cards already have RepaintBoundary
                     itemBuilder: (context, index) {
                       final track = tracks[index];
                       return Container(

@@ -118,6 +118,9 @@ class _ArtistRowState extends State<ArtistRow> with AutomaticKeepAliveClientMixi
                     padding: const EdgeInsets.symmetric(horizontal: 12.0),
                     itemCount: artists.length,
                     itemExtent: itemExtent,
+                    cacheExtent: 500, // Preload ~3 items ahead for smoother scrolling
+                    addAutomaticKeepAlives: false, // Row already uses AutomaticKeepAliveClientMixin
+                    addRepaintBoundaries: false, // Cards already have RepaintBoundary
                     itemBuilder: (context, index) {
                       final artist = artists[index];
                       return Container(

@@ -5,6 +5,40 @@ import '../providers/navigation_provider.dart';
 import '../theme/theme_provider.dart';
 import 'expandable_player.dart';
 
+/// Cached color with contrast adjustment
+/// Avoids expensive HSL conversions during scroll
+class _CachedNavColor {
+  Color? _sourceColor;
+  bool? _isDark;
+  Color? _adjustedColor;
+
+  Color getAdjustedColor(Color sourceColor, bool isDark) {
+    // Return cached value if inputs haven't changed
+    if (_sourceColor == sourceColor && _isDark == isDark && _adjustedColor != null) {
+      return _adjustedColor!;
+    }
+
+    // Compute new adjusted color
+    var navSelectedColor = sourceColor;
+    if (isDark && navSelectedColor.computeLuminance() < 0.2) {
+      final hsl = HSLColor.fromColor(navSelectedColor);
+      navSelectedColor = hsl.withLightness((hsl.lightness + 0.3).clamp(0.0, 0.8)).toColor();
+    } else if (!isDark && navSelectedColor.computeLuminance() > 0.8) {
+      final hsl = HSLColor.fromColor(navSelectedColor);
+      navSelectedColor = hsl.withLightness((hsl.lightness - 0.3).clamp(0.2, 1.0)).toColor();
+    }
+
+    // Cache the result
+    _sourceColor = sourceColor;
+    _isDark = isDark;
+    _adjustedColor = navSelectedColor;
+
+    return navSelectedColor;
+  }
+}
+
+final _cachedNavColor = _CachedNavColor();
+
 /// A global key to access the player state from anywhere in the app
 final globalPlayerKey = GlobalKey<ExpandablePlayerState>();
 
@@ -135,19 +169,13 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
               return Consumer<ThemeProvider>(
                 builder: (context, themeProvider, _) {
                   // Use adaptive primary color for bottom nav when adaptive theme is enabled
-                  var navSelectedColor = themeProvider.adaptiveTheme
+                  final sourceColor = themeProvider.adaptiveTheme
                       ? themeProvider.adaptivePrimaryColor
                       : colorScheme.primary;
 
-                  // Ensure nav color has sufficient contrast against the surface background
+                  // Use cached color computation to avoid expensive HSL operations during scroll
                   final isDark = Theme.of(context).brightness == Brightness.dark;
-                  if (isDark && navSelectedColor.computeLuminance() < 0.2) {
-                    final hsl = HSLColor.fromColor(navSelectedColor);
-                    navSelectedColor = hsl.withLightness((hsl.lightness + 0.3).clamp(0.0, 0.8)).toColor();
-                  } else if (!isDark && navSelectedColor.computeLuminance() > 0.8) {
-                    final hsl = HSLColor.fromColor(navSelectedColor);
-                    navSelectedColor = hsl.withLightness((hsl.lightness - 0.3).clamp(0.2, 1.0)).toColor();
-                  }
+                  final navSelectedColor = _cachedNavColor.getAdjustedColor(sourceColor, isDark);
 
                   // Base background: use adaptive surface color if available, otherwise default surface
                   final baseBgColor = (themeProvider.adaptiveTheme && themeProvider.adaptiveSurfaceColor != null)

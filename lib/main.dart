@@ -108,13 +108,13 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
       return;
     }
 
-    _logger.log('🔊 Hardware volume: player=${player.displayName}, current=${player.volume}, delta=$delta');
+    _logger.log('🔊 Hardware volume: player=${player.name}, current=${player.volume}, delta=$delta');
 
     final newVolume = (player.volume + delta).clamp(0, 100);
     if (newVolume != player.volume) {
       try {
         await _musicProvider.setVolume(player.playerId, newVolume);
-        _logger.log('🔊 Hardware volume adjusted: ${player.volume} -> $newVolume for ${player.displayName}');
+        _logger.log('🔊 Hardware volume adjusted: ${player.volume} -> $newVolume for ${player.name}');
       } catch (e) {
         _logger.error('Hardware volume adjustment failed', context: 'VolumeControl', error: e);
       }

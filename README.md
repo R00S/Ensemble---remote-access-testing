@@ -11,7 +11,7 @@
 
 ## Disclaimer
 
-I am not a developer. This application was created using **Claude Code** and **Gemini CLI**.
+This application was built with AI-assisted development using **Claude Code** and **Gemini CLI**.
 
 ---
 

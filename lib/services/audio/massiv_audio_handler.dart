@@ -20,9 +20,17 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
   Function()? onSkipToPrevious;
   Function()? onPlay;
   Function()? onPause;
+  Function()? onSwitchPlayer;
 
   // Track whether we're in remote control mode (controlling MA player, not playing locally)
   bool _isRemoteMode = false;
+
+  // Custom control for switching players (uses stop action with custom icon)
+  static const _switchPlayerControl = MediaControl(
+    androidIcon: 'drawable/ic_switch_player',
+    label: 'Switch Player',
+    action: MediaAction.stop,
+  );
 
   MassivAudioHandler({required this.authManager}) {
     _init();
@@ -146,9 +154,17 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> stop() async {
-    await _player.stop();
-    // Don't call super.stop() which would end the service
-    // Just stop playback and let the notification remain for resuming
+    if (_isRemoteMode) {
+      // In remote mode, stop action switches players
+      _logger.log('MassivAudioHandler: stop requested (remote mode) -> switching player');
+      if (onSwitchPlayer != null) {
+        onSwitchPlayer!();
+      }
+    } else {
+      await _player.stop();
+      // Don't call super.stop() which would end the service
+      // Just stop playback and let the notification remain for resuming
+    }
   }
 
   @override
@@ -230,12 +246,14 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
         MediaControl.skipToPrevious,
         if (playing) MediaControl.pause else MediaControl.play,
         MediaControl.skipToNext,
+        _switchPlayerControl,
       ],
       systemActions: const {
         MediaAction.play,
         MediaAction.pause,
         MediaAction.skipToNext,
         MediaAction.skipToPrevious,
+        MediaAction.stop,
       },
       androidCompactActionIndices: const [0, 1, 2],
       processingState: AudioProcessingState.ready,

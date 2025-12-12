@@ -1181,9 +1181,12 @@ class MusicAssistantProvider with ChangeNotifier {
           duration: track.duration,
           artUri: artworkUrl != null ? Uri.tryParse(artworkUrl) : null,
         );
+        // Get current position from player state
+        final position = Duration(seconds: (player.currentElapsedTime ?? 0).round());
         audioHandler.updateLocalModeNotification(
           item: mediaItem,
           playing: player.state == 'playing',
+          position: position,
           duration: track.duration,
         );
       } else if (player.state == 'playing' || player.state == 'paused') {
@@ -1193,9 +1196,11 @@ class MusicAssistantProvider with ChangeNotifier {
           title: player.name,
           artist: 'Loading...',
         );
+        final position = Duration(seconds: (player.currentElapsedTime ?? 0).round());
         audioHandler.updateLocalModeNotification(
           item: mediaItem,
           playing: player.state == 'playing',
+          position: position,
           duration: Duration.zero,
         );
       }
@@ -1217,9 +1222,11 @@ class MusicAssistantProvider with ChangeNotifier {
           duration: track.duration,
           artUri: artworkUrl != null ? Uri.tryParse(artworkUrl) : null,
         );
+        final position = Duration(seconds: (player.currentElapsedTime ?? 0).round());
         audioHandler.setRemotePlaybackState(
           item: mediaItem,
           playing: player.state == 'playing',
+          position: position,
           duration: track.duration,
         );
       } else if (player.state == 'playing' || player.state == 'paused') {
@@ -1230,9 +1237,11 @@ class MusicAssistantProvider with ChangeNotifier {
           title: player.name,
           artist: 'Loading...',
         );
+        final position = Duration(seconds: (player.currentElapsedTime ?? 0).round());
         audioHandler.setRemotePlaybackState(
           item: mediaItem,
           playing: player.state == 'playing',
+          position: position,
           duration: Duration.zero,
         );
       }
@@ -1469,9 +1478,11 @@ class MusicAssistantProvider with ChangeNotifier {
             duration: track.duration,
             artUri: artworkUrl != null ? Uri.tryParse(artworkUrl) : null,
           );
+          final position = Duration(seconds: (_selectedPlayer!.currentElapsedTime ?? 0).round());
           audioHandler.updateLocalModeNotification(
             item: mediaItem,
             playing: _selectedPlayer!.state == 'playing',
+            position: position,
             duration: track.duration,
           );
         } else {
@@ -1488,9 +1499,11 @@ class MusicAssistantProvider with ChangeNotifier {
             duration: track.duration,
             artUri: artworkUrl != null ? Uri.tryParse(artworkUrl) : null,
           );
+          final position = Duration(seconds: (_selectedPlayer!.currentElapsedTime ?? 0).round());
           audioHandler.setRemotePlaybackState(
             item: mediaItem,
             playing: _selectedPlayer!.state == 'playing',
+            position: position,
             duration: track.duration,
           );
         }
@@ -1511,16 +1524,19 @@ class MusicAssistantProvider with ChangeNotifier {
             title: _selectedPlayer!.name,
             artist: 'No track info',
           );
+          final position = Duration(seconds: (_selectedPlayer!.currentElapsedTime ?? 0).round());
           if (isBuiltinPlayer) {
             audioHandler.updateLocalModeNotification(
               item: mediaItem,
               playing: _selectedPlayer!.state == 'playing',
+              position: position,
               duration: Duration.zero,
             );
           } else {
             audioHandler.setRemotePlaybackState(
               item: mediaItem,
               playing: _selectedPlayer!.state == 'playing',
+              position: position,
               duration: Duration.zero,
             );
           }

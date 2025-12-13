@@ -49,6 +49,7 @@ class MusicAssistantProvider with ChangeNotifier {
   List<Player> _availablePlayers = [];
   Track? _currentTrack;
   Timer? _playerStateTimer;
+  Timer? _notificationPositionTimer; // Updates notification position every second for remote players
 
   // Local player state
   bool _isLocalPlayerPowered = true;
@@ -313,6 +314,8 @@ class MusicAssistantProvider with ChangeNotifier {
   Future<void> disconnect() async {
     _playerStateTimer?.cancel();
     _playerStateTimer = null;
+    _notificationPositionTimer?.cancel();
+    _notificationPositionTimer = null;
     _localPlayerStateReportTimer?.cancel();
     _localPlayerEventSubscription?.cancel();
     _playerUpdatedEventSubscription?.cancel();
@@ -1244,6 +1247,9 @@ class MusicAssistantProvider with ChangeNotifier {
 
     _startPlayerStatePolling();
 
+    // Start notification position timer for remote players
+    _manageNotificationPositionTimer();
+
     _preloadAdjacentPlayers();
 
     if (!skipNotify) {
@@ -1253,7 +1259,27 @@ class MusicAssistantProvider with ChangeNotifier {
 
   /// Cycle to the next active player (for notification switch button)
   /// Only cycles through players that are currently playing or paused
-  void selectNextPlayer() {
+  Future<void> selectNextPlayer() async {
+    // If not connected yet (cold start), wait briefly for connection
+    if (!isConnected) {
+      _logger.log('🔄 Not connected yet, waiting for connection...');
+      // Wait up to 3 seconds for connection to be established
+      for (int i = 0; i < 30; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (isConnected) break;
+      }
+      if (!isConnected) {
+        _logger.log('🔄 Still not connected, cannot switch player');
+        return;
+      }
+    }
+
+    // If players haven't loaded yet (cold start), try to load them first
+    if (_availablePlayers.isEmpty && _api != null) {
+      _logger.log('🔄 Players not loaded yet, loading...');
+      await _loadAndSelectPlayers();
+    }
+
     // Only include players that are available AND actively playing/paused
     final activePlayers = _availablePlayers.where((p) =>
       p.available && (p.state == 'playing' || p.state == 'paused')
@@ -1264,7 +1290,12 @@ class MusicAssistantProvider with ChangeNotifier {
       return;
     }
 
-    if (_selectedPlayer == null) return;
+    if (_selectedPlayer == null) {
+      // If no player selected, select the first active one
+      _logger.log('🔄 No player selected, selecting first active: ${activePlayers.first.name}');
+      selectPlayer(activePlayers.first);
+      return;
+    }
 
     // Find current player in active list
     final currentIndex = activePlayers.indexWhere((p) => p.playerId == _selectedPlayer!.playerId);
@@ -1275,6 +1306,68 @@ class MusicAssistantProvider with ChangeNotifier {
 
     _logger.log('🔄 Switching to next active player: ${nextPlayer.name} (${nextIndex + 1}/${activePlayers.length})');
     selectPlayer(nextPlayer);
+  }
+
+  /// Manage notification position timer for remote players.
+  /// This timer updates the notification position every second using interpolated time,
+  /// making the progress bar smooth instead of jumping every 5 seconds (polling interval).
+  void _manageNotificationPositionTimer() {
+    _notificationPositionTimer?.cancel();
+
+    if (_selectedPlayer == null || _currentTrack == null) return;
+
+    // Check if this is a builtin/local player (doesn't need timer - just_audio handles position)
+    // Note: We can't use async/await in this method easily, so check using pattern matching
+    final playerId = _selectedPlayer!.playerId;
+    if (playerId.startsWith('ensemble_')) {
+      // Local player - no timer needed, just_audio handles position automatically
+      return;
+    }
+
+    // Only run timer if remote player is playing
+    if (_selectedPlayer!.state != 'playing') return;
+
+    _notificationPositionTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _updateNotificationPosition(),
+    );
+  }
+
+  /// Update just the notification position (called every second for remote players)
+  void _updateNotificationPosition() {
+    if (_selectedPlayer == null || _currentTrack == null) {
+      _notificationPositionTimer?.cancel();
+      return;
+    }
+
+    // Don't update if player is not playing
+    if (_selectedPlayer!.state != 'playing') {
+      _notificationPositionTimer?.cancel();
+      return;
+    }
+
+    // Use interpolated position from player model
+    final position = Duration(seconds: (_selectedPlayer!.currentElapsedTime ?? 0).round());
+    final track = _currentTrack!;
+    final artworkUrl = _api?.getImageUrl(track, size: 512);
+    final artistWithPlayer = track.artistsString.isNotEmpty
+        ? '${track.artistsString} • ${_selectedPlayer!.name}'
+        : _selectedPlayer!.name;
+    final mediaItem = audio_service.MediaItem(
+      id: track.uri ?? track.itemId,
+      title: track.name,
+      artist: artistWithPlayer,
+      album: track.album?.name ?? '',
+      duration: track.duration,
+      artUri: artworkUrl != null ? Uri.tryParse(artworkUrl) : null,
+    );
+
+    audioHandler.setRemotePlaybackState(
+      item: mediaItem,
+      playing: true,
+      position: position,
+      duration: track.duration,
+    );
   }
 
   Future<void> _preloadAdjacentPlayers({bool preloadAll = false}) async {
@@ -1537,6 +1630,9 @@ class MusicAssistantProvider with ChangeNotifier {
           audioHandler.clearRemotePlaybackState();
         }
       }
+
+      // Manage notification position timer based on current player state
+      _manageNotificationPositionTimer();
 
       if (stateChanged) {
         notifyListeners();
@@ -1966,6 +2062,7 @@ class MusicAssistantProvider with ChangeNotifier {
   @override
   void dispose() {
     _playerStateTimer?.cancel();
+    _notificationPositionTimer?.cancel();
     _localPlayerStateReportTimer?.cancel();
     _localPlayerEventSubscription?.cancel();
     _playerUpdatedEventSubscription?.cancel();

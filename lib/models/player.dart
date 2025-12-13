@@ -67,8 +67,11 @@ class Player {
     // 2. Server timestamp is stale (e.g., after switching to a remote player)
     // 3. Clock skew between client and server
     final creationKey = '$playerId:$elapsedTime';
-    if (!_playerCreationTimes.containsKey(creationKey)) {
-      // First time seeing this player/position combo - record creation time
+    final existingCreationTime = _playerCreationTimes[creationKey];
+
+    // Reset creation time if missing OR if stale (>10 seconds)
+    // This ensures progress bar keeps moving even after app backgrounding
+    if (existingCreationTime == null || (now - existingCreationTime) > 10.0) {
       _playerCreationTimes[creationKey] = now;
       // Clean up old entries to prevent memory leak
       if (_playerCreationTimes.length > 50) {
@@ -82,9 +85,8 @@ class Player {
     final creationTime = _playerCreationTimes[creationKey]!;
     final timeSinceCreation = now - creationTime;
 
-    // Clamp local interpolation to 10 seconds as well
-    final clampedTime = timeSinceCreation.clamp(0.0, 10.0);
-    return elapsedTime! + clampedTime;
+    // No clamp needed - we reset stale entries above so timeSinceCreation is always small
+    return elapsedTime! + timeSinceCreation;
   }
 
   factory Player.fromJson(Map<String, dynamic> json) {

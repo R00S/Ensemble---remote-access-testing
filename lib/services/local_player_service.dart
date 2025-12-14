@@ -84,11 +84,9 @@ class LocalPlayerService {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    _logger.log('LocalPlayerService: Initializing with audio_service...');
     // The audioHandler is already initialized in main.dart
     // Just mark ourselves as initialized
     _isInitialized = true;
-    _logger.log('LocalPlayerService: Initialized (using global audioHandler)');
   }
 
   /// Set metadata for the current track (for notification display)
@@ -100,21 +98,12 @@ class LocalPlayerService {
   Future<void> playUrl(String url) async {
     // Ensure player is initialized before playing
     if (!_isInitialized) {
-      _logger.log('LocalPlayerService: Not initialized, initializing now...');
       await initialize();
     }
 
     try {
-      _logger.log('LocalPlayerService: Loading URL: $url');
-
       // Get auth headers from AuthManager
       final headers = authManager.getStreamingHeaders();
-
-      if (headers.isNotEmpty) {
-        _logger.log('LocalPlayerService: Added auth headers to request: ${headers.keys.join(', ')}');
-      } else {
-        _logger.log('LocalPlayerService: No authentication needed for streaming');
-      }
 
       // Create MediaItem from current metadata
       final mediaItem = _currentMetadata?.toMediaItem(url) ?? MediaItem(
@@ -123,19 +112,13 @@ class LocalPlayerService {
         artist: 'Unknown Artist',
       );
 
-      _logger.log('LocalPlayerService: Playing with audio_service');
-      _logger.log('LocalPlayerService: Metadata: ${mediaItem.title} by ${mediaItem.artist}');
-
       await audioHandler.playUrl(
         url,
         mediaItem,
         headers: headers.isNotEmpty ? headers : null,
       );
-
-      _logger.log('LocalPlayerService: Playback started with notification');
     } catch (e, stackTrace) {
       _logger.log('LocalPlayerService: Error playing URL: $e');
-      _logger.log('LocalPlayerService: Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -156,24 +139,18 @@ class LocalPlayerService {
       artworkUrl: artworkUrl,
       duration: duration,
     );
-
-    _logger.log('LocalPlayerService: Metadata updated for notification');
   }
 
   /// Update the notification while audio is already playing.
   /// With audio_service, we can update the MediaItem directly without
   /// re-setting the audio source.
   Future<void> updateNotificationWhilePlaying(TrackMetadata metadata) async {
-    _logger.log('LocalPlayerService: Updating notification mid-playback: ${metadata.title} by ${metadata.artist}');
-
     final currentItem = audioHandler.currentMediaItem;
     final id = currentItem?.id ?? 'unknown';
 
     final newMediaItem = metadata.toMediaItem(id);
     audioHandler.updateMediaItem(newMediaItem);
     _currentMetadata = metadata;
-
-    _logger.log('LocalPlayerService: Notification updated successfully');
   }
 
   Future<void> play() async {

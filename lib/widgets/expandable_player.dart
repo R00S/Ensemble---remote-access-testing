@@ -51,9 +51,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   PlayerQueue? _queue;
   bool _isLoadingQueue = false;
 
-  // Progress tracking - now uses PositionTracker stream instead of local timer
+  // Progress tracking - uses PositionTracker stream as single source of truth
   StreamSubscription<Duration>? _positionSubscription;
-  double? _seekPosition;
   final ValueNotifier<int> _progressNotifier = ValueNotifier<int>(0);
   final ValueNotifier<double?> _seekPositionNotifier = ValueNotifier<double?>(null);
 
@@ -1255,7 +1254,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                                           } finally {
                                             if (mounted) {
                                               _seekPositionNotifier.value = null;
-                                              _seekPosition = null;
                                             }
                                           }
                                         },

@@ -135,15 +135,6 @@ class Player {
     elapsedTime ??= topLevelElapsedTime;
     elapsedTimeLastUpdated ??= topLevelLastUpdated;
 
-    // Debug logging for position tracking issues
-    final playerName = json['name'] as String? ?? 'unknown';
-    final state = json['playback_state'] as String? ?? json['state'] as String? ?? 'idle';
-    if (state == 'playing' && elapsedTime == null) {
-      // Only log if this is a playing player without elapsed time
-      print('⚠️ Player "$playerName" is playing but has no elapsed_time. '
-          'top_level=${json['elapsed_time']}, current_media.elapsed_time=${json['current_media']?['elapsed_time']}');
-    }
-
     return Player(
       playerId: json['player_id'] as String,
       name: json['name'] as String,

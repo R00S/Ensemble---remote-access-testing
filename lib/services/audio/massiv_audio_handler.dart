@@ -37,8 +37,6 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   Future<void> _init() async {
-    _logger.log('MassivAudioHandler: Initializing...');
-
     // Configure audio session
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
@@ -83,8 +81,6 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
         mediaItem.add(_currentMediaItem);
       }
     });
-
-    _logger.log('MassivAudioHandler: Initialized');
   }
 
   /// Broadcast the current playback state to the system
@@ -132,10 +128,7 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> play() async {
     if (_isRemoteMode) {
-      _logger.log('MassivAudioHandler: play requested (remote mode)');
-      if (onPlay != null) {
-        onPlay!();
-      }
+      onPlay?.call();
     } else {
       await _player.play();
     }
@@ -144,10 +137,7 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> pause() async {
     if (_isRemoteMode) {
-      _logger.log('MassivAudioHandler: pause requested (remote mode)');
-      if (onPause != null) {
-        onPause!();
-      }
+      onPause?.call();
     } else {
       await _player.pause();
     }
@@ -156,10 +146,7 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> stop() async {
     // Stop action is used for switching players (both local and remote modes)
-    _logger.log('MassivAudioHandler: stop requested -> switching player');
-    if (onSwitchPlayer != null) {
-      onSwitchPlayer!();
-    }
+    onSwitchPlayer?.call();
     // Note: We don't actually stop playback - this button is repurposed for player switching
   }
 
@@ -168,27 +155,18 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> skipToNext() async {
-    _logger.log('MassivAudioHandler: skipToNext requested');
-    if (onSkipToNext != null) {
-      onSkipToNext!();
-    }
+    onSkipToNext?.call();
   }
 
   @override
   Future<void> skipToPrevious() async {
-    _logger.log('MassivAudioHandler: skipToPrevious requested');
-    if (onSkipToPrevious != null) {
-      onSkipToPrevious!();
-    }
+    onSkipToPrevious?.call();
   }
 
   // --- Custom methods for Ensemble ---
 
   /// Play a URL with the given metadata
   Future<void> playUrl(String url, MediaItem item, {Map<String, String>? headers}) async {
-    _logger.log('MassivAudioHandler: Playing URL: $url');
-    _logger.log('MassivAudioHandler: Metadata: ${item.title} by ${item.artist}');
-
     _currentMediaItem = item;
     mediaItem.add(item);
 
@@ -201,10 +179,8 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
 
       await _player.setAudioSource(source);
       await _player.play();
-      _logger.log('MassivAudioHandler: Playback started');
-    } catch (e, stackTrace) {
+    } catch (e) {
       _logger.log('MassivAudioHandler: Error playing URL: $e');
-      _logger.log('MassivAudioHandler: Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -213,7 +189,6 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
   /// This can be called when metadata arrives after playback starts
   @override
   Future<void> updateMediaItem(MediaItem item) async {
-    _logger.log('MassivAudioHandler: Updating media item: ${item.title} by ${item.artist}');
     _currentMediaItem = item;
     mediaItem.add(item);
   }
@@ -234,8 +209,6 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
     _isRemoteMode = true;
     _currentMediaItem = item;
     mediaItem.add(item);
-
-    _logger.log('MassivAudioHandler: Setting remote playback state - ${item.title} (playing: $playing)');
 
     playbackState.add(playbackState.value.copyWith(
       controls: [
@@ -264,7 +237,6 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
 
   /// Clear remote playback state and hide notification
   void clearRemotePlaybackState() {
-    _logger.log('MassivAudioHandler: Clearing remote playback state');
     _isRemoteMode = false;
     _currentMediaItem = null;
 
@@ -277,7 +249,6 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
 
   /// Switch to local playback mode (when builtin player is selected)
   void setLocalMode() {
-    _logger.log('MassivAudioHandler: Switching to local mode');
     _isRemoteMode = false;
   }
 
@@ -298,7 +269,6 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
         _currentMediaItem?.artist != item.artist) {
       _currentMediaItem = item;
       mediaItem.add(item);
-      _logger.log('MassivAudioHandler: Updating local mode notification - ${item.title}');
     }
   }
 

@@ -12,7 +12,7 @@ import 'debug_logger.dart';
 /// 4. Logs will show frame timing, jank detection, and summary stats
 class AnimationDebugger {
   static final _logger = DebugLogger();
-  static bool _enabled = true;
+  static bool _enabled = false; // Disabled for release - enable for debugging animation jank
 
   // Session tracking
   static String? _currentSession;

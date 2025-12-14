@@ -89,11 +89,6 @@ class PositionTracker {
     final bool playStateChanged = _isPlaying != isPlaying;
     final bool durationChanged = duration != null && _duration != duration;
 
-    // Log significant changes
-    if (playerChanged || playStateChanged) {
-      _logger.log('PositionTracker: player=$playerId, playing=$isPlaying, pos=${position.toStringAsFixed(1)}s');
-    }
-
     _playerId = playerId;
     _duration = duration ?? _duration;
 
@@ -110,13 +105,9 @@ class PositionTracker {
       // and not in the future (clock skew)
       if (serverAge >= 0 && serverAge < 30) {
         anchorPos = position + serverAge;
-        _logger.log('PositionTracker: Using server timestamp, age=${serverAge.toStringAsFixed(1)}s, adjusted pos=${anchorPos.toStringAsFixed(1)}s');
       } else {
         // Timestamp is stale - mark this so we don't blindly trust the position
         hasStaleTimestamp = true;
-        if (serverAge >= 30) {
-          _logger.log('PositionTracker: Stale timestamp (age=${serverAge.toStringAsFixed(0)}s), raw pos=${position.toStringAsFixed(1)}s');
-        }
       }
     }
 
@@ -142,16 +133,6 @@ class PositionTracker {
         && isBackwardJump
         && isJumpToNearZero
         && currentInterpolated > 3.0;
-
-    if (positionDiff > 3 && _isPlaying && isPlaying && !playerChanged) {
-      if (isSuspiciousReset) {
-        _logger.log('PositionTracker: Ignoring suspicious reset to 0: ${currentInterpolated.toStringAsFixed(1)}s -> ${anchorPos.toStringAsFixed(1)}s (likely bad server data)');
-      } else if (hasStaleTimestamp) {
-        _logger.log('PositionTracker: Ignoring position diff due to stale timestamp: ${currentInterpolated.toStringAsFixed(1)}s -> ${anchorPos.toStringAsFixed(1)}s (keeping interpolated)');
-      } else {
-        _logger.log('PositionTracker: Position jump detected: ${currentInterpolated.toStringAsFixed(1)}s -> ${anchorPos.toStringAsFixed(1)}s (diff: ${positionDiff.toStringAsFixed(1)}s)');
-      }
-    }
 
     // Always update anchor when:
     // 1. Player changed
@@ -186,7 +167,6 @@ class PositionTracker {
 
   /// Handle seek - immediately update position without waiting for server
   void onSeek(double positionSeconds) {
-    _logger.log('PositionTracker: Seek to ${positionSeconds.toStringAsFixed(1)}s');
     _anchorPosition = positionSeconds;
     _anchorTime = DateTime.now();
     _lastEmittedSeconds = -1; // Force emit
@@ -195,7 +175,6 @@ class PositionTracker {
 
   /// Handle track change - reset position to 0
   void onTrackChange(String playerId, Duration? newDuration) {
-    _logger.log('PositionTracker: Track change, duration=${newDuration?.inSeconds}s');
     _playerId = playerId;
     _duration = newDuration ?? Duration.zero;
     _anchorPosition = 0.0;
@@ -207,7 +186,6 @@ class PositionTracker {
   /// Handle player selection change
   void onPlayerSelected(String playerId) {
     if (_playerId != playerId) {
-      _logger.log('PositionTracker: Player selected: $playerId');
       _playerId = playerId;
       // Don't reset position - let updateFromServer handle it with actual data
       _lastEmittedSeconds = -1;
@@ -216,7 +194,6 @@ class PositionTracker {
 
   /// Clear tracker state (e.g., when disconnecting)
   void clear() {
-    _logger.log('PositionTracker: Cleared');
     _stopInterpolationTimer();
     _playerId = null;
     _isPlaying = false;

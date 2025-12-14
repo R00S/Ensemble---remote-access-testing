@@ -100,8 +100,13 @@ class Player {
     double? elapsedTimeLastUpdated;
 
     // Get top-level elapsed time values
-    final topLevelElapsedTime = (json['elapsed_time'] as num?)?.toDouble();
-    final topLevelLastUpdated = (json['elapsed_time_last_updated'] as num?)?.toDouble();
+    // Try multiple field names as different player types may report position differently
+    final topLevelElapsedTime = (json['elapsed_time'] as num?)?.toDouble()
+        ?? (json['position'] as num?)?.toDouble()
+        ?? (json['media_position'] as num?)?.toDouble()
+        ?? (json['current_position'] as num?)?.toDouble();
+    final topLevelLastUpdated = (json['elapsed_time_last_updated'] as num?)?.toDouble()
+        ?? (json['position_updated_at'] as num?)?.toDouble();
 
     // Extract current_item_id and elapsed time from current_media
     // current_media often has the more accurate position after seeks
@@ -110,8 +115,12 @@ class Player {
       if (currentMedia != null) {
         currentItemId ??= currentMedia['queue_item_id'] as String?;
 
-        final currentMediaElapsedTime = (currentMedia['elapsed_time'] as num?)?.toDouble();
-        final currentMediaLastUpdated = (currentMedia['elapsed_time_last_updated'] as num?)?.toDouble();
+        // Try multiple field names for position
+        final currentMediaElapsedTime = (currentMedia['elapsed_time'] as num?)?.toDouble()
+            ?? (currentMedia['position'] as num?)?.toDouble()
+            ?? (currentMedia['media_position'] as num?)?.toDouble();
+        final currentMediaLastUpdated = (currentMedia['elapsed_time_last_updated'] as num?)?.toDouble()
+            ?? (currentMedia['position_updated_at'] as num?)?.toDouble();
 
         // Prefer current_media elapsed_time when available - it reflects actual playback position
         // after seek operations, while top-level elapsed_time may lag behind
@@ -125,6 +134,15 @@ class Player {
     // Fall back to top-level values if current_media didn't have elapsed time
     elapsedTime ??= topLevelElapsedTime;
     elapsedTimeLastUpdated ??= topLevelLastUpdated;
+
+    // Debug logging for position tracking issues
+    final playerName = json['name'] as String? ?? 'unknown';
+    final state = json['playback_state'] as String? ?? json['state'] as String? ?? 'idle';
+    if (state == 'playing' && elapsedTime == null) {
+      // Only log if this is a playing player without elapsed time
+      print('⚠️ Player "$playerName" is playing but has no elapsed_time. '
+          'top_level=${json['elapsed_time']}, current_media.elapsed_time=${json['current_media']?['elapsed_time']}');
+    }
 
     return Player(
       playerId: json['player_id'] as String,

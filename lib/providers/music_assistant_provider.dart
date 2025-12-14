@@ -1545,12 +1545,19 @@ class MusicAssistantProvider with ChangeNotifier {
       stateChanged = true;
 
       // Feed position tracker with server data
+      // Log raw values to debug position issues
+      final rawElapsedTime = updatedPlayer.elapsedTime;
+      final rawTimestamp = updatedPlayer.elapsedTimeLastUpdated;
+      if (rawElapsedTime == null) {
+        _logger.log('⚠️ Player ${updatedPlayer.name} has null elapsedTime');
+      }
+
       _positionTracker.updateFromServer(
         playerId: updatedPlayer.playerId,
-        position: updatedPlayer.elapsedTime ?? 0.0,
+        position: rawElapsedTime ?? 0.0,
         isPlaying: updatedPlayer.state == 'playing',
         duration: _currentTrack?.duration,
-        serverTimestamp: updatedPlayer.elapsedTimeLastUpdated,
+        serverTimestamp: rawTimestamp,
       );
 
       final isPlayingOrPaused = _selectedPlayer!.state == 'playing' || _selectedPlayer!.state == 'paused';

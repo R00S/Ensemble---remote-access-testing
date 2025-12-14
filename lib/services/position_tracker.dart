@@ -122,17 +122,39 @@ class PositionTracker {
     // This helps identify seeks or track changes
     final currentInterpolated = currentPositionSeconds;
     final positionDiff = (anchorPos - currentInterpolated).abs();
+    final isBackwardJump = anchorPos < currentInterpolated;
+    final isJumpToNearZero = anchorPos < 3.0;
+
+    // Detect suspicious backward jumps to 0 - likely bad server data
+    // This happens when some player types don't report elapsed_time correctly
+    final isSuspiciousReset = !playerChanged
+        && !playStateChanged
+        && !durationChanged
+        && isPlaying
+        && _isPlaying
+        && isBackwardJump
+        && isJumpToNearZero
+        && currentInterpolated > 3.0;
 
     if (positionDiff > 3 && _isPlaying && isPlaying && !playerChanged) {
-      _logger.log('PositionTracker: Position jump detected: ${currentInterpolated.toStringAsFixed(1)}s -> ${anchorPos.toStringAsFixed(1)}s (diff: ${positionDiff.toStringAsFixed(1)}s)');
+      if (isSuspiciousReset) {
+        _logger.log('PositionTracker: Ignoring suspicious reset to 0: ${currentInterpolated.toStringAsFixed(1)}s -> ${anchorPos.toStringAsFixed(1)}s (likely bad server data)');
+      } else {
+        _logger.log('PositionTracker: Position jump detected: ${currentInterpolated.toStringAsFixed(1)}s -> ${anchorPos.toStringAsFixed(1)}s (diff: ${positionDiff.toStringAsFixed(1)}s)');
+      }
     }
 
     // Always update anchor when:
     // 1. Player changed
     // 2. Play state changed
-    // 3. Position jumped significantly (seek or track change)
+    // 3. Position jumped significantly (seek or track change) - BUT NOT if it's a suspicious reset
     // 4. We're not playing (paused state should reflect server position)
-    if (playerChanged || playStateChanged || positionDiff > 2 || !isPlaying) {
+    final shouldUpdateAnchor = playerChanged
+        || playStateChanged
+        || (positionDiff > 2 && !isSuspiciousReset)
+        || !isPlaying;
+
+    if (shouldUpdateAnchor) {
       _anchorPosition = anchorPos;
       _anchorTime = DateTime.now();
     }

@@ -8,7 +8,6 @@ import '../constants/timings.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/player.dart';
 import '../services/animation_debugger.dart';
-import '../services/settings_service.dart';
 import '../theme/palette_helper.dart';
 import '../theme/theme_provider.dart';
 import 'animated_icon_button.dart';
@@ -91,9 +90,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   String? _lastMeasuredTrackName;
   double? _lastMeasuredTitleWidth;
 
-  // Provider icons setting
-  bool _showProviderIcons = false;
-
   @override
   void initState() {
     super.initState();
@@ -150,18 +146,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         _stopQueueRefreshTimer();
       }
     });
-
-    // Load provider icons setting
-    _loadProviderIconsSetting();
-  }
-
-  Future<void> _loadProviderIconsSetting() async {
-    final showIcons = await SettingsService.getShowProviderIcons();
-    if (mounted) {
-      setState(() {
-        _showProviderIcons = showIcons;
-      });
-    }
   }
 
   Timer? _queueRefreshTimer;
@@ -416,104 +400,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         );
       }
     }
-  }
-
-  /// Get provider icons for the current track
-  List<Widget> _buildProviderIcons(dynamic currentTrack) {
-    if (currentTrack == null) return [];
-
-    // Try to get providerMappings - handle both typed and dynamic access
-    List<dynamic>? mappings;
-    try {
-      final rawMappings = currentTrack.providerMappings;
-      if (rawMappings == null) return [];
-      mappings = rawMappings as List<dynamic>?;
-    } catch (e) {
-      return [];
-    }
-
-    if (mappings == null || mappings.isEmpty) return [];
-
-    // Get unique providers (exclude 'library' as it's not a music source)
-    final seenProviders = <String>{};
-    final icons = <Widget>[];
-
-    for (final mapping in mappings) {
-      try {
-        // Check if available
-        final available = mapping.available;
-        if (available != true) continue;
-
-        // Get provider domain or instance
-        String provider = '';
-        try {
-          provider = (mapping.providerDomain ?? '').toString().toLowerCase();
-        } catch (e) {
-          // Fallback to providerInstance
-        }
-        if (provider.isEmpty) {
-          try {
-            provider = (mapping.providerInstance ?? '').toString().toLowerCase();
-          } catch (e) {
-            continue;
-          }
-        }
-
-        if (provider.isEmpty || provider == 'library' || seenProviders.contains(provider)) continue;
-        seenProviders.add(provider);
-
-        final icon = _getProviderIcon(provider);
-        if (icon != null) {
-          icons.add(
-            Container(
-              width: 24,
-              height: 24,
-              margin: const EdgeInsets.only(left: 4),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Center(
-                child: icon,
-              ),
-            ),
-          );
-        }
-      } catch (e) {
-        // Skip this mapping on any error
-        continue;
-      }
-    }
-
-    return icons;
-  }
-
-  /// Get icon widget for a provider
-  Widget? _getProviderIcon(String provider) {
-    // Common Music Assistant providers
-    if (provider.contains('spotify')) {
-      return const Icon(Icons.music_note_rounded, size: 16, color: Color(0xFF1DB954));
-    } else if (provider.contains('subsonic') || provider.contains('opensubsonic')) {
-      return const Icon(Icons.cloud_rounded, size: 16, color: Color(0xFFF9A825));
-    } else if (provider.contains('tidal')) {
-      return const Icon(Icons.waves_rounded, size: 16, color: Colors.white);
-    } else if (provider.contains('qobuz')) {
-      return const Icon(Icons.high_quality_rounded, size: 16, color: Color(0xFF2C8BFF));
-    } else if (provider.contains('youtube') || provider.contains('ytmusic')) {
-      return const Icon(Icons.play_circle_filled_rounded, size: 16, color: Colors.red);
-    } else if (provider.contains('plex')) {
-      return const Icon(Icons.smart_display_rounded, size: 16, color: Color(0xFFE5A00D));
-    } else if (provider.contains('jellyfin')) {
-      return const Icon(Icons.video_library_rounded, size: 16, color: Color(0xFF00A4DC));
-    } else if (provider.contains('filesystem') || provider.contains('local')) {
-      return const Icon(Icons.folder_rounded, size: 16, color: Colors.grey);
-    } else if (provider.contains('soundcloud')) {
-      return const Icon(Icons.cloud_queue_rounded, size: 16, color: Color(0xFFFF5500));
-    } else if (provider.contains('deezer')) {
-      return const Icon(Icons.music_note_rounded, size: 16, color: Color(0xFFEF5466));
-    }
-    // Unknown provider - show generic icon
-    return const Icon(Icons.album_rounded, size: 16, color: Colors.white70);
   }
 
   /// Show fullscreen album art overlay
@@ -1342,7 +1228,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     top: artTop,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: t > 0.5 ? () => _showFullscreenArt(context, imageUrl) : null,
+                      // Use onTapUp instead of onTap - resolves immediately and wins
+                      // the gesture arena against the outer vertical drag detector
+                      onTapUp: t > 0.5 ? (_) => _showFullscreenArt(context, imageUrl) : null,
                       child: Container(
                         width: artSize,
                         height: artSize,
@@ -1381,26 +1269,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                         ),
                       ),
                     ),
-                  ),
-
-                // Provider icons overlay (expanded only)
-                if (t > 0.5 && _showProviderIcons && !(_inTransition && t < 0.1))
-                  Builder(
-                    builder: (context) {
-                      final icons = _buildProviderIcons(currentTrack);
-                      if (icons.isEmpty) return const SizedBox.shrink();
-                      return Positioned(
-                        right: (screenSize.width - artLeft - artSize) + 8,
-                        top: artTop + 8,
-                        child: Opacity(
-                          opacity: ((t - 0.5) / 0.5).clamp(0.0, 1.0),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: icons,
-                          ),
-                        ),
-                      );
-                    },
                   ),
 
                 // Track title - with slide animation when collapsed

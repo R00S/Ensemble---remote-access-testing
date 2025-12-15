@@ -185,7 +185,7 @@ class SendspinService {
             'supported_commands': ['volume', 'mute'],
           },
         },
-      });
+      }, allowDuringHandshake: true);
 
       // Wait for server acknowledgment (server sends welcome/registered after hello)
       final ackReceived = await _waitForAck().timeout(
@@ -322,11 +322,17 @@ class SendspinService {
   }
 
   /// Send a JSON message to the server
-  void _sendMessage(Map<String, dynamic> message) {
-    if (_channel == null || _state != SendspinConnectionState.connected) return;
+  /// allowDuringHandshake: set to true to send messages before connection is established (e.g., hello)
+  void _sendMessage(Map<String, dynamic> message, {bool allowDuringHandshake = false}) {
+    if (_channel == null) return;
+
+    // During handshake, we need to send hello even though state is still 'connecting'
+    if (!allowDuringHandshake && _state != SendspinConnectionState.connected) return;
 
     try {
-      _channel!.sink.add(jsonEncode(message));
+      final json = jsonEncode(message);
+      _logger.log('Sendspin: Sending message: ${message['type']}');
+      _channel!.sink.add(json);
     } catch (e) {
       _logger.log('Sendspin: Error sending message: $e');
     }

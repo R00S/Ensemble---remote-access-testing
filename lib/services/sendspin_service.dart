@@ -368,17 +368,43 @@ class SendspinService {
   }
 
   /// Handle binary audio data (PCM frames from server)
-  void _handleBinaryAudioData(Uint8List audioData) {
+  /// Sendspin binary frame format:
+  /// - Byte 0: message type (uint8) - Type 4 = audio data
+  /// - Bytes 1-8: timestamp (int64 microseconds, little-endian) for synchronization
+  /// - Bytes 9+: actual PCM audio data (16-bit stereo 48kHz)
+  void _handleBinaryAudioData(Uint8List frame) {
+    // Minimum frame size: 1 (type) + 8 (timestamp) + 2 (at least one sample)
+    if (frame.length < 11) {
+      _logger.log('Sendspin: Binary frame too short: ${frame.length} bytes');
+      return;
+    }
+
+    // Parse header
+    final messageType = frame[0];
+
+    // Type 4 = audio data, other types may be used for other purposes
+    if (messageType != 4) {
+      _logger.log('Sendspin: Unexpected binary message type: $messageType');
+      return;
+    }
+
+    // Extract timestamp (bytes 1-8, little-endian int64)
+    final timestampBytes = ByteData.sublistView(frame, 1, 9);
+    final timestamp = timestampBytes.getInt64(0, Endian.little);
+
+    // Extract actual PCM audio data (everything after the 9-byte header)
+    final audioData = Uint8List.sublistView(frame, 9);
+
     _audioFramesReceived++;
 
     // Log periodically to avoid spam
     if (_audioFramesReceived == 1) {
-      _logger.log('Sendspin: Receiving audio data (first frame: ${audioData.length} bytes)');
+      _logger.log('Sendspin: Receiving audio data (first frame: ${frame.length} bytes, audio: ${audioData.length} bytes, ts: $timestamp)');
     } else if (_audioFramesReceived % 100 == 0) {
       _logger.log('Sendspin: Received $_audioFramesReceived audio frames');
     }
 
-    // Emit to stream for consumers
+    // Emit only the PCM audio data (without header) to stream for consumers
     if (!_audioDataController.isClosed) {
       _audioDataController.add(audioData);
     }

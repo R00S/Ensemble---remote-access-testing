@@ -1165,11 +1165,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Mini player progress bar background (collapsed only)
                 // Shows played portion with brighter color, unplayed with darker
                 // Starts after album art so progress is visible
-                if (t < 0.5 && currentTrack?.duration != null)
+                // Slides with content during swipe, hidden during transition if peek available
+                if (t < 0.5 && currentTrack?.duration != null && !(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
-                    left: _collapsedArtSize,
+                    left: _collapsedArtSize + miniPlayerSlideOffset,
                     top: 0,
-                    right: 0,
+                    width: width - _collapsedArtSize,
                     bottom: 0,
                     child: ValueListenableBuilder<int>(
                       valueListenable: _progressNotifier,
@@ -1199,6 +1200,52 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                         );
                       },
                     ),
+                  ),
+
+                // Peek player progress bar (slides in during swipe)
+                if (t < 0.1 && _peekPlayer != null && _peekTrack?.duration != null && (_slideOffset.abs() > 0.01 || _inTransition))
+                  Builder(
+                    builder: (context) {
+                      // Calculate peek progress bar position (mirrors _buildPeekContent positioning)
+                      double peekProgressLeft;
+                      if (_inTransition && _slideOffset.abs() < 0.01) {
+                        peekProgressLeft = _collapsedArtSize;
+                      } else {
+                        final isFromRight = _slideOffset < 0;
+                        final peekProgress = _slideOffset.abs();
+                        peekProgressLeft = _collapsedArtSize + (isFromRight
+                            ? collapsedWidth * (1 - peekProgress)
+                            : -collapsedWidth * (1 - peekProgress));
+                      }
+
+                      // Get peek player's elapsed time
+                      final peekElapsed = _peekPlayer.currentElapsed;
+                      final peekTotal = _peekTrack!.duration!.inSeconds;
+                      if (peekTotal <= 0) return const SizedBox.shrink();
+                      final peekProgressValue = (peekElapsed / peekTotal).clamp(0.0, 1.0);
+                      final progressAreaWidth = width - _collapsedArtSize;
+
+                      return Positioned(
+                        left: peekProgressLeft,
+                        top: 0,
+                        width: progressAreaWidth,
+                        bottom: 0,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.only(
+                            topRight: Radius.circular(borderRadius),
+                            bottomRight: Radius.circular(borderRadius),
+                          ),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              width: progressAreaWidth * peekProgressValue,
+                              height: height,
+                              color: collapsedBg,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
 
                 // Peek player content (shows when dragging OR during transition)

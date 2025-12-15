@@ -1160,7 +1160,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             width: width,
             height: height,
             child: Stack(
-              clipBehavior: Clip.hardEdge,
+              clipBehavior: Clip.none,
               children: [
                 // Mini player progress bar background (collapsed only)
                 // Shows played portion with brighter color, unplayed with darker
@@ -1200,18 +1200,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                         );
                       },
                     ),
-                  ),
-
-                // Peek player progress bar (slides in during swipe)
-                if (t < 0.1 && _peekPlayer != null && _peekTrack?.duration != null && (_slideOffset.abs() > 0.01 || _inTransition))
-                  _buildPeekProgressBar(
-                    slideOffset: _slideOffset,
-                    inTransition: _inTransition,
-                    collapsedWidth: collapsedWidth,
-                    progressAreaWidth: width - _collapsedArtSize,
-                    height: height,
-                    borderRadius: borderRadius,
-                    color: collapsedBg,
                   ),
 
                 // Peek player content (shows when dragging OR during transition)

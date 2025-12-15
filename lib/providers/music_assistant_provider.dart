@@ -17,6 +17,7 @@ import '../services/local_player_service.dart';
 import '../services/metadata_service.dart';
 import '../services/position_tracker.dart';
 import '../services/sendspin_service.dart';
+import '../services/pcm_audio_player.dart';
 import '../constants/timings.dart';
 import '../main.dart' show audioHandler;
 
@@ -72,6 +73,9 @@ class MusicAssistantProvider with ChangeNotifier {
   // Sendspin service (MA 2.7.0b20+ replacement for builtin_player)
   SendspinService? _sendspinService;
   bool _sendspinConnected = false;
+
+  // PCM audio player for raw Sendspin audio streaming
+  PcmAudioPlayer? _pcmAudioPlayer;
 
   // Search state persistence
   String _lastSearchQuery = '';
@@ -338,8 +342,9 @@ class MusicAssistantProvider with ChangeNotifier {
     _playerUpdatedEventSubscription?.cancel();
     _playerAddedEventSubscription?.cancel();
     _positionTracker.clear();
-    // Disconnect Sendspin if connected
+    // Disconnect Sendspin and PCM player if connected
     if (_sendspinConnected) {
+      await _pcmAudioPlayer?.disconnect();
       await _sendspinService?.disconnect();
       _sendspinConnected = false;
     }
@@ -540,6 +545,18 @@ class MusicAssistantProvider with ChangeNotifier {
       _sendspinService?.dispose();
       _sendspinService = SendspinService(_serverUrl!);
 
+      // Initialize PCM audio player for raw audio streaming
+      _pcmAudioPlayer?.dispose();
+      _pcmAudioPlayer = PcmAudioPlayer();
+      final pcmInitialized = await _pcmAudioPlayer!.initialize();
+      if (pcmInitialized) {
+        _logger.log('✅ PCM audio player initialized for Sendspin');
+        // Connect PCM player to Sendspin audio stream
+        await _pcmAudioPlayer!.connectToStream(_sendspinService!.audioDataStream);
+      } else {
+        _logger.log('⚠️ PCM audio player initialization failed');
+      }
+
       // Wire up callbacks
       _sendspinService!.onPlay = _handleSendspinPlay;
       _sendspinService!.onPause = _handleSendspinPause;
@@ -643,6 +660,8 @@ class MusicAssistantProvider with ChangeNotifier {
   /// Handle Sendspin pause command
   void _handleSendspinPause() async {
     _logger.log('⏸️ Sendspin: Pause command received');
+    // Pause both players - PCM for raw streaming, local for URL-based
+    await _pcmAudioPlayer?.pause();
     await _localPlayer.pause();
     _sendspinService?.reportState(playing: false, paused: true);
   }
@@ -650,6 +669,8 @@ class MusicAssistantProvider with ChangeNotifier {
   /// Handle Sendspin stop command
   void _handleSendspinStop() async {
     _logger.log('⏹️ Sendspin: Stop command received');
+    // Stop both players - PCM for raw streaming, local for URL-based
+    await _pcmAudioPlayer?.stop();
     await _localPlayer.stop();
     _sendspinService?.reportState(playing: false, paused: false);
   }
@@ -2317,6 +2338,7 @@ class MusicAssistantProvider with ChangeNotifier {
     _playerUpdatedEventSubscription?.cancel();
     _playerAddedEventSubscription?.cancel();
     _positionTracker.dispose();
+    _pcmAudioPlayer?.dispose();
     _sendspinService?.dispose();
     _api?.dispose();
     super.dispose();

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:raw_sound/raw_sound_player.dart';
+import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 import 'debug_logger.dart';
 
 /// Audio format configuration matching Sendspin protocol
@@ -30,11 +30,10 @@ enum PcmPlayerState {
 }
 
 /// Service to play raw PCM audio data from Sendspin WebSocket stream
-/// Uses raw_sound plugin for low-level PCM playback
+/// Uses flutter_pcm_sound plugin for low-level PCM playback
 class PcmAudioPlayer {
   final _logger = DebugLogger();
 
-  RawSoundPlayer? _player;
   PcmPlayerState _state = PcmPlayerState.idle;
   PcmAudioFormat _format = PcmAudioFormat.sendspin;
 
@@ -43,6 +42,7 @@ class PcmAudioPlayer {
   // Audio buffer for smooth playback
   final List<Uint8List> _audioBuffer = [];
   bool _isFeeding = false;
+  bool _isStarted = false;
 
   // Stats
   int _framesPlayed = 0;
@@ -64,16 +64,21 @@ class PcmAudioPlayer {
     try {
       _logger.log('PcmAudioPlayer: Initializing (${_format.sampleRate}Hz, ${_format.channels}ch, ${_format.bitDepth}bit)');
 
-      _player = RawSoundPlayer();
-
-      // Initialize with Sendspin audio format
-      // Buffer size: larger buffer for network jitter tolerance
-      await _player!.initialize(
-        bufferSize: 4096 << 4,  // ~65KB buffer for smooth streaming
-        nChannels: _format.channels,
+      // Setup flutter_pcm_sound with Sendspin audio format
+      await FlutterPcmSound.setup(
         sampleRate: _format.sampleRate,
-        pcmType: _format.bitDepth == 16 ? RawSoundPCMType.PCMI16 : RawSoundPCMType.PCMF32,
+        channelCount: _format.channels,
       );
+
+      // Set feed threshold - request more data when buffer has fewer frames
+      // Lower threshold = lower latency but more risk of underruns
+      await FlutterPcmSound.setFeedThreshold(8000);
+
+      // Set up feed callback for when buffer needs more data
+      FlutterPcmSound.setFeedCallback(_onFeedRequested);
+
+      // Set log level for debugging
+      await FlutterPcmSound.setLogLevel(LogLevel.standard);
 
       _state = PcmPlayerState.ready;
       _logger.log('PcmAudioPlayer: Initialized successfully');
@@ -85,9 +90,18 @@ class PcmAudioPlayer {
     }
   }
 
+  /// Callback when flutter_pcm_sound needs more audio data
+  void _onFeedRequested(int remainingFrames) {
+    // This is called when buffer is getting low
+    // We'll feed from our buffer if we have data
+    if (_audioBuffer.isNotEmpty && !_isFeeding) {
+      _feedNextChunk();
+    }
+  }
+
   /// Connect to a Sendspin audio data stream and start playback
   Future<bool> connectToStream(Stream<Uint8List> audioStream) async {
-    if (_player == null) {
+    if (_state == PcmPlayerState.error || _state == PcmPlayerState.idle) {
       _logger.log('PcmAudioPlayer: Cannot connect - player not initialized');
       return false;
     }
@@ -114,51 +128,78 @@ class PcmAudioPlayer {
     // Add to buffer
     _audioBuffer.add(audioData);
 
-    // Start feeding if not already doing so
-    if (!_isFeeding) {
-      _startFeeding();
+    // Start playback if not already started
+    if (!_isStarted && _state == PcmPlayerState.ready) {
+      _startPlayback();
+    }
+
+    // Feed data if not currently feeding
+    if (!_isFeeding && _isStarted) {
+      _feedNextChunk();
     }
   }
 
-  /// Start the audio feeding loop
-  Future<void> _startFeeding() async {
-    if (_isFeeding || _player == null) return;
+  /// Start audio playback
+  Future<void> _startPlayback() async {
+    if (_isStarted) return;
+
+    try {
+      await FlutterPcmSound.start();
+      _isStarted = true;
+      _state = PcmPlayerState.playing;
+      _logger.log('PcmAudioPlayer: Started playback');
+    } catch (e) {
+      _logger.log('PcmAudioPlayer: Error starting playback: $e');
+      _state = PcmPlayerState.error;
+    }
+  }
+
+  /// Feed the next chunk of audio data to the player
+  Future<void> _feedNextChunk() async {
+    if (_isFeeding || _audioBuffer.isEmpty) return;
 
     _isFeeding = true;
 
     try {
-      // Start playback if not already playing
-      if (_state == PcmPlayerState.ready) {
-        await _player!.play();
-        _state = PcmPlayerState.playing;
-        _logger.log('PcmAudioPlayer: Started playback');
-      }
-
-      // Feed audio data from buffer
-      while (_isFeeding && _state == PcmPlayerState.playing) {
-        if (_audioBuffer.isEmpty) {
-          // Wait a bit for more data
-          await Future.delayed(const Duration(milliseconds: 10));
-          continue;
-        }
-
+      while (_audioBuffer.isNotEmpty && _state == PcmPlayerState.playing) {
         final chunk = _audioBuffer.removeAt(0);
-        await _player!.feed(chunk);
 
-        _framesPlayed++;
-        _bytesPlayed += chunk.length;
+        // Convert Uint8List (raw bytes) to Int16 samples
+        // Sendspin sends 16-bit little-endian PCM
+        final samples = _bytesToInt16List(chunk);
 
-        // Log periodically
-        if (_framesPlayed % 100 == 0) {
-          _logger.log('PcmAudioPlayer: Played $_framesPlayed frames (${(_bytesPlayed / 1024).toStringAsFixed(1)} KB)');
+        if (samples.isNotEmpty) {
+          await FlutterPcmSound.feed(PcmArrayInt16.fromList(samples));
+
+          _framesPlayed++;
+          _bytesPlayed += chunk.length;
+
+          // Log periodically
+          if (_framesPlayed % 100 == 0) {
+            _logger.log('PcmAudioPlayer: Played $_framesPlayed frames (${(_bytesPlayed / 1024).toStringAsFixed(1)} KB)');
+          }
         }
       }
     } catch (e) {
       _logger.log('PcmAudioPlayer: Error feeding audio: $e');
-      _state = PcmPlayerState.error;
     }
 
     _isFeeding = false;
+  }
+
+  /// Convert raw bytes (Uint8List) to Int16 samples
+  /// Assumes little-endian 16-bit PCM
+  List<int> _bytesToInt16List(Uint8List bytes) {
+    if (bytes.length < 2) return [];
+
+    final byteData = ByteData.sublistView(bytes);
+    final samples = <int>[];
+
+    for (int i = 0; i < bytes.length - 1; i += 2) {
+      samples.add(byteData.getInt16(i, Endian.little));
+    }
+
+    return samples;
   }
 
   /// Handle stream errors
@@ -174,41 +215,47 @@ class PcmAudioPlayer {
 
   /// Start playback (if paused)
   Future<void> play() async {
-    if (_player == null || _state == PcmPlayerState.error) return;
+    if (_state == PcmPlayerState.error) return;
 
     if (_state == PcmPlayerState.paused || _state == PcmPlayerState.ready) {
-      await _player!.play();
-      _state = PcmPlayerState.playing;
+      await _startPlayback();
       _logger.log('PcmAudioPlayer: Resumed playback');
 
       // Resume feeding
       if (!_isFeeding && _audioBuffer.isNotEmpty) {
-        _startFeeding();
+        _feedNextChunk();
       }
     }
   }
 
-  /// Pause playback (preserves buffer)
+  /// Pause playback
   Future<void> pause() async {
-    if (_player == null || _state != PcmPlayerState.playing) return;
+    if (_state != PcmPlayerState.playing) return;
 
-    await _player!.pause();
+    // flutter_pcm_sound doesn't have a native pause, so we just stop feeding
+    // and mark as paused
     _state = PcmPlayerState.paused;
     _logger.log('PcmAudioPlayer: Paused playback');
   }
 
   /// Stop playback (clears buffer)
   Future<void> stop() async {
-    if (_player == null) return;
-
-    _isFeeding = false;
+    _isStarted = false;
     _audioBuffer.clear();
 
-    await _player!.stop();
+    try {
+      await FlutterPcmSound.release();
+    } catch (e) {
+      _logger.log('PcmAudioPlayer: Error releasing: $e');
+    }
+
     _state = PcmPlayerState.ready;
     _framesPlayed = 0;
     _bytesPlayed = 0;
     _logger.log('PcmAudioPlayer: Stopped playback');
+
+    // Re-initialize for next playback
+    await initialize(format: _format);
   }
 
   /// Disconnect from audio stream
@@ -222,13 +269,15 @@ class PcmAudioPlayer {
   /// Release all resources
   Future<void> dispose() async {
     _isFeeding = false;
+    _isStarted = false;
     await _audioSubscription?.cancel();
     _audioSubscription = null;
     _audioBuffer.clear();
 
-    if (_player != null) {
-      await _player!.release();
-      _player = null;
+    try {
+      await FlutterPcmSound.release();
+    } catch (e) {
+      _logger.log('PcmAudioPlayer: Error releasing: $e');
     }
 
     _state = PcmPlayerState.idle;

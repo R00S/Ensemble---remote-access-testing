@@ -145,47 +145,46 @@ class SendspinService {
   /// Attempt to connect to a specific WebSocket URL
   Future<bool> _tryConnect(String url, {Duration timeout = const Duration(seconds: 5)}) async {
     try {
-      // Build connection URL with player info
-      final uri = Uri.parse(url);
-      final connectUri = uri.replace(
-        queryParameters: {
-          ...uri.queryParameters,
-          'player_id': _playerId!,
-          'player_name': _playerName!,
-        },
-      );
-
-      _logger.log('Sendspin: Connecting to ${connectUri.toString()}');
+      // Connect to the base URL without query params - we send player info in hello message
+      _logger.log('Sendspin: Connecting to $url');
 
       // Create WebSocket connection
-      final webSocket = await WebSocket.connect(
-        connectUri.toString(),
-      ).timeout(timeout);
+      final webSocket = await WebSocket.connect(url).timeout(timeout);
 
       _channel = IOWebSocketChannel(webSocket);
       _connectedUrl = url;
 
-      // Set up message listener
+      // Set up message listener BEFORE sending hello
       _channel!.stream.listen(
         _handleMessage,
         onError: _handleError,
         onDone: _handleDone,
       );
 
-      // Wait for server acknowledgment
+      // Send client/hello message immediately after connecting
+      // This is required by the Sendspin protocol - server waits for this
+      _logger.log('Sendspin: Sending client/hello with player_id=$_playerId');
+      _sendMessage({
+        'type': 'client/hello',
+        'player_id': _playerId,
+        'player_name': _playerName,
+        'version': '1.0.0',  // Protocol version
+      });
+
+      // Wait for server acknowledgment (server sends welcome/registered after hello)
       final ackReceived = await _waitForAck().timeout(
-        const Duration(seconds: 3),
+        const Duration(seconds: 5),
         onTimeout: () => false,
       );
 
       if (!ackReceived) {
-        _logger.log('Sendspin: No acknowledgment from server');
+        _logger.log('Sendspin: No acknowledgment from server after hello');
         await _channel?.sink.close();
         _channel = null;
         return false;
       }
 
-      _logger.log('Sendspin: Connected successfully');
+      _logger.log('Sendspin: Connected and registered successfully');
       _updateState(SendspinConnectionState.connected);
       _startHeartbeat();
 

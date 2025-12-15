@@ -3,13 +3,15 @@
 
 ---
 
-  <p>A minimalistic mobile client for <a href="https://music-assistant.io/">Music Assistant</a></p>
+  <p><strong>An unofficial mobile client for Music Assistant</strong></p>
   <p>Stream your music library directly to your phone, or control playback on any connected speaker.</p>
 </div>
 
 ---
 
 ## Disclaimer
+
+**Ensemble is an unofficial, community-built mobile client for Music Assistant. It is not affiliated with, endorsed by, or supported by the Music Assistant project or its developers.**
 
 This application was built with AI-assisted development using **Claude Code** and **Gemini CLI**.
 
@@ -97,16 +99,6 @@ Ensemble supports multiple authentication methods:
 - Android device (Android 5.0+)
 
 > **Note:** Local device playback (streaming to your phone) is not currently supported on Music Assistant beta 20+. This is due to MA replacing the built-in player with Sendspin. Support will be added once Sendspin is more stable. Remote control of other players works fine.
-
-## About Music Assistant
-
-Ensemble is a mobile client for [Music Assistant](https://music-assistant.io/), an open-source music library manager that integrates with various music sources and streaming providers.
-
-With Ensemble, you can:
-- **Stream locally** - Use your phone as a Music Assistant player
-- **Control remotely** - Manage playback on smart speakers, Chromecast, Sonos, and more
-
-Learn more: [music-assistant.io](https://music-assistant.io/)
 
 ## License
 

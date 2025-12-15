@@ -240,9 +240,10 @@ class SendspinService {
             _ackCompleter!.complete(true);
           }
           // Send initial client/state immediately after handshake (required by spec)
+          // Note: These must use allowDuringHandshake since state is still 'connecting'
           _sendInitialState();
           // Also send initial time sync
-          _sendClientTime();
+          _sendClientTime(allowDuringHandshake: true);
           break;
 
         case 'server/time':
@@ -432,17 +433,18 @@ class SendspinService {
   }
 
   /// Send client/time message for clock synchronization (Sendspin protocol)
-  void _sendClientTime() {
+  void _sendClientTime({bool allowDuringHandshake = false}) {
     final timestampMicroseconds = DateTime.now().microsecondsSinceEpoch;
     _sendMessage({
       'type': 'client/time',
       'payload': {
         'timestamp': timestampMicroseconds,
       },
-    });
+    }, allowDuringHandshake: allowDuringHandshake);
   }
 
   /// Send initial client/state immediately after handshake (required by Sendspin spec)
+  /// Must use allowDuringHandshake since state is still 'connecting' at this point
   void _sendInitialState() {
     _logger.log('Sendspin: Sending initial client/state');
     _sendMessage({
@@ -454,7 +456,7 @@ class SendspinService {
           'muted': _isMuted,
         },
       },
-    });
+    }, allowDuringHandshake: true);
   }
 
   /// Stop heartbeat timer

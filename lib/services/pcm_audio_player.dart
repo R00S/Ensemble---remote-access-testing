@@ -49,6 +49,11 @@ class PcmAudioPlayer {
   bool _isPausePending = false;  // Flag to stop feed operations during pause
   Completer<void>? _feedCompleter;  // Tracks when current feed operation completes
 
+  // Maximum chunks to feed at once to keep native buffer small (~300ms)
+  // Each chunk is ~25ms of audio, so 12 chunks = ~300ms
+  // This enables faster pause response (only need to drain 300ms vs 5-8 seconds)
+  static const int _maxChunksPerFeed = 12;
+
   // Stats
   int _framesPlayed = 0;
   int _bytesPlayed = 0;
@@ -232,7 +237,8 @@ class PcmAudioPlayer {
   }
 
   /// Feed the next chunk of audio data to the player
-  /// CRITICAL: This loop must yield to the event loop to prevent UI freeze
+  /// CRITICAL: Only feeds limited chunks to keep native buffer small (~300ms)
+  /// This enables faster pause response by minimizing buffered audio
   Future<void> _feedNextChunk() async {
     if (_isFeeding || _audioBuffer.isEmpty || _isPausePending) return;
 
@@ -242,7 +248,12 @@ class PcmAudioPlayer {
     try {
       int chunksProcessed = 0;
 
-      while (_audioBuffer.isNotEmpty && _state == PcmPlayerState.playing && !_isPausePending) {
+      // CRITICAL: Only feed limited chunks to keep native buffer small
+      // This is the key to fast pause - we drain 300ms instead of 5-8 seconds
+      while (_audioBuffer.isNotEmpty &&
+             chunksProcessed < _maxChunksPerFeed &&
+             _state == PcmPlayerState.playing &&
+             !_isPausePending) {
         final chunk = _audioBuffer.removeAt(0);
 
         // Convert Uint8List (raw bytes) to Int16 samples
@@ -266,9 +277,8 @@ class PcmAudioPlayer {
           }
         }
 
-        // CRITICAL: Yield to event loop every few chunks to allow UI to respond
-        // This prevents the feed loop from starving the event loop and causing freeze
-        if (chunksProcessed % 5 == 0) {
+        // Yield to event loop mid-feed to allow UI to respond
+        if (chunksProcessed % 4 == 0) {
           await Future.delayed(Duration.zero);
         }
       }
@@ -318,8 +328,24 @@ class PcmAudioPlayer {
     _isPausePending = false;
 
     if (_state == PcmPlayerState.paused) {
-      // Resume from pause - player is still initialized, just resume feeding
+      // Resume from pause - need to re-initialize since we released on pause
       _logger.log('PcmAudioPlayer: Resuming from pause at ${elapsedTime.inSeconds}s');
+
+      // Re-initialize the PCM player (it was released on pause)
+      try {
+        await pcm.FlutterPcmSound.setup(
+          sampleRate: _format.sampleRate,
+          channelCount: _format.channels,
+        );
+        await pcm.FlutterPcmSound.setFeedThreshold(8000);
+        pcm.FlutterPcmSound.setFeedCallback(_onFeedRequested);
+        await pcm.FlutterPcmSound.start();
+        _isStarted = true;
+      } catch (e) {
+        _logger.log('PcmAudioPlayer: Error re-initializing on resume: $e');
+        _state = PcmPlayerState.error;
+        return;
+      }
 
       _state = PcmPlayerState.playing;
       _startElapsedTimeTimer();
@@ -341,17 +367,15 @@ class PcmAudioPlayer {
     }
   }
 
-  /// Pause playback - stops feeding audio so native buffer drains quickly
+  /// Pause playback - stops feeding and releases player for instant stop
   /// Position is preserved via _bytesPlayed tracking
-  /// Note: We don't call release() on pause to avoid native deadlocks.
-  /// The native buffer is small (~170ms) so audio stops naturally.
+  /// Uses release() to clear native buffer for instant audio stop
   Future<void> pause() async {
     if (_state != PcmPlayerState.playing) return;
 
     _logger.log('PcmAudioPlayer: Pause requested');
 
     // Set pause pending flag FIRST to stop feed loop from starting new feeds
-    // CRITICAL: This flag must stay true until the pause operation is complete
     _isPausePending = true;
 
     // Update state immediately so UI reflects pause
@@ -362,32 +386,26 @@ class PcmAudioPlayer {
     // Clear our buffer - no more data will be fed
     _audioBuffer.clear();
 
-    // Wait for any in-flight feed operation to complete (short timeout)
-    // This is critical to prevent UI freeze from concurrent FFI calls
-    final completer = _feedCompleter;
-    if (completer != null && !completer.isCompleted) {
-      _logger.log('PcmAudioPlayer: Waiting for in-flight feed to complete');
-      try {
-        await completer.future.timeout(
-          const Duration(milliseconds: 100),
-          onTimeout: () {
-            _logger.log('PcmAudioPlayer: Feed wait timed out, proceeding');
-          },
-        );
-      } catch (e) {
-        _logger.log('PcmAudioPlayer: Feed wait error: $e');
-      }
-    }
+    // Clear feed callback to prevent native from triggering more feeds
+    pcm.FlutterPcmSound.setFeedCallback(null);
 
+    // Mark as not feeding
     _isFeeding = false;
 
-    // Don't call release() - it causes native deadlocks
-    // Audio will stop naturally as the small native buffer drains (~170ms)
-    // We keep the player initialized for faster resume
+    // Schedule release() to clear native buffer - use Future.delayed to yield control
+    // This allows UI to update before the potentially blocking release() call
+    Future.delayed(Duration.zero, () async {
+      try {
+        await pcm.FlutterPcmSound.release();
+        _isStarted = false;
+        _logger.log('PcmAudioPlayer: Player released for instant stop');
+      } catch (e) {
+        _logger.log('PcmAudioPlayer: Release error (expected if already released): $e');
+      }
+    });
 
     // CRITICAL: Keep _isPausePending = true! It's only cleared when play() is called
-    // This prevents _onAudioData from auto-resuming and _onFeedRequested from starting feeds
-    _logger.log('PcmAudioPlayer: Paused playback at ${elapsedTime.inSeconds}s (buffer will drain)');
+    _logger.log('PcmAudioPlayer: Paused playback at ${elapsedTime.inSeconds}s');
   }
 
   /// Stop playback (clears buffer and resets position)

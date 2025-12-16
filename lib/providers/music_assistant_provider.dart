@@ -2347,13 +2347,13 @@ class MusicAssistantProvider with ChangeNotifier {
 
   Future<void> nextTrack(String playerId) async {
     try {
-      // Optimistic local stop for builtin player on skip
+      // Optimistic local stop for builtin player on skip - non-blocking
       final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
       if (builtinPlayerId != null && playerId == builtinPlayerId && _sendspinConnected) {
-        _logger.log('⏭️ Optimistic local stop for skip on builtin player');
-        // Stop current audio immediately - new track will start fresh
-        await _pcmAudioPlayer?.pause();
-        await _localPlayer.stop();
+        _logger.log('⏭️ Non-blocking local stop for skip on builtin player');
+        // Stop current audio immediately - fire and forget
+        unawaited(_pcmAudioPlayer?.pause() ?? Future.value());
+        // Don't stop just_audio - not used for Sendspin audio output
       }
       await _api?.nextTrack(playerId);
     } catch (e) {
@@ -2364,13 +2364,13 @@ class MusicAssistantProvider with ChangeNotifier {
 
   Future<void> previousTrack(String playerId) async {
     try {
-      // Optimistic local stop for builtin player on previous
+      // Optimistic local stop for builtin player on previous - non-blocking
       final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
       if (builtinPlayerId != null && playerId == builtinPlayerId && _sendspinConnected) {
-        _logger.log('⏮️ Optimistic local stop for previous on builtin player');
-        // Stop current audio immediately - new track will start fresh
-        await _pcmAudioPlayer?.pause();
-        await _localPlayer.stop();
+        _logger.log('⏮️ Non-blocking local stop for previous on builtin player');
+        // Stop current audio immediately - fire and forget
+        unawaited(_pcmAudioPlayer?.pause() ?? Future.value());
+        // Don't stop just_audio - not used for Sendspin audio output
       }
       await _api?.previousTrack(playerId);
     } catch (e) {

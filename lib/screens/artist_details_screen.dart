@@ -364,9 +364,13 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
     final allAlbums = await provider.getArtistAlbumsWithCache(widget.artist.name);
 
     if (mounted) {
+      // Separate library albums from provider-only albums
+      final libraryAlbums = allAlbums.where((a) => a.inLibrary).toList();
+      final providerOnlyAlbums = allAlbums.where((a) => !a.inLibrary).toList();
+
       setState(() {
-        _albums = allAlbums;
-        _providerAlbums = []; // All albums are merged in the cache method
+        _albums = libraryAlbums;
+        _providerAlbums = providerOnlyAlbums;
         _isLoading = false;
       });
     }
@@ -626,7 +630,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
                 sliver: SliverGrid(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    childAspectRatio: 0.75,
+                    childAspectRatio: 0.78,  // Square image + text below
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
@@ -660,7 +664,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
                 sliver: SliverGrid(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    childAspectRatio: 0.75,
+                    childAspectRatio: 0.78,  // Square image + text below
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
@@ -707,7 +711,8 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
+          AspectRatio(
+            aspectRatio: 1.0,  // Square album art
             child: Hero(
               tag: HeroTags.albumCover + (album.uri ?? album.itemId) + '_$heroSuffix',
               child: ClipRRect(
@@ -745,7 +750,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
             child: Material(
               color: Colors.transparent,
               child: Text(
-                album.name,
+                album.nameWithYear,
                 style: textTheme.titleSmall?.copyWith(
                   color: colorScheme.onSurface,
                   fontWeight: FontWeight.w500,

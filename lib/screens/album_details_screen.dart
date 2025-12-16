@@ -697,7 +697,7 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
                     child: Material(
                       color: Colors.transparent,
                       child: Text(
-                        widget.album.name,
+                        widget.album.nameWithYear,
                         style: textTheme.headlineMedium?.copyWith(
                           color: colorScheme.onBackground,
                           fontWeight: FontWeight.bold,

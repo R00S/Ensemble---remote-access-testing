@@ -472,7 +472,7 @@ class SearchScreenState extends State<SearchScreen> {
             : null,
       ),
       title: Text(
-        album.name,
+        album.nameWithYear,
         style: TextStyle(
           color: colorScheme.onSurface,
           fontWeight: FontWeight.w500,

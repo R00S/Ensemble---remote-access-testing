@@ -147,13 +147,13 @@ class _AlbumCardState extends State<AlbumCard> {
               ),
             ),
           const SizedBox(height: 8),
-          // Album title
+          // Album title with year
           Hero(
             tag: HeroTags.albumTitle + (widget.album.uri ?? widget.album.itemId) + suffix,
             child: Material(
               color: Colors.transparent,
               child: Text(
-                widget.album.name,
+                widget.album.nameWithYear,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: textTheme.titleSmall?.copyWith(

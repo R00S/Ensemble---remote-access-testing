@@ -179,6 +179,26 @@ class Album extends MediaItem {
 
   String get artistsString =>
       artists?.map((a) => a.name).join(', ') ?? 'Unknown Artist';
+
+  /// Get the album year from metadata, returns null if not available
+  int? get year {
+    final y = metadata?['year'];
+    if (y is int) return y;
+    if (y is String) return int.tryParse(y);
+    return null;
+  }
+
+  /// Get album name with year appended (e.g., "Album Name (2023)")
+  String get nameWithYear {
+    final y = year;
+    return y != null ? '$name ($y)' : name;
+  }
+
+  /// Check if this album is in the user's library
+  bool get inLibrary {
+    if (provider == 'library') return true;
+    return providerMappings?.any((m) => m.providerInstance == 'library') ?? false;
+  }
 }
 
 class Track extends MediaItem {

@@ -303,33 +303,18 @@ class PcmAudioPlayer {
     _isPausePending = false;
 
     if (_state == PcmPlayerState.paused) {
-      // Resume from pause - need to re-initialize since we released on pause
+      // Resume from pause - player is still initialized, just resume feeding
       _logger.log('PcmAudioPlayer: Resuming from pause at ${elapsedTime.inSeconds}s');
-
-      // Re-initialize the PCM player (it was released on pause)
-      try {
-        await pcm.FlutterPcmSound.setup(
-          sampleRate: _format.sampleRate,
-          channelCount: _format.channels,
-        );
-        await pcm.FlutterPcmSound.setFeedThreshold(8000);
-        pcm.FlutterPcmSound.setFeedCallback(_onFeedRequested);
-        await pcm.FlutterPcmSound.start();
-        _isStarted = true;
-      } catch (e) {
-        _logger.log('PcmAudioPlayer: Error re-initializing on resume: $e');
-        _state = PcmPlayerState.error;
-        return;
-      }
 
       _state = PcmPlayerState.playing;
       _startElapsedTimeTimer();
-      _logger.log('PcmAudioPlayer: Resumed playback');
 
       // Resume feeding - new audio will come from stream
       if (!_isFeeding && _audioBuffer.isNotEmpty) {
         _feedNextChunk();
       }
+
+      _logger.log('PcmAudioPlayer: Resumed playback');
     } else if (_state == PcmPlayerState.ready) {
       await _startPlayback();
       _logger.log('PcmAudioPlayer: Started playback');
@@ -341,54 +326,33 @@ class PcmAudioPlayer {
     }
   }
 
-  /// Pause playback - immediately stops audio by releasing the player
+  /// Pause playback - stops feeding audio so native buffer drains quickly
   /// Position is preserved via _bytesPlayed tracking
+  /// Note: We don't call release() on pause to avoid native deadlocks.
+  /// The native buffer is small (~170ms) so audio stops naturally.
   Future<void> pause() async {
     if (_state != PcmPlayerState.playing) return;
 
     _logger.log('PcmAudioPlayer: Pause requested');
 
-    // Set pause pending flag FIRST to stop any in-flight feed operations
+    // Set pause pending flag to stop feed loop
     _isPausePending = true;
 
-    // Update state immediately so UI reflects pause
+    // Update state immediately
     _state = PcmPlayerState.paused;
     _bytesPlayedAtLastPause = _bytesPlayed;
     _stopElapsedTimeTimer();
 
-    // Clear our local buffer immediately
+    // Clear our buffer - no more data will be fed
     _audioBuffer.clear();
     _isFeeding = false;
 
-    // Do NOT await - let it run in background to avoid blocking UI
-    // All native calls that could block go here
-    _releasePlayerAsync();
+    // Don't call release() - it causes native deadlocks
+    // Audio will stop naturally as the small native buffer drains (~170ms)
+    // We keep the player initialized for faster resume
 
-    _logger.log('PcmAudioPlayer: Paused playback at ${elapsedTime.inSeconds}s');
-  }
-
-  /// Release player asynchronously to avoid blocking UI
-  /// This runs completely detached from the calling code
-  void _releasePlayerAsync() {
-    // Use Future.microtask to ensure this runs after pause() returns
-    Future.microtask(() async {
-      try {
-        // Clear the feed callback - this might block
-        pcm.FlutterPcmSound.setFeedCallback(null);
-
-        // Small delay to let any in-progress feed operation exit
-        await Future.delayed(const Duration(milliseconds: 50));
-
-        // Release flutter_pcm_sound to stop audio - this might block
-        await pcm.FlutterPcmSound.release();
-        _isStarted = false;
-        _logger.log('PcmAudioPlayer: Player released');
-      } catch (e) {
-        _logger.log('PcmAudioPlayer: Error releasing on pause: $e');
-      } finally {
-        _isPausePending = false;
-      }
-    });
+    _isPausePending = false;
+    _logger.log('PcmAudioPlayer: Paused playback at ${elapsedTime.inSeconds}s (buffer will drain)');
   }
 
   /// Stop playback (clears buffer and resets position)

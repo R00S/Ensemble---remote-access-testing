@@ -28,6 +28,13 @@ class SettingsService {
   static const String _keyShowFavoriteArtists = 'show_favorite_artists';
   static const String _keyShowFavoriteTracks = 'show_favorite_tracks';
 
+  // View Mode Settings
+  static const String _keyArtistAlbumsSortOrder = 'artist_albums_sort_order'; // 'alpha' or 'year'
+  static const String _keyArtistAlbumsViewMode = 'artist_albums_view_mode'; // 'grid2', 'grid3', 'list'
+  static const String _keyLibraryArtistsViewMode = 'library_artists_view_mode'; // 'grid2', 'grid3', 'list'
+  static const String _keyLibraryAlbumsViewMode = 'library_albums_view_mode'; // 'grid2', 'grid3', 'list'
+  static const String _keyLibraryPlaylistsViewMode = 'library_playlists_view_mode'; // 'grid2', 'grid3', 'list'
+
   static Future<String?> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyServerUrl);
@@ -380,5 +387,59 @@ class SettingsService {
   static Future<void> setShowFavoriteTracks(bool show) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowFavoriteTracks, show);
+  }
+
+  // View Mode Settings - Artist Albums
+  static Future<String> getArtistAlbumsSortOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyArtistAlbumsSortOrder) ?? 'alpha';
+  }
+
+  static Future<void> setArtistAlbumsSortOrder(String order) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyArtistAlbumsSortOrder, order);
+  }
+
+  static Future<String> getArtistAlbumsViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyArtistAlbumsViewMode) ?? 'grid2';
+  }
+
+  static Future<void> setArtistAlbumsViewMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyArtistAlbumsViewMode, mode);
+  }
+
+  // View Mode Settings - Library Artists
+  static Future<String> getLibraryArtistsViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLibraryArtistsViewMode) ?? 'list';
+  }
+
+  static Future<void> setLibraryArtistsViewMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLibraryArtistsViewMode, mode);
+  }
+
+  // View Mode Settings - Library Albums
+  static Future<String> getLibraryAlbumsViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLibraryAlbumsViewMode) ?? 'grid2';
+  }
+
+  static Future<void> setLibraryAlbumsViewMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLibraryAlbumsViewMode, mode);
+  }
+
+  // View Mode Settings - Library Playlists
+  static Future<String> getLibraryPlaylistsViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLibraryPlaylistsViewMode) ?? 'list';
+  }
+
+  static Future<void> setLibraryPlaylistsViewMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLibraryPlaylistsViewMode, mode);
   }
 }

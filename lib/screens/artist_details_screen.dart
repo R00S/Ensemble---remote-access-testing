@@ -9,6 +9,7 @@ import '../constants/hero_tags.dart';
 import '../theme/palette_helper.dart';
 import '../theme/theme_provider.dart';
 import '../services/metadata_service.dart';
+import '../services/settings_service.dart';
 import '../services/debug_logger.dart';
 import '../utils/page_transitions.dart';
 
@@ -40,6 +41,10 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
   String? _artistDescription;
   String? _artistImageUrl;
 
+  // View preferences
+  String _sortOrder = 'alpha'; // 'alpha' or 'year'
+  String _viewMode = 'grid2'; // 'grid2', 'grid3', 'list'
+
   String get _heroTagSuffix => widget.heroTagSuffix != null ? '_${widget.heroTagSuffix}' : '';
 
   @override
@@ -48,6 +53,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
     _isFavorite = widget.artist.favorite ?? false;
     // Use initial image URL immediately for smooth hero animation
     _artistImageUrl = widget.initialImageUrl;
+    _loadViewPreferences();
     _loadArtistAlbums();
     _loadArtistDescription();
     _refreshFavoriteStatus();
@@ -62,6 +68,66 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
         }
       });
     });
+  }
+
+  Future<void> _loadViewPreferences() async {
+    final sortOrder = await SettingsService.getArtistAlbumsSortOrder();
+    final viewMode = await SettingsService.getArtistAlbumsViewMode();
+    if (mounted) {
+      setState(() {
+        _sortOrder = sortOrder;
+        _viewMode = viewMode;
+      });
+    }
+  }
+
+  void _toggleSortOrder() {
+    final newOrder = _sortOrder == 'alpha' ? 'year' : 'alpha';
+    setState(() {
+      _sortOrder = newOrder;
+      _sortAlbums();
+    });
+    SettingsService.setArtistAlbumsSortOrder(newOrder);
+  }
+
+  void _cycleViewMode() {
+    String newMode;
+    switch (_viewMode) {
+      case 'grid2':
+        newMode = 'grid3';
+        break;
+      case 'grid3':
+        newMode = 'list';
+        break;
+      default:
+        newMode = 'grid2';
+    }
+    setState(() {
+      _viewMode = newMode;
+    });
+    SettingsService.setArtistAlbumsViewMode(newMode);
+  }
+
+  void _sortAlbums() {
+    if (_sortOrder == 'year') {
+      // Sort by year descending (newest first), null years at end
+      _albums.sort((a, b) {
+        if (a.year == null && b.year == null) return a.name.compareTo(b.name);
+        if (a.year == null) return 1;
+        if (b.year == null) return -1;
+        return b.year!.compareTo(a.year!);
+      });
+      _providerAlbums.sort((a, b) {
+        if (a.year == null && b.year == null) return a.name.compareTo(b.name);
+        if (a.year == null) return 1;
+        if (b.year == null) return -1;
+        return b.year!.compareTo(a.year!);
+      });
+    } else {
+      // Sort alphabetically
+      _albums.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      _providerAlbums.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
   }
 
   Future<void> _refreshFavoriteStatus() async {
@@ -371,6 +437,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
       setState(() {
         _albums = libraryAlbums;
         _providerAlbums = providerOnlyAlbums;
+        _sortAlbums(); // Apply saved sort order
         _isLoading = false;
       });
     }
@@ -611,6 +678,44 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
               ),
             )
           else ...[
+            // View controls row
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                child: Row(
+                  children: [
+                    // Sort toggle
+                    IconButton(
+                      icon: Icon(
+                        _sortOrder == 'alpha' ? Icons.sort_by_alpha : Icons.calendar_today,
+                        color: colorScheme.primary,
+                      ),
+                      tooltip: _sortOrder == 'alpha' ? 'Sort by year' : 'Sort alphabetically',
+                      onPressed: _toggleSortOrder,
+                    ),
+                    const SizedBox(width: 8),
+                    // View mode toggle
+                    IconButton(
+                      icon: Icon(
+                        _viewMode == 'list'
+                            ? Icons.view_list
+                            : _viewMode == 'grid3'
+                                ? Icons.grid_view
+                                : Icons.grid_on,
+                        color: colorScheme.primary,
+                      ),
+                      tooltip: _viewMode == 'grid2'
+                          ? '3-column grid'
+                          : _viewMode == 'grid3'
+                              ? 'List view'
+                              : '2-column grid',
+                      onPressed: _cycleViewMode,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             // Library Albums Section
             if (_albums.isNotEmpty) ...[
               SliverToBoxAdapter(
@@ -625,24 +730,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.78,  // Square image + text below
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final album = _albums[index];
-                      return _buildAlbumCard(album);
-                    },
-                    childCount: _albums.length,
-                  ),
-                ),
-              ),
+              _buildAlbumSliver(_albums),
             ],
 
             // Provider Albums Section
@@ -659,24 +747,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.78,  // Square image + text below
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final album = _providerAlbums[index];
-                      return _buildAlbumCard(album);
-                    },
-                    childCount: _providerAlbums.length,
-                  ),
-                ),
-              ),
+              _buildAlbumSliver(_providerAlbums),
               const SliverToBoxAdapter(child: SizedBox(height: 140)), // Space for bottom nav + mini player
             ],
           ],
@@ -776,6 +847,100 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAlbumSliver(List<Album> albums) {
+    if (_viewMode == 'list') {
+      return SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => _buildAlbumListTile(albums[index]),
+            childCount: albums.length,
+          ),
+        ),
+      );
+    }
+
+    final crossAxisCount = _viewMode == 'grid3' ? 3 : 2;
+    final childAspectRatio = _viewMode == 'grid3' ? 0.70 : 0.78;
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      sliver: SliverGrid(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          childAspectRatio: childAspectRatio,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => _buildAlbumCard(albums[index]),
+          childCount: albums.length,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlbumListTile(Album album) {
+    final maProvider = context.read<MusicAssistantProvider>();
+    final imageUrl = maProvider.getImageUrl(album, size: 128);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 56,
+          height: 56,
+          color: colorScheme.surfaceVariant,
+          child: imageUrl != null
+              ? Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Icon(
+                    Icons.album_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                )
+              : Icon(
+                  Icons.album_rounded,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+        ),
+      ),
+      title: Text(
+        album.nameWithYear,
+        style: textTheme.titleMedium?.copyWith(
+          color: colorScheme.onSurface,
+          fontWeight: FontWeight.w500,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        album.artistsString,
+        style: textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurface.withOpacity(0.7),
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () {
+        updateAdaptiveColorsFromImage(context, imageUrl);
+        Navigator.push(
+          context,
+          FadeSlidePageRoute(
+            child: AlbumDetailsScreen(
+              album: album,
+              heroTagSuffix: 'artist_albums',
+            ),
+          ),
+        );
+      },
     );
   }
 }

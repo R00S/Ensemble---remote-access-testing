@@ -12,6 +12,8 @@ import '../constants/hero_tags.dart';
 import '../theme/theme_provider.dart';
 import '../widgets/common/empty_state.dart';
 import '../widgets/common/disconnected_state.dart';
+import '../services/settings_service.dart';
+import 'album_details_screen.dart';
 import 'artist_details_screen.dart';
 import 'playlist_details_screen.dart';
 import 'settings_screen.dart';
@@ -31,6 +33,11 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   bool _isLoadingPlaylists = true;
   bool _isLoadingTracks = false;
   bool _showFavoritesOnly = false;
+
+  // View mode settings
+  String _artistsViewMode = 'list'; // 'grid2', 'grid3', 'list'
+  String _albumsViewMode = 'grid2'; // 'grid2', 'grid3', 'list'
+  String _playlistsViewMode = 'list'; // 'grid2', 'grid3', 'list'
 
   // Restoration: Remember selected tab across app restarts
   final RestorableInt _selectedTabIndex = RestorableInt(0);
@@ -57,6 +64,79 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     // Listen to tab changes to persist selection
     _tabController.addListener(_onTabChanged);
     _loadPlaylists();
+    _loadViewPreferences();
+  }
+
+  Future<void> _loadViewPreferences() async {
+    final artistsMode = await SettingsService.getLibraryArtistsViewMode();
+    final albumsMode = await SettingsService.getLibraryAlbumsViewMode();
+    final playlistsMode = await SettingsService.getLibraryPlaylistsViewMode();
+    if (mounted) {
+      setState(() {
+        _artistsViewMode = artistsMode;
+        _albumsViewMode = albumsMode;
+        _playlistsViewMode = playlistsMode;
+      });
+    }
+  }
+
+  void _cycleArtistsViewMode() {
+    String newMode;
+    switch (_artistsViewMode) {
+      case 'list':
+        newMode = 'grid2';
+        break;
+      case 'grid2':
+        newMode = 'grid3';
+        break;
+      default:
+        newMode = 'list';
+    }
+    setState(() => _artistsViewMode = newMode);
+    SettingsService.setLibraryArtistsViewMode(newMode);
+  }
+
+  void _cycleAlbumsViewMode() {
+    String newMode;
+    switch (_albumsViewMode) {
+      case 'grid2':
+        newMode = 'grid3';
+        break;
+      case 'grid3':
+        newMode = 'list';
+        break;
+      default:
+        newMode = 'grid2';
+    }
+    setState(() => _albumsViewMode = newMode);
+    SettingsService.setLibraryAlbumsViewMode(newMode);
+  }
+
+  void _cyclePlaylistsViewMode() {
+    String newMode;
+    switch (_playlistsViewMode) {
+      case 'list':
+        newMode = 'grid2';
+        break;
+      case 'grid2':
+        newMode = 'grid3';
+        break;
+      default:
+        newMode = 'list';
+    }
+    setState(() => _playlistsViewMode = newMode);
+    SettingsService.setLibraryPlaylistsViewMode(newMode);
+  }
+
+  IconData _getViewModeIcon(String mode) {
+    switch (mode) {
+      case 'list':
+        return Icons.view_list;
+      case 'grid3':
+        return Icons.grid_view;
+      default:
+        return Icons.grid_on;
+    }
   }
 
   void _recreateTabController() {
@@ -282,26 +362,65 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           );
         }
 
-        return RefreshIndicator(
-          color: colorScheme.primary,
-          backgroundColor: colorScheme.surface,
-          onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
-          child: ListView.builder(
-            key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}'),
-            cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
-            addAutomaticKeepAlives: false, // Tiles have their own keep-alive
-            addRepaintBoundaries: false, // Tiles have RepaintBoundary
-            itemCount: artists.length,
-            padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
-            itemBuilder: (context, index) {
-              final artist = artists[index];
-              return _buildArtistTile(
-                context,
-                artist,
-                key: ValueKey(artist.uri ?? artist.itemId),
-              );
-            },
-          ),
+        return Column(
+          children: [
+            // View toggle row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(_getViewModeIcon(_artistsViewMode), color: colorScheme.primary),
+                    onPressed: _cycleArtistsViewMode,
+                    tooltip: 'Change view',
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                color: colorScheme.primary,
+                backgroundColor: colorScheme.surface,
+                onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
+                child: _artistsViewMode == 'list'
+                    ? ListView.builder(
+                        key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
+                        cacheExtent: 500,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: false,
+                        itemCount: artists.length,
+                        padding: EdgeInsets.only(left: 8, right: 8, bottom: BottomSpacing.navBarOnly),
+                        itemBuilder: (context, index) {
+                          final artist = artists[index];
+                          return _buildArtistTile(
+                            context,
+                            artist,
+                            key: ValueKey(artist.uri ?? artist.itemId),
+                          );
+                        },
+                      )
+                    : GridView.builder(
+                        key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
+                        cacheExtent: 500,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: false,
+                        padding: EdgeInsets.only(left: 16, right: 16, bottom: BottomSpacing.navBarOnly),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: _artistsViewMode == 'grid3' ? 3 : 2,
+                          childAspectRatio: _artistsViewMode == 'grid3' ? 0.85 : 0.90,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: artists.length,
+                        itemBuilder: (context, index) {
+                          final artist = artists[index];
+                          return _buildArtistGridCard(context, artist);
+                        },
+                      ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -359,6 +478,68 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
+  Widget _buildArtistGridCard(BuildContext context, Artist artist) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final maProvider = context.read<MusicAssistantProvider>();
+    final imageUrl = maProvider.getImageUrl(artist, size: 256);
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          FadeSlidePageRoute(
+            child: ArtistDetailsScreen(
+              artist: artist,
+              heroTagSuffix: 'library_grid',
+              initialImageUrl: imageUrl,
+            ),
+          ),
+        );
+      },
+      child: Column(
+        children: [
+          Expanded(
+            child: ClipOval(
+              child: Container(
+                color: colorScheme.surfaceVariant,
+                child: imageUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        placeholder: (_, __) => const SizedBox(),
+                        errorWidget: (_, __, ___) => Icon(
+                          Icons.person_rounded,
+                          size: 48,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      )
+                    : Icon(
+                        Icons.person_rounded,
+                        size: 48,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            artist.name,
+            style: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   // ============ ALBUMS TAB ============
   Widget _buildAlbumsTab(BuildContext context) {
     // Use Selector for targeted rebuilds - only rebuild when albums or loading state changes
@@ -390,31 +571,123 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           );
         }
 
-        return RefreshIndicator(
-          color: colorScheme.primary,
-          backgroundColor: colorScheme.surface,
-          onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
-          child: GridView.builder(
-            key: PageStorageKey<String>('library_albums_grid_${_showFavoritesOnly ? 'fav' : 'all'}'),
-            cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
-            addAutomaticKeepAlives: false, // Cards have their own keep-alive
-            addRepaintBoundaries: false, // Cards have RepaintBoundary
-            padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.75,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
+        return Column(
+          children: [
+            // View toggle row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(_getViewModeIcon(_albumsViewMode), color: colorScheme.primary),
+                    onPressed: _cycleAlbumsViewMode,
+                    tooltip: 'Change view',
+                  ),
+                ],
+              ),
             ),
-            itemCount: albums.length,
-            itemBuilder: (context, index) {
-              final album = albums[index];
-              return AlbumCard(
-                key: ValueKey(album.uri ?? album.itemId),
-                album: album,
-                heroTagSuffix: 'library_grid',
-              );
-            },
+            Expanded(
+              child: RefreshIndicator(
+                color: colorScheme.primary,
+                backgroundColor: colorScheme.surface,
+                onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
+                child: _albumsViewMode == 'list'
+                    ? ListView.builder(
+                        key: PageStorageKey<String>('library_albums_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
+                        cacheExtent: 500,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: false,
+                        padding: EdgeInsets.only(left: 8, right: 8, bottom: BottomSpacing.navBarOnly),
+                        itemCount: albums.length,
+                        itemBuilder: (context, index) {
+                          final album = albums[index];
+                          return _buildAlbumListTile(context, album);
+                        },
+                      )
+                    : GridView.builder(
+                        key: PageStorageKey<String>('library_albums_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
+                        cacheExtent: 500,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: false,
+                        padding: EdgeInsets.only(left: 16, right: 16, bottom: BottomSpacing.navBarOnly),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: _albumsViewMode == 'grid3' ? 3 : 2,
+                          childAspectRatio: _albumsViewMode == 'grid3' ? 0.70 : 0.75,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: albums.length,
+                        itemBuilder: (context, index) {
+                          final album = albums[index];
+                          return AlbumCard(
+                            key: ValueKey(album.uri ?? album.itemId),
+                            album: album,
+                            heroTagSuffix: 'library_grid',
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAlbumListTile(BuildContext context, Album album) {
+    final maProvider = context.read<MusicAssistantProvider>();
+    final imageUrl = maProvider.getImageUrl(album, size: 128);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 56,
+          height: 56,
+          color: colorScheme.surfaceVariant,
+          child: imageUrl != null
+              ? CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => const SizedBox(),
+                  errorWidget: (_, __, ___) => Icon(
+                    Icons.album_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                )
+              : Icon(
+                  Icons.album_rounded,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+        ),
+      ),
+      title: Text(
+        album.nameWithYear,
+        style: textTheme.titleMedium?.copyWith(
+          color: colorScheme.onSurface,
+          fontWeight: FontWeight.w500,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        album.artistsString,
+        style: textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurface.withOpacity(0.7),
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () {
+        updateAdaptiveColorsFromImage(context, imageUrl);
+        Navigator.push(
+          context,
+          FadeSlidePageRoute(
+            child: AlbumDetailsScreen(album: album),
           ),
         );
       },
@@ -440,22 +713,61 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       return EmptyState.playlists(onRefresh: () => _loadPlaylists());
     }
 
-    return RefreshIndicator(
-      color: colorScheme.primary,
-      backgroundColor: colorScheme.surface,
-      onRefresh: () => _loadPlaylists(favoriteOnly: _showFavoritesOnly ? true : null),
-      child: ListView.builder(
-        key: PageStorageKey<String>('library_playlists_list_${_showFavoritesOnly ? 'fav' : 'all'}'),
-        cacheExtent: 500, // Prebuild items off-screen for smoother scrolling
-        addAutomaticKeepAlives: false, // Tiles don't need individual keep-alive
-        addRepaintBoundaries: false, // We add RepaintBoundary manually to tiles
-        itemCount: _playlists.length,
-        padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
-        itemBuilder: (context, index) {
-          final playlist = _playlists[index];
-          return _buildPlaylistTile(context, playlist);
-        },
-      ),
+    return Column(
+      children: [
+        // View toggle row
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                icon: Icon(_getViewModeIcon(_playlistsViewMode), color: colorScheme.primary),
+                onPressed: _cyclePlaylistsViewMode,
+                tooltip: 'Change view',
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            color: colorScheme.primary,
+            backgroundColor: colorScheme.surface,
+            onRefresh: () => _loadPlaylists(favoriteOnly: _showFavoritesOnly ? true : null),
+            child: _playlistsViewMode == 'list'
+                ? ListView.builder(
+                    key: PageStorageKey<String>('library_playlists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
+                    cacheExtent: 500,
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: false,
+                    itemCount: _playlists.length,
+                    padding: EdgeInsets.only(left: 8, right: 8, bottom: BottomSpacing.navBarOnly),
+                    itemBuilder: (context, index) {
+                      final playlist = _playlists[index];
+                      return _buildPlaylistTile(context, playlist);
+                    },
+                  )
+                : GridView.builder(
+                    key: PageStorageKey<String>('library_playlists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
+                    cacheExtent: 500,
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: false,
+                    padding: EdgeInsets.only(left: 16, right: 16, bottom: BottomSpacing.navBarOnly),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: _playlistsViewMode == 'grid3' ? 3 : 2,
+                      childAspectRatio: _playlistsViewMode == 'grid3' ? 0.85 : 0.90,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
+                    itemCount: _playlists.length,
+                    itemBuilder: (context, index) {
+                      final playlist = _playlists[index];
+                      return _buildPlaylistGridCard(context, playlist);
+                    },
+                  ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -514,6 +826,83 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPlaylistGridCard(BuildContext context, Playlist playlist) {
+    final provider = context.read<MusicAssistantProvider>();
+    final imageUrl = provider.api?.getImageUrl(playlist, size: 256);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlaylistDetailsScreen(
+              playlist: playlist,
+              provider: playlist.provider,
+              itemId: playlist.itemId,
+            ),
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                color: colorScheme.surfaceVariant,
+                child: imageUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        placeholder: (_, __) => const SizedBox(),
+                        errorWidget: (_, __, ___) => Center(
+                          child: Icon(
+                            Icons.playlist_play_rounded,
+                            size: 48,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Icon(
+                          Icons.playlist_play_rounded,
+                          size: 48,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            playlist.name,
+            style: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            playlist.trackCount != null
+                ? '${playlist.trackCount} tracks'
+                : playlist.owner ?? 'Playlist',
+            style: textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurface.withOpacity(0.7),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

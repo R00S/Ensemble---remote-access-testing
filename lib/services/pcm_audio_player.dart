@@ -165,6 +165,12 @@ class PcmAudioPlayer {
       _startPlayback();
     }
 
+    // Resume from paused state when new audio arrives (e.g., new track in radio mode)
+    if (_state == PcmPlayerState.paused) {
+      _logger.log('PcmAudioPlayer: Resuming from paused state for new stream');
+      play();
+    }
+
     // Feed data if not currently feeding
     if (!_isFeeding && _isStarted) {
       _feedNextChunk();

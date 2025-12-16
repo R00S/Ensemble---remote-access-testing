@@ -346,47 +346,49 @@ class PcmAudioPlayer {
   Future<void> pause() async {
     if (_state != PcmPlayerState.playing) return;
 
-    _logger.log('PcmAudioPlayer: Pause requested, isFeeding=$_isFeeding');
+    _logger.log('PcmAudioPlayer: Pause requested');
 
     // Set pause pending flag FIRST to stop any in-flight feed operations
     _isPausePending = true;
 
-    // flutter_pcm_sound doesn't have a native pause, so we must release
-    // to actually stop audio immediately (otherwise buffered audio plays out)
+    // Update state immediately so UI reflects pause
     _state = PcmPlayerState.paused;
     _bytesPlayedAtLastPause = _bytesPlayed;
     _stopElapsedTimeTimer();
 
     // Clear our local buffer immediately
     _audioBuffer.clear();
+    _isFeeding = false;
 
-    // Schedule the release on a microtask to avoid blocking the UI
-    // The _isPausePending flag will stop any new feeds from starting
-    unawaited(_releasePlayerAsync());
+    // Do NOT await - let it run in background to avoid blocking UI
+    // All native calls that could block go here
+    _releasePlayerAsync();
 
     _logger.log('PcmAudioPlayer: Paused playback at ${elapsedTime.inSeconds}s');
   }
 
   /// Release player asynchronously to avoid blocking UI
-  Future<void> _releasePlayerAsync() async {
-    // Clear the feed callback to prevent native code from triggering new feeds
-    pcm.FlutterPcmSound.setFeedCallback(null);
+  /// This runs completely detached from the calling code
+  void _releasePlayerAsync() {
+    // Use Future.microtask to ensure this runs after pause() returns
+    Future.microtask(() async {
+      try {
+        // Clear the feed callback - this might block
+        pcm.FlutterPcmSound.setFeedCallback(null);
 
-    // Small delay to let any in-progress feed operation exit its loop
-    await Future.delayed(const Duration(milliseconds: 50));
+        // Small delay to let any in-progress feed operation exit
+        await Future.delayed(const Duration(milliseconds: 50));
 
-    _isFeeding = false;
-
-    // Release flutter_pcm_sound to stop audio
-    try {
-      await pcm.FlutterPcmSound.release();
-      _isStarted = false;
-      _logger.log('PcmAudioPlayer: Player released');
-    } catch (e) {
-      _logger.log('PcmAudioPlayer: Error releasing on pause: $e');
-    }
-
-    _isPausePending = false;
+        // Release flutter_pcm_sound to stop audio - this might block
+        await pcm.FlutterPcmSound.release();
+        _isStarted = false;
+        _logger.log('PcmAudioPlayer: Player released');
+      } catch (e) {
+        _logger.log('PcmAudioPlayer: Error releasing on pause: $e');
+      } finally {
+        _isPausePending = false;
+      }
+    });
   }
 
   /// Stop playback (clears buffer and resets position)

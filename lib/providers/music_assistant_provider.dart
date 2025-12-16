@@ -2293,6 +2293,17 @@ class MusicAssistantProvider with ChangeNotifier {
 
   Future<void> pausePlayer(String playerId) async {
     try {
+      // Optimistic local pause for builtin player - don't wait for MA round-trip
+      final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
+      if (builtinPlayerId != null && playerId == builtinPlayerId && _sendspinConnected) {
+        _logger.log('⏸️ Optimistic local pause for builtin player');
+        // Immediately pause local playback
+        await _pcmAudioPlayer?.pause();
+        await _localPlayer.pause();
+        // Report state to MA (fire and forget)
+        _sendspinService?.reportState(playing: false, paused: true);
+      }
+      // Still send command to MA for proper state sync
       await _api?.pausePlayer(playerId);
     } catch (e) {
       ErrorHandler.logError('Pause player', e);
@@ -2302,6 +2313,8 @@ class MusicAssistantProvider with ChangeNotifier {
 
   Future<void> resumePlayer(String playerId) async {
     try {
+      // For resume, we let MA handle it since it needs to restart the stream
+      // The stream_start event will trigger local playback
       await _api?.resumePlayer(playerId);
     } catch (e) {
       ErrorHandler.logError('Resume player', e);
@@ -2311,6 +2324,14 @@ class MusicAssistantProvider with ChangeNotifier {
 
   Future<void> nextTrack(String playerId) async {
     try {
+      // Optimistic local stop for builtin player on skip
+      final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
+      if (builtinPlayerId != null && playerId == builtinPlayerId && _sendspinConnected) {
+        _logger.log('⏭️ Optimistic local stop for skip on builtin player');
+        // Stop current audio immediately - new track will start fresh
+        await _pcmAudioPlayer?.pause();
+        await _localPlayer.stop();
+      }
       await _api?.nextTrack(playerId);
     } catch (e) {
       ErrorHandler.logError('Next track', e);
@@ -2320,6 +2341,14 @@ class MusicAssistantProvider with ChangeNotifier {
 
   Future<void> previousTrack(String playerId) async {
     try {
+      // Optimistic local stop for builtin player on previous
+      final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
+      if (builtinPlayerId != null && playerId == builtinPlayerId && _sendspinConnected) {
+        _logger.log('⏮️ Optimistic local stop for previous on builtin player');
+        // Stop current audio immediately - new track will start fresh
+        await _pcmAudioPlayer?.pause();
+        await _localPlayer.stop();
+      }
       await _api?.previousTrack(playerId);
     } catch (e) {
       ErrorHandler.logError('Previous track', e);

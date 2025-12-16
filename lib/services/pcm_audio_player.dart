@@ -286,12 +286,30 @@ class PcmAudioPlayer {
     if (_state == PcmPlayerState.error) return;
 
     if (_state == PcmPlayerState.paused) {
-      // Resume from pause - restart timer, keep position
+      // Resume from pause - need to re-initialize since we released on pause
+      _logger.log('PcmAudioPlayer: Resuming from pause at ${elapsedTime.inSeconds}s');
+
+      // Re-initialize the PCM player (it was released on pause)
+      try {
+        await pcm.FlutterPcmSound.setup(
+          sampleRate: _format.sampleRate,
+          channelCount: _format.channels,
+        );
+        await pcm.FlutterPcmSound.setFeedThreshold(8000);
+        pcm.FlutterPcmSound.setFeedCallback(_onFeedRequested);
+        await pcm.FlutterPcmSound.start();
+        _isStarted = true;
+      } catch (e) {
+        _logger.log('PcmAudioPlayer: Error re-initializing on resume: $e');
+        _state = PcmPlayerState.error;
+        return;
+      }
+
       _state = PcmPlayerState.playing;
       _startElapsedTimeTimer();
-      _logger.log('PcmAudioPlayer: Resumed playback from ${elapsedTime.inSeconds}s');
+      _logger.log('PcmAudioPlayer: Resumed playback');
 
-      // Resume feeding
+      // Resume feeding - new audio will come from stream
       if (!_isFeeding && _audioBuffer.isNotEmpty) {
         _feedNextChunk();
       }
@@ -306,16 +324,31 @@ class PcmAudioPlayer {
     }
   }
 
-  /// Pause playback
+  /// Pause playback - immediately stops audio by releasing the player
+  /// Position is preserved via _bytesPlayed tracking
   Future<void> pause() async {
     if (_state != PcmPlayerState.playing) return;
 
-    // flutter_pcm_sound doesn't have a native pause, so we just stop feeding
-    // and mark as paused
+    // flutter_pcm_sound doesn't have a native pause, so we must release
+    // to actually stop audio immediately (otherwise buffered audio plays out)
     _state = PcmPlayerState.paused;
     _bytesPlayedAtLastPause = _bytesPlayed;
     _stopElapsedTimeTimer();
-    _logger.log('PcmAudioPlayer: Paused playback at ${elapsedTime.inSeconds}s');
+
+    // Clear our local buffer to prevent stale audio on resume
+    _audioBuffer.clear();
+    _isFeeding = false;
+
+    // Release flutter_pcm_sound to stop audio immediately
+    // This clears its internal buffer - we'll re-initialize on resume
+    try {
+      await pcm.FlutterPcmSound.release();
+      _isStarted = false;
+    } catch (e) {
+      _logger.log('PcmAudioPlayer: Error releasing on pause: $e');
+    }
+
+    _logger.log('PcmAudioPlayer: Paused playback at ${elapsedTime.inSeconds}s (released player)');
   }
 
   /// Stop playback (clears buffer and resets position)

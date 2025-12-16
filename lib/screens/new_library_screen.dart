@@ -139,6 +139,70 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
   }
 
+  String _getCurrentViewMode() {
+    // Return the view mode for the currently selected tab
+    final tabIndex = _tabController.index;
+    if (_showFavoritesOnly) {
+      // Artists, Albums, Tracks, Playlists
+      switch (tabIndex) {
+        case 0:
+          return _artistsViewMode;
+        case 1:
+          return _albumsViewMode;
+        case 2:
+          return 'list'; // Tracks always list
+        case 3:
+          return _playlistsViewMode;
+        default:
+          return 'list';
+      }
+    } else {
+      // Artists, Albums, Playlists
+      switch (tabIndex) {
+        case 0:
+          return _artistsViewMode;
+        case 1:
+          return _albumsViewMode;
+        case 2:
+          return _playlistsViewMode;
+        default:
+          return 'list';
+      }
+    }
+  }
+
+  void _cycleCurrentViewMode() {
+    final tabIndex = _tabController.index;
+    if (_showFavoritesOnly) {
+      switch (tabIndex) {
+        case 0:
+          _cycleArtistsViewMode();
+          break;
+        case 1:
+          _cycleAlbumsViewMode();
+          break;
+        case 2:
+          // Tracks - no view toggle
+          break;
+        case 3:
+          _cyclePlaylistsViewMode();
+          break;
+      }
+    } else {
+      switch (tabIndex) {
+        case 0:
+          _cycleArtistsViewMode();
+          break;
+        case 1:
+          _cycleAlbumsViewMode();
+          break;
+        case 2:
+          _cyclePlaylistsViewMode();
+          break;
+      }
+    }
+  }
+
   void _recreateTabController() {
     final oldIndex = _tabController.index;
     _tabController.removeListener(_onTabChanged);
@@ -298,8 +362,17 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               ],
             ),
             centerTitle: false,
-            actions: const [
-              PlayerSelector(),
+            actions: [
+              // View mode toggle - changes based on current tab
+              IconButton(
+                icon: Icon(
+                  _getViewModeIcon(_getCurrentViewMode()),
+                  color: colorScheme.primary,
+                ),
+                onPressed: _cycleCurrentViewMode,
+                tooltip: 'Change view',
+              ),
+              const PlayerSelector(),
             ],
             bottom: TabBar(
               controller: _tabController,
@@ -362,65 +435,45 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           );
         }
 
-        return Column(
-          children: [
-            // View toggle row
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: Icon(_getViewModeIcon(_artistsViewMode), color: colorScheme.primary),
-                    onPressed: _cycleArtistsViewMode,
-                    tooltip: 'Change view',
+        return RefreshIndicator(
+          color: colorScheme.primary,
+          backgroundColor: colorScheme.surface,
+          onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
+          child: _artistsViewMode == 'list'
+              ? ListView.builder(
+                  key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
+                  cacheExtent: 500,
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: false,
+                  itemCount: artists.length,
+                  padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
+                  itemBuilder: (context, index) {
+                    final artist = artists[index];
+                    return _buildArtistTile(
+                      context,
+                      artist,
+                      key: ValueKey(artist.uri ?? artist.itemId),
+                    );
+                  },
+                )
+              : GridView.builder(
+                  key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
+                  cacheExtent: 500,
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: false,
+                  padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _artistsViewMode == 'grid3' ? 3 : 2,
+                    childAspectRatio: _artistsViewMode == 'grid3' ? 0.75 : 0.80,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                color: colorScheme.primary,
-                backgroundColor: colorScheme.surface,
-                onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
-                child: _artistsViewMode == 'list'
-                    ? ListView.builder(
-                        key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
-                        cacheExtent: 500,
-                        addAutomaticKeepAlives: false,
-                        addRepaintBoundaries: false,
-                        itemCount: artists.length,
-                        padding: EdgeInsets.only(left: 8, right: 8, bottom: BottomSpacing.navBarOnly),
-                        itemBuilder: (context, index) {
-                          final artist = artists[index];
-                          return _buildArtistTile(
-                            context,
-                            artist,
-                            key: ValueKey(artist.uri ?? artist.itemId),
-                          );
-                        },
-                      )
-                    : GridView.builder(
-                        key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
-                        cacheExtent: 500,
-                        addAutomaticKeepAlives: false,
-                        addRepaintBoundaries: false,
-                        padding: EdgeInsets.only(left: 16, right: 16, bottom: BottomSpacing.navBarOnly),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: _artistsViewMode == 'grid3' ? 3 : 2,
-                          childAspectRatio: _artistsViewMode == 'grid3' ? 0.85 : 0.90,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                        itemCount: artists.length,
-                        itemBuilder: (context, index) {
-                          final artist = artists[index];
-                          return _buildArtistGridCard(context, artist);
-                        },
-                      ),
-              ),
-            ),
-          ],
+                  itemCount: artists.length,
+                  itemBuilder: (context, index) {
+                    final artist = artists[index];
+                    return _buildArtistGridCard(context, artist);
+                  },
+                ),
         );
       },
     );
@@ -498,8 +551,11 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         );
       },
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
+          // Use AspectRatio to ensure a square, then clip to circle
+          AspectRatio(
+            aspectRatio: 1.0,
             child: ClipOval(
               child: Container(
                 color: colorScheme.surfaceVariant,
@@ -509,7 +565,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                         fit: BoxFit.cover,
                         width: double.infinity,
                         height: double.infinity,
-                        placeholder: (_, __) => const SizedBox(),
+                        memCacheWidth: 256,
+                        memCacheHeight: 256,
+                        placeholder: (_, __) => Icon(
+                          Icons.person_rounded,
+                          size: 48,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                         errorWidget: (_, __, ___) => Icon(
                           Icons.person_rounded,
                           size: 48,
@@ -571,65 +633,45 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           );
         }
 
-        return Column(
-          children: [
-            // View toggle row
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: Icon(_getViewModeIcon(_albumsViewMode), color: colorScheme.primary),
-                    onPressed: _cycleAlbumsViewMode,
-                    tooltip: 'Change view',
+        return RefreshIndicator(
+          color: colorScheme.primary,
+          backgroundColor: colorScheme.surface,
+          onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
+          child: _albumsViewMode == 'list'
+              ? ListView.builder(
+                  key: PageStorageKey<String>('library_albums_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
+                  cacheExtent: 500,
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: false,
+                  padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
+                  itemCount: albums.length,
+                  itemBuilder: (context, index) {
+                    final album = albums[index];
+                    return _buildAlbumListTile(context, album);
+                  },
+                )
+              : GridView.builder(
+                  key: PageStorageKey<String>('library_albums_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
+                  cacheExtent: 500,
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: false,
+                  padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _albumsViewMode == 'grid3' ? 3 : 2,
+                    childAspectRatio: _albumsViewMode == 'grid3' ? 0.70 : 0.75,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                color: colorScheme.primary,
-                backgroundColor: colorScheme.surface,
-                onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
-                child: _albumsViewMode == 'list'
-                    ? ListView.builder(
-                        key: PageStorageKey<String>('library_albums_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
-                        cacheExtent: 500,
-                        addAutomaticKeepAlives: false,
-                        addRepaintBoundaries: false,
-                        padding: EdgeInsets.only(left: 8, right: 8, bottom: BottomSpacing.navBarOnly),
-                        itemCount: albums.length,
-                        itemBuilder: (context, index) {
-                          final album = albums[index];
-                          return _buildAlbumListTile(context, album);
-                        },
-                      )
-                    : GridView.builder(
-                        key: PageStorageKey<String>('library_albums_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
-                        cacheExtent: 500,
-                        addAutomaticKeepAlives: false,
-                        addRepaintBoundaries: false,
-                        padding: EdgeInsets.only(left: 16, right: 16, bottom: BottomSpacing.navBarOnly),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: _albumsViewMode == 'grid3' ? 3 : 2,
-                          childAspectRatio: _albumsViewMode == 'grid3' ? 0.70 : 0.75,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                        itemCount: albums.length,
-                        itemBuilder: (context, index) {
-                          final album = albums[index];
-                          return AlbumCard(
-                            key: ValueKey(album.uri ?? album.itemId),
-                            album: album,
-                            heroTagSuffix: 'library_grid',
-                          );
-                        },
-                      ),
-              ),
-            ),
-          ],
+                  itemCount: albums.length,
+                  itemBuilder: (context, index) {
+                    final album = albums[index];
+                    return AlbumCard(
+                      key: ValueKey(album.uri ?? album.itemId),
+                      album: album,
+                      heroTagSuffix: 'library_grid',
+                    );
+                  },
+                ),
         );
       },
     );
@@ -713,61 +755,41 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       return EmptyState.playlists(onRefresh: () => _loadPlaylists());
     }
 
-    return Column(
-      children: [
-        // View toggle row
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButton(
-                icon: Icon(_getViewModeIcon(_playlistsViewMode), color: colorScheme.primary),
-                onPressed: _cyclePlaylistsViewMode,
-                tooltip: 'Change view',
+    return RefreshIndicator(
+      color: colorScheme.primary,
+      backgroundColor: colorScheme.surface,
+      onRefresh: () => _loadPlaylists(favoriteOnly: _showFavoritesOnly ? true : null),
+      child: _playlistsViewMode == 'list'
+          ? ListView.builder(
+              key: PageStorageKey<String>('library_playlists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
+              cacheExtent: 500,
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: false,
+              itemCount: _playlists.length,
+              padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
+              itemBuilder: (context, index) {
+                final playlist = _playlists[index];
+                return _buildPlaylistTile(context, playlist);
+              },
+            )
+          : GridView.builder(
+              key: PageStorageKey<String>('library_playlists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
+              cacheExtent: 500,
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: false,
+              padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _playlistsViewMode == 'grid3' ? 3 : 2,
+                childAspectRatio: _playlistsViewMode == 'grid3' ? 0.75 : 0.80,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
               ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            color: colorScheme.primary,
-            backgroundColor: colorScheme.surface,
-            onRefresh: () => _loadPlaylists(favoriteOnly: _showFavoritesOnly ? true : null),
-            child: _playlistsViewMode == 'list'
-                ? ListView.builder(
-                    key: PageStorageKey<String>('library_playlists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
-                    cacheExtent: 500,
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: false,
-                    itemCount: _playlists.length,
-                    padding: EdgeInsets.only(left: 8, right: 8, bottom: BottomSpacing.navBarOnly),
-                    itemBuilder: (context, index) {
-                      final playlist = _playlists[index];
-                      return _buildPlaylistTile(context, playlist);
-                    },
-                  )
-                : GridView.builder(
-                    key: PageStorageKey<String>('library_playlists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
-                    cacheExtent: 500,
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: false,
-                    padding: EdgeInsets.only(left: 16, right: 16, bottom: BottomSpacing.navBarOnly),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: _playlistsViewMode == 'grid3' ? 3 : 2,
-                      childAspectRatio: _playlistsViewMode == 'grid3' ? 0.85 : 0.90,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    itemCount: _playlists.length,
-                    itemBuilder: (context, index) {
-                      final playlist = _playlists[index];
-                      return _buildPlaylistGridCard(context, playlist);
-                    },
-                  ),
-          ),
-        ),
-      ],
+              itemCount: _playlists.length,
+              itemBuilder: (context, index) {
+                final playlist = _playlists[index];
+                return _buildPlaylistGridCard(context, playlist);
+              },
+            ),
     );
   }
 

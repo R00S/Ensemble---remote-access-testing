@@ -110,18 +110,18 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
 
   void _sortAlbums() {
     if (_sortOrder == 'year') {
-      // Sort by year descending (newest first), null years at end
+      // Sort by year ascending (oldest first), null years at end
       _albums.sort((a, b) {
         if (a.year == null && b.year == null) return a.name.compareTo(b.name);
         if (a.year == null) return 1;
         if (b.year == null) return -1;
-        return b.year!.compareTo(a.year!);
+        return a.year!.compareTo(b.year!);
       });
       _providerAlbums.sort((a, b) {
         if (a.year == null && b.year == null) return a.name.compareTo(b.name);
         if (a.year == null) return 1;
         if (b.year == null) return -1;
-        return b.year!.compareTo(a.year!);
+        return a.year!.compareTo(b.year!);
       });
     } else {
       // Sort alphabetically
@@ -678,22 +678,24 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
               ),
             )
           else ...[
-            // View controls row
+            // View controls row - right aligned, minimal gap
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                padding: const EdgeInsets.only(right: 12.0),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     // Sort toggle
                     IconButton(
                       icon: Icon(
                         _sortOrder == 'alpha' ? Icons.sort_by_alpha : Icons.calendar_today,
                         color: colorScheme.primary,
+                        size: 20,
                       ),
                       tooltip: _sortOrder == 'alpha' ? 'Sort by year' : 'Sort alphabetically',
                       onPressed: _toggleSortOrder,
+                      visualDensity: VisualDensity.compact,
                     ),
-                    const SizedBox(width: 8),
                     // View mode toggle
                     IconButton(
                       icon: Icon(
@@ -703,6 +705,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
                                 ? Icons.grid_view
                                 : Icons.grid_on,
                         color: colorScheme.primary,
+                        size: 20,
                       ),
                       tooltip: _viewMode == 'grid2'
                           ? '3-column grid'
@@ -710,6 +713,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
                               ? 'List view'
                               : '2-column grid',
                       onPressed: _cycleViewMode,
+                      visualDensity: VisualDensity.compact,
                     ),
                   ],
                 ),

@@ -18,6 +18,9 @@ import 'artist_details_screen.dart';
 import 'playlist_details_screen.dart';
 import 'settings_screen.dart';
 
+/// Media type for the library
+enum LibraryMediaType { music, books, podcasts }
+
 class NewLibraryScreen extends StatefulWidget {
   const NewLibraryScreen({super.key});
 
@@ -34,6 +37,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   bool _isLoadingTracks = false;
   bool _showFavoritesOnly = false;
 
+  // Media type selection (Music, Books, Podcasts)
+  LibraryMediaType _selectedMediaType = LibraryMediaType.music;
+
   // View mode settings
   String _artistsViewMode = 'list'; // 'grid2', 'grid3', 'list'
   String _albumsViewMode = 'grid2'; // 'grid2', 'grid3', 'list'
@@ -42,7 +48,16 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   // Restoration: Remember selected tab across app restarts
   final RestorableInt _selectedTabIndex = RestorableInt(0);
 
-  int get _tabCount => _showFavoritesOnly ? 4 : 3;
+  int get _tabCount {
+    switch (_selectedMediaType) {
+      case LibraryMediaType.music:
+        return _showFavoritesOnly ? 4 : 3;
+      case LibraryMediaType.books:
+        return 3; // Authors, All Books, Series
+      case LibraryMediaType.podcasts:
+        return 1; // Coming soon placeholder
+    }
+  }
 
   @override
   String? get restorationId => 'new_library_screen';
@@ -215,6 +230,14 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
   }
 
+  void _changeMediaType(LibraryMediaType type) {
+    if (_selectedMediaType == type) return;
+    setState(() {
+      _selectedMediaType = type;
+      _recreateTabController();
+    });
+  }
+
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       _selectedTabIndex.value = _tabController.index;
@@ -331,86 +354,85 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           appBar: AppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
-            titleSpacing: 16,
-            title: Row(
-              children: [
-                // Favorites toggle with label
-                GestureDetector(
-                  onTap: () => _toggleFavoritesMode(!_showFavoritesOnly),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Switch(
-                        value: _showFavoritesOnly,
-                        onChanged: _toggleFavoritesMode,
-                        activeColor: colorScheme.primary,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Favourites',
-                        style: textTheme.titleMedium?.copyWith(
-                          color: _showFavoritesOnly
-                              ? colorScheme.primary
-                              : colorScheme.onSurface.withOpacity(0.7),
-                          fontWeight: _showFavoritesOnly ? FontWeight.w500 : FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            titleSpacing: 0,
+            toolbarHeight: 56,
+            title: const PlayerSelector(),
             centerTitle: false,
-            actions: const [
-              PlayerSelector(),
+            actions: [
+              // Favorites toggle (only for Music)
+              if (_selectedMediaType == LibraryMediaType.music)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Switch(
+                      value: _showFavoritesOnly,
+                      onChanged: _toggleFavoritesMode,
+                      activeColor: colorScheme.primary,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    Text(
+                      'Favs',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: _showFavoritesOnly
+                            ? colorScheme.primary
+                            : colorScheme.onSurface.withOpacity(0.5),
+                        fontWeight: _showFavoritesOnly ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
             ],
             bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
-              child: Stack(
+              preferredSize: const Size.fromHeight(100), // Pills + Tabs
+              child: Column(
                 children: [
-                  // Bottom border line extending full width
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      height: 1,
-                      color: colorScheme.outlineVariant.withOpacity(0.3),
-                    ),
-                  ),
-                  Row(
+                  // Media type pills (centered)
+                  _buildMediaTypePills(colorScheme),
+                  const SizedBox(height: 8),
+                  // Contextual tabs
+                  Stack(
                     children: [
-                      Expanded(
-                        child: TabBar(
-                          controller: _tabController,
-                          labelColor: colorScheme.primary,
-                          unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
-                          indicatorColor: colorScheme.primary,
-                          indicatorWeight: 3,
-                          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
-                          tabs: [
-                            const Tab(text: 'Artists'),
-                            const Tab(text: 'Albums'),
-                            if (_showFavoritesOnly) const Tab(text: 'Tracks'),
-                            const Tab(text: 'Playlists'),
-                          ],
+                      // Bottom border line extending full width
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          height: 1,
+                          color: colorScheme.outlineVariant.withOpacity(0.3),
                         ),
                       ),
-                      // View mode toggle in tab row
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: IconButton(
-                          icon: Icon(
-                            _getViewModeIcon(_getCurrentViewMode()),
-                            color: colorScheme.primary,
-                            size: 22,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TabBar(
+                              controller: _tabController,
+                              labelColor: colorScheme.primary,
+                              unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
+                              indicatorColor: colorScheme.primary,
+                              indicatorWeight: 3,
+                              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
+                              tabs: _buildTabs(),
+                            ),
                           ),
-                          onPressed: _cycleCurrentViewMode,
-                          tooltip: 'Change view',
-                          visualDensity: VisualDensity.compact,
-                        ),
+                          // View mode toggle (only for Music)
+                          if (_selectedMediaType == LibraryMediaType.music)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: IconButton(
+                                icon: Icon(
+                                  _getViewModeIcon(_getCurrentViewMode()),
+                                  color: colorScheme.primary,
+                                  size: 22,
+                                ),
+                                onPressed: _cycleCurrentViewMode,
+                                tooltip: 'Change view',
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),
@@ -420,15 +442,271 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           ),
           body: TabBarView(
             controller: _tabController,
-            children: [
-              _buildArtistsTab(context),
-              _buildAlbumsTab(context),
-              if (_showFavoritesOnly) _buildTracksTab(context),
-              _buildPlaylistsTab(context),
-            ],
+            children: _buildTabViews(context),
           ),
         );
       },
+    );
+  }
+
+  // ============ MEDIA TYPE PILLS ============
+  Widget _buildMediaTypePills(ColorScheme colorScheme) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildPill(
+          label: 'Music',
+          isSelected: _selectedMediaType == LibraryMediaType.music,
+          onTap: () => _changeMediaType(LibraryMediaType.music),
+          colorScheme: colorScheme,
+        ),
+        const SizedBox(width: 12),
+        _buildPill(
+          label: 'Books',
+          isSelected: _selectedMediaType == LibraryMediaType.books,
+          onTap: () => _changeMediaType(LibraryMediaType.books),
+          colorScheme: colorScheme,
+        ),
+        const SizedBox(width: 12),
+        _buildPill(
+          label: 'Podcasts',
+          isSelected: _selectedMediaType == LibraryMediaType.podcasts,
+          onTap: () => _changeMediaType(LibraryMediaType.podcasts),
+          colorScheme: colorScheme,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPill({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required ColorScheme colorScheme,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected
+                ? colorScheme.onPrimary
+                : colorScheme.primary.withOpacity(0.4),
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============ CONTEXTUAL TABS ============
+  List<Tab> _buildTabs() {
+    switch (_selectedMediaType) {
+      case LibraryMediaType.music:
+        return [
+          const Tab(text: 'Artists'),
+          const Tab(text: 'Albums'),
+          if (_showFavoritesOnly) const Tab(text: 'Tracks'),
+          const Tab(text: 'Playlists'),
+        ];
+      case LibraryMediaType.books:
+        return const [
+          Tab(text: 'Authors'),
+          Tab(text: 'All Books'),
+          Tab(text: 'Series'),
+        ];
+      case LibraryMediaType.podcasts:
+        return const [
+          Tab(text: 'Shows'),
+        ];
+    }
+  }
+
+  List<Widget> _buildTabViews(BuildContext context) {
+    switch (_selectedMediaType) {
+      case LibraryMediaType.music:
+        return [
+          _buildArtistsTab(context),
+          _buildAlbumsTab(context),
+          if (_showFavoritesOnly) _buildTracksTab(context),
+          _buildPlaylistsTab(context),
+        ];
+      case LibraryMediaType.books:
+        return [
+          _buildBooksAuthorsTab(context),
+          _buildAllBooksTab(context),
+          _buildSeriesTab(context),
+        ];
+      case LibraryMediaType.podcasts:
+        return [
+          _buildPodcastsComingSoonTab(context),
+        ];
+    }
+  }
+
+  // ============ BOOKS TABS (Placeholders) ============
+  Widget _buildBooksAuthorsTab(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.menu_book_rounded,
+            size: 64,
+            color: colorScheme.primary.withOpacity(0.3),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Authors',
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Browse audiobooks by author',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.6),
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Coming in Phase 6',
+            style: TextStyle(
+              color: colorScheme.primary.withOpacity(0.5),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllBooksTab(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.library_books_rounded,
+            size: 64,
+            color: colorScheme.primary.withOpacity(0.3),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'All Books',
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'View all audiobooks in your library',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.6),
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Coming in Phase 6',
+            style: TextStyle(
+              color: colorScheme.primary.withOpacity(0.5),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeriesTab(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.collections_bookmark_rounded,
+            size: 64,
+            color: colorScheme.primary.withOpacity(0.3),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Series',
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Browse audiobook series',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.6),
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Waiting for Music Assistant support',
+            style: TextStyle(
+              color: colorScheme.primary.withOpacity(0.5),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============ PODCASTS TAB (Placeholder) ============
+  Widget _buildPodcastsComingSoonTab(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.podcasts_rounded,
+            size: 64,
+            color: colorScheme.primary.withOpacity(0.3),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Podcasts',
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Podcast support coming soon',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.6),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

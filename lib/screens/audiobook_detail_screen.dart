@@ -8,6 +8,7 @@ import '../widgets/global_player_overlay.dart';
 import '../theme/palette_helper.dart';
 import '../theme/theme_provider.dart';
 import '../services/debug_logger.dart';
+import '../constants/hero_tags.dart';
 
 class AudiobookDetailScreen extends StatefulWidget {
   final Audiobook audiobook;
@@ -29,6 +30,8 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
   bool _isFavorite = false;
   ColorScheme? _lightColorScheme;
   ColorScheme? _darkColorScheme;
+
+  String get _heroTagSuffix => widget.heroTagSuffix != null ? '_${widget.heroTagSuffix}' : '';
 
   @override
   void initState() {
@@ -245,38 +248,41 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 60),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        width: 200,
-                        height: 200,
-                        color: colorScheme.surfaceContainerHighest,
-                        child: imageUrl != null
-                            ? CachedNetworkImage(
-                                imageUrl: imageUrl,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => Center(
+                    Hero(
+                      tag: HeroTags.audiobookCover + (widget.audiobook.uri ?? widget.audiobook.itemId) + _heroTagSuffix,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: 200,
+                          height: 200,
+                          color: colorScheme.surfaceContainerHighest,
+                          child: imageUrl != null
+                              ? CachedNetworkImage(
+                                  imageUrl: imageUrl,
+                                  fit: BoxFit.cover,
+                                  placeholder: (_, __) => Center(
+                                    child: Icon(
+                                      MdiIcons.bookOutline,
+                                      size: 80,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  errorWidget: (_, __, ___) => Center(
+                                    child: Icon(
+                                      MdiIcons.bookOutline,
+                                      size: 80,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                )
+                              : Center(
                                   child: Icon(
                                     MdiIcons.bookOutline,
                                     size: 80,
                                     color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),
-                                errorWidget: (_, __, ___) => Center(
-                                  child: Icon(
-                                    MdiIcons.bookOutline,
-                                    size: 80,
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              )
-                            : Center(
-                                child: Icon(
-                                  MdiIcons.bookOutline,
-                                  size: 80,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
+                        ),
                       ),
                     ),
                   ],
@@ -290,11 +296,17 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Title
-                    Text(
-                      book.name,
-                      style: textTheme.headlineMedium?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.bold,
+                    Hero(
+                      tag: HeroTags.audiobookTitle + (widget.audiobook.uri ?? widget.audiobook.itemId) + _heroTagSuffix,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Text(
+                          book.name,
+                          style: textTheme.headlineMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),

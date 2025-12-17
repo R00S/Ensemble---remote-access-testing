@@ -11,6 +11,7 @@ import '../services/settings_service.dart';
 import '../services/metadata_service.dart';
 import '../services/debug_logger.dart';
 import '../utils/page_transitions.dart';
+import '../constants/hero_tags.dart';
 import 'audiobook_detail_screen.dart';
 
 class AudiobookAuthorScreen extends StatefulWidget {
@@ -163,36 +164,39 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 60),
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
-                        shape: BoxShape.circle,
-                      ),
-                      child: ClipOval(
-                        child: _authorImageUrl != null
-                            ? CachedNetworkImage(
-                                imageUrl: _authorImageUrl!,
-                                fit: BoxFit.cover,
-                                width: 120,
-                                height: 120,
-                                placeholder: (_, __) => Icon(
+                    Hero(
+                      tag: HeroTags.authorImage + widget.authorName + _heroTagSuffix,
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          shape: BoxShape.circle,
+                        ),
+                        child: ClipOval(
+                          child: _authorImageUrl != null
+                              ? CachedNetworkImage(
+                                  imageUrl: _authorImageUrl!,
+                                  fit: BoxFit.cover,
+                                  width: 120,
+                                  height: 120,
+                                  placeholder: (_, __) => Icon(
+                                    MdiIcons.accountOutline,
+                                    size: 60,
+                                    color: colorScheme.onPrimaryContainer,
+                                  ),
+                                  errorWidget: (_, __, ___) => Icon(
+                                    MdiIcons.accountOutline,
+                                    size: 60,
+                                    color: colorScheme.onPrimaryContainer,
+                                  ),
+                                )
+                              : Icon(
                                   MdiIcons.accountOutline,
                                   size: 60,
                                   color: colorScheme.onPrimaryContainer,
                                 ),
-                                errorWidget: (_, __, ___) => Icon(
-                                  MdiIcons.accountOutline,
-                                  size: 60,
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
-                              )
-                            : Icon(
-                                MdiIcons.accountOutline,
-                                size: 60,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
+                        ),
                       ),
                     ),
                   ],
@@ -321,75 +325,85 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
     final imageUrl = maProvider.getImageUrl(book, size: 256);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final heroSuffix = 'author${_heroTagSuffix}';
 
     return InkWell(
-      onTap: () => _navigateToAudiobook(book),
+      onTap: () => _navigateToAudiobook(book, heroTagSuffix: heroSuffix),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AspectRatio(
             aspectRatio: 1.0,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Stack(
-                children: [
-                  Container(
-                    color: colorScheme.surfaceContainerHighest,
-                    child: imageUrl != null
-                        ? CachedNetworkImage(
-                            imageUrl: imageUrl,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            placeholder: (_, __) => Center(
+            child: Stack(
+              children: [
+                Hero(
+                  tag: HeroTags.audiobookCover + (book.uri ?? book.itemId) + '_$heroSuffix',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      color: colorScheme.surfaceContainerHighest,
+                      child: imageUrl != null
+                          ? CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              placeholder: (_, __) => Center(
+                                child: Icon(
+                                  MdiIcons.bookOutline,
+                                  size: 48,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              errorWidget: (_, __, ___) => Center(
+                                child: Icon(
+                                  MdiIcons.bookOutline,
+                                  size: 48,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            )
+                          : Center(
                               child: Icon(
                                 MdiIcons.bookOutline,
                                 size: 48,
                                 color: colorScheme.onSurfaceVariant,
                               ),
                             ),
-                            errorWidget: (_, __, ___) => Center(
-                              child: Icon(
-                                MdiIcons.bookOutline,
-                                size: 48,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          )
-                        : Center(
-                            child: Icon(
-                              MdiIcons.bookOutline,
-                              size: 48,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                  ),
-                  // Progress indicator
-                  if (book.progress > 0)
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: LinearProgressIndicator(
-                        value: book.progress,
-                        backgroundColor: Colors.black54,
-                        valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-                        minHeight: 3,
-                      ),
                     ),
-                ],
-              ),
+                  ),
+                ),
+                // Progress indicator
+                if (book.progress > 0)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(
+                      value: book.progress,
+                      backgroundColor: Colors.black54,
+                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                      minHeight: 3,
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            book.name,
-            style: textTheme.titleSmall?.copyWith(
-              color: colorScheme.onSurface,
-              fontWeight: FontWeight.w500,
+          Hero(
+            tag: HeroTags.audiobookTitle + (book.uri ?? book.itemId) + '_$heroSuffix',
+            child: Material(
+              color: Colors.transparent,
+              child: Text(
+                book.name,
+                style: textTheme.titleSmall?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
           ),
           if (book.narratorsString != 'Unknown Narrator')
             Text(
@@ -410,58 +424,68 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
     final imageUrl = maProvider.getImageUrl(book, size: 128);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final heroSuffix = 'author${_heroTagSuffix}';
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: Stack(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              color: colorScheme.surfaceContainerHighest,
-              child: imageUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Icon(
+      leading: Hero(
+        tag: HeroTags.audiobookCover + (book.uri ?? book.itemId) + '_$heroSuffix',
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Stack(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                color: colorScheme.surfaceContainerHighest,
+                child: imageUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Icon(
+                          MdiIcons.bookOutline,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        errorWidget: (_, __, ___) => Icon(
+                          MdiIcons.bookOutline,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      )
+                    : Icon(
                         MdiIcons.bookOutline,
                         color: colorScheme.onSurfaceVariant,
                       ),
-                      errorWidget: (_, __, ___) => Icon(
-                        MdiIcons.bookOutline,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    )
-                  : Icon(
-                      MdiIcons.bookOutline,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-            ),
-            if (book.progress > 0)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: LinearProgressIndicator(
-                  value: book.progress,
-                  backgroundColor: Colors.black54,
-                  valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-                  minHeight: 2,
-                ),
               ),
-          ],
+              if (book.progress > 0)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: LinearProgressIndicator(
+                    value: book.progress,
+                    backgroundColor: Colors.black54,
+                    valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                    minHeight: 2,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
-      title: Text(
-        book.name,
-        style: textTheme.titleMedium?.copyWith(
-          color: colorScheme.onSurface,
-          fontWeight: FontWeight.w500,
+      title: Hero(
+        tag: HeroTags.audiobookTitle + (book.uri ?? book.itemId) + '_$heroSuffix',
+        child: Material(
+          color: Colors.transparent,
+          child: Text(
+            book.name,
+            style: textTheme.titleMedium?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
         book.narratorsString != 'Unknown Narrator'
@@ -483,15 +507,18 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
               ),
             )
           : null,
-      onTap: () => _navigateToAudiobook(book),
+      onTap: () => _navigateToAudiobook(book, heroTagSuffix: heroSuffix),
     );
   }
 
-  void _navigateToAudiobook(Audiobook book) {
+  void _navigateToAudiobook(Audiobook book, {String? heroTagSuffix}) {
     Navigator.push(
       context,
       FadeSlidePageRoute(
-        child: AudiobookDetailScreen(audiobook: book),
+        child: AudiobookDetailScreen(
+          audiobook: book,
+          heroTagSuffix: heroTagSuffix,
+        ),
       ),
     );
   }

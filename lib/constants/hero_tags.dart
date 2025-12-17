@@ -13,4 +13,16 @@ class HeroTags {
 
   /// Artist image hero tag prefix
   static const String artistImage = 'artist_image_';
+
+  /// Audiobook cover hero tag prefix
+  static const String audiobookCover = 'audiobook_cover_';
+
+  /// Audiobook title hero tag prefix
+  static const String audiobookTitle = 'audiobook_title_';
+
+  /// Audiobook author name hero tag prefix (for navigating to author screen)
+  static const String audiobookAuthorName = 'audiobook_author_name_';
+
+  /// Audiobook author image hero tag prefix
+  static const String authorImage = 'author_image_';
 }

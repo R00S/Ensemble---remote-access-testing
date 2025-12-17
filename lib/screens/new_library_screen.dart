@@ -786,45 +786,49 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final authorImageUrl = _authorImages[authorName];
+    final heroSuffix = _showFavoritesOnly ? '_fav' : '';
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      leading: CircleAvatar(
-        backgroundColor: colorScheme.primaryContainer,
-        radius: 24,
-        child: authorImageUrl != null
-            ? ClipOval(
-                child: CachedNetworkImage(
-                  imageUrl: authorImageUrl,
-                  fit: BoxFit.cover,
-                  width: 48,
-                  height: 48,
-                  placeholder: (_, __) => Text(
-                    authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      color: colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
+      leading: Hero(
+        tag: HeroTags.authorImage + authorName + '_library$heroSuffix',
+        child: CircleAvatar(
+          backgroundColor: colorScheme.primaryContainer,
+          radius: 24,
+          child: authorImageUrl != null
+              ? ClipOval(
+                  child: CachedNetworkImage(
+                    imageUrl: authorImageUrl,
+                    fit: BoxFit.cover,
+                    width: 48,
+                    height: 48,
+                    placeholder: (_, __) => Text(
+                      authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => Text(
+                      authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
                     ),
                   ),
-                  errorWidget: (_, __, ___) => Text(
-                    authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      color: colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
+                )
+              : Text(
+                  authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    color: colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
                   ),
                 ),
-              )
-            : Text(
-                authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
-                style: TextStyle(
-                  color: colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
+        ),
       ),
       title: Text(
         authorName,
@@ -840,7 +844,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           color: colorScheme.onSurface.withOpacity(0.6),
         ),
       ),
-      onTap: () => _navigateToAuthor(authorName, books),
+      onTap: () => _navigateToAuthor(authorName, books, heroTagSuffix: 'library$heroSuffix'),
     );
   }
 
@@ -848,27 +852,51 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final authorImageUrl = _authorImages[authorName];
+    final heroSuffix = _showFavoritesOnly ? '_fav' : '';
 
     return InkWell(
-      onTap: () => _navigateToAuthor(authorName, books),
+      onTap: () => _navigateToAuthor(authorName, books, heroTagSuffix: 'library$heroSuffix'),
       borderRadius: BorderRadius.circular(12),
       child: Column(
         children: [
           AspectRatio(
             aspectRatio: 1.0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: ClipOval(
-                child: authorImageUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: authorImageUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        placeholder: (_, __) => Center(
+            child: Hero(
+              tag: HeroTags.authorImage + authorName + '_library$heroSuffix',
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: ClipOval(
+                  child: authorImageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: authorImageUrl,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                          placeholder: (_, __) => Center(
+                            child: Text(
+                              authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                color: colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.bold,
+                                fontSize: _authorsViewMode == 'grid3' ? 32 : 40,
+                              ),
+                            ),
+                          ),
+                          errorWidget: (_, __, ___) => Center(
+                            child: Text(
+                              authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                color: colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.bold,
+                                fontSize: _authorsViewMode == 'grid3' ? 32 : 40,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
                           child: Text(
                             authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
                             style: TextStyle(
@@ -878,27 +906,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                             ),
                           ),
                         ),
-                        errorWidget: (_, __, ___) => Center(
-                          child: Text(
-                            authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
-                            style: TextStyle(
-                              color: colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold,
-                              fontSize: _authorsViewMode == 'grid3' ? 32 : 40,
-                            ),
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Text(
-                          authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
-                          style: TextStyle(
-                            color: colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
-                            fontSize: _authorsViewMode == 'grid3' ? 32 : 40,
-                          ),
-                        ),
-                      ),
+                ),
               ),
             ),
           ),
@@ -925,13 +933,14 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
-  void _navigateToAuthor(String authorName, List<Audiobook> books) {
+  void _navigateToAuthor(String authorName, List<Audiobook> books, {String? heroTagSuffix}) {
     Navigator.push(
       context,
       FadeSlidePageRoute(
         child: AudiobookAuthorScreen(
           authorName: authorName,
           audiobooks: books,
+          heroTagSuffix: heroTagSuffix,
         ),
       ),
     );
@@ -941,38 +950,48 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final imageUrl = maProvider.getImageUrl(book, size: 128);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final heroSuffix = _showFavoritesOnly ? '_fav' : '';
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          width: 56,
-          height: 56,
-          color: colorScheme.surfaceContainerHighest,
-          child: imageUrl != null
-              ? CachedNetworkImage(
-                  imageUrl: imageUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => const SizedBox(),
-                  errorWidget: (_, __, ___) => Icon(
+      leading: Hero(
+        tag: HeroTags.audiobookCover + (book.uri ?? book.itemId) + '_library$heroSuffix',
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: 56,
+            height: 56,
+            color: colorScheme.surfaceContainerHighest,
+            child: imageUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => const SizedBox(),
+                    errorWidget: (_, __, ___) => Icon(
+                      MdiIcons.bookOutline,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  )
+                : Icon(
                     MdiIcons.bookOutline,
                     color: colorScheme.onSurfaceVariant,
                   ),
-                )
-              : Icon(
-                  MdiIcons.bookOutline,
-                  color: colorScheme.onSurfaceVariant,
-                ),
+          ),
         ),
       ),
-      title: Text(
-        book.name,
-        style: textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w500,
+      title: Hero(
+        tag: HeroTags.audiobookTitle + (book.uri ?? book.itemId) + '_library$heroSuffix',
+        child: Material(
+          color: Colors.transparent,
+          child: Text(
+            book.name,
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
         book.authorsString,
@@ -994,15 +1013,18 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               ),
             )
           : null,
-      onTap: () => _navigateToAudiobook(book),
+      onTap: () => _navigateToAudiobook(book, heroTagSuffix: 'library$heroSuffix'),
     );
   }
 
-  void _navigateToAudiobook(Audiobook book) {
+  void _navigateToAudiobook(Audiobook book, {String? heroTagSuffix}) {
     Navigator.push(
       context,
       FadeSlidePageRoute(
-        child: AudiobookDetailScreen(audiobook: book),
+        child: AudiobookDetailScreen(
+          audiobook: book,
+          heroTagSuffix: heroTagSuffix,
+        ),
       ),
     );
   }
@@ -1143,40 +1165,44 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final imageUrl = maProvider.getImageUrl(book, size: 256);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final heroSuffix = _showFavoritesOnly ? '_fav' : '';
 
     return GestureDetector(
-      onTap: () => _navigateToAudiobook(book),
+      onTap: () => _navigateToAudiobook(book, heroTagSuffix: 'library$heroSuffix'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Stack(
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    width: double.infinity,
-                    color: colorScheme.surfaceVariant,
-                    child: imageUrl != null
-                        ? CachedNetworkImage(
-                            imageUrl: imageUrl,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) => const SizedBox(),
-                            errorWidget: (_, __, ___) => Center(
+                Hero(
+                  tag: HeroTags.audiobookCover + (book.uri ?? book.itemId) + '_library$heroSuffix',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: double.infinity,
+                      color: colorScheme.surfaceVariant,
+                      child: imageUrl != null
+                          ? CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) => const SizedBox(),
+                              errorWidget: (_, __, ___) => Center(
+                                child: Icon(
+                                  MdiIcons.bookOutline,
+                                  size: 48,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            )
+                          : Center(
                               child: Icon(
                                 MdiIcons.bookOutline,
                                 size: 48,
                                 color: colorScheme.onSurfaceVariant,
                               ),
                             ),
-                          )
-                        : Center(
-                            child: Icon(
-                              MdiIcons.bookOutline,
-                              size: 48,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+                    ),
                   ),
                 ),
                 // Progress indicator overlay
@@ -1199,13 +1225,19 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            book.name,
-            style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w500,
+          Hero(
+            tag: HeroTags.audiobookTitle + (book.uri ?? book.itemId) + '_library$heroSuffix',
+            child: Material(
+              color: Colors.transparent,
+              child: Text(
+                book.name,
+                style: textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(

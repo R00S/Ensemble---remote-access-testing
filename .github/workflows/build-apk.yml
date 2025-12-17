@@ -4,10 +4,13 @@ on:
   push:
     branches:
       - main
+      - master
       - 'claude/**'
+      - 'feature/**'
   pull_request:
     branches:
       - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -34,6 +37,9 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Generate code (Drift database)
+        run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Generate launcher icons
         run: flutter pub run flutter_launcher_icons

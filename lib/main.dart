@@ -8,6 +8,8 @@ import 'providers/navigation_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/settings_service.dart';
+import 'services/database_service.dart';
+import 'services/profile_service.dart';
 import 'services/audio/massiv_audio_handler.dart';
 import 'services/auth/auth_manager.dart';
 import 'services/debug_logger.dart';
@@ -26,6 +28,13 @@ final _logger = DebugLogger();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize local database
+  await DatabaseService.instance.initialize();
+  _logger.log('💾 Database initialized');
+
+  // Migrate existing ownerName to profile (one-time for existing users)
+  await ProfileService.instance.migrateFromOwnerName();
 
   // Create auth manager for streaming headers
   final authManager = AuthManager();

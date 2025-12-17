@@ -1,0 +1,159 @@
+import 'dart:convert';
+import '../database/database.dart';
+import 'debug_logger.dart';
+
+/// Singleton service for database access throughout the app
+class DatabaseService {
+  static DatabaseService? _instance;
+  static AppDatabase? _database;
+  static final _logger = DebugLogger();
+
+  DatabaseService._();
+
+  /// Get the singleton instance
+  static DatabaseService get instance {
+    _instance ??= DatabaseService._();
+    return _instance!;
+  }
+
+  /// Get the database instance
+  AppDatabase get db {
+    if (_database == null) {
+      throw StateError('Database not initialized. Call initialize() first.');
+    }
+    return _database!;
+  }
+
+  /// Check if database is initialized
+  bool get isInitialized => _database != null;
+
+  /// Initialize the database
+  Future<void> initialize() async {
+    if (_database != null) {
+      _logger.log('Database already initialized');
+      return;
+    }
+
+    _logger.log('Initializing database...');
+    _database = AppDatabase();
+    _logger.log('Database initialized successfully');
+  }
+
+  /// Close the database (for cleanup)
+  Future<void> close() async {
+    await _database?.close();
+    _database = null;
+    _logger.log('Database closed');
+  }
+
+  // ============================================
+  // Profile Convenience Methods
+  // ============================================
+
+  /// Get the currently active profile
+  Future<Profile?> getActiveProfile() => db.getActiveProfile();
+
+  /// Set the active profile (creates if doesn't exist)
+  Future<Profile> setActiveProfile({
+    required String username,
+    String? displayName,
+    required String source,
+  }) {
+    _logger.log('Setting active profile: $username (source: $source)');
+    return db.setActiveProfile(
+      username: username,
+      displayName: displayName,
+      source: source,
+    );
+  }
+
+  /// Get all profiles
+  Future<List<Profile>> getAllProfiles() => db.getAllProfiles();
+
+  // ============================================
+  // Recently Played Convenience Methods
+  // ============================================
+
+  /// Add an item to recently played
+  Future<void> addRecentlyPlayed({
+    required String mediaId,
+    required String mediaType,
+    required String name,
+    String? artistName,
+    String? imageUrl,
+    Map<String, dynamic>? metadata,
+  }) {
+    _logger.log('Adding to recently played: $name ($mediaType)');
+    return db.addRecentlyPlayed(
+      mediaId: mediaId,
+      mediaType: mediaType,
+      name: name,
+      artistName: artistName,
+      imageUrl: imageUrl,
+      metadata: metadata != null ? jsonEncode(metadata) : null,
+    );
+  }
+
+  /// Get recently played items
+  Future<List<RecentlyPlayedData>> getRecentlyPlayed({int limit = 20}) {
+    return db.getRecentlyPlayed(limit: limit);
+  }
+
+  /// Clear recently played for current profile
+  Future<void> clearRecentlyPlayed() => db.clearRecentlyPlayed();
+
+  // ============================================
+  // Library Cache Convenience Methods
+  // ============================================
+
+  /// Cache an item with JSON serialization
+  Future<void> cacheItem<T>({
+    required String itemType,
+    required String itemId,
+    required Map<String, dynamic> data,
+  }) {
+    return db.cacheItem(
+      itemType: itemType,
+      itemId: itemId,
+      data: jsonEncode(data),
+    );
+  }
+
+  /// Get cached items with JSON deserialization
+  Future<List<Map<String, dynamic>>> getCachedItems(String itemType) async {
+    final items = await db.getCachedItems(itemType);
+    return items.map((item) {
+      try {
+        return jsonDecode(item.data) as Map<String, dynamic>;
+      } catch (e) {
+        _logger.log('Error decoding cached item: $e');
+        return <String, dynamic>{};
+      }
+    }).where((item) => item.isNotEmpty).toList();
+  }
+
+  /// Get a single cached item
+  Future<Map<String, dynamic>?> getCachedItem(String itemType, String itemId) async {
+    final item = await db.getCachedItem(itemType, itemId);
+    if (item == null) return null;
+    try {
+      return jsonDecode(item.data) as Map<String, dynamic>;
+    } catch (e) {
+      _logger.log('Error decoding cached item: $e');
+      return null;
+    }
+  }
+
+  /// Check if sync is needed
+  Future<bool> needsSync(String syncType, {Duration maxAge = const Duration(minutes: 5)}) {
+    return db.needsSync(syncType, maxAge);
+  }
+
+  /// Update sync timestamp
+  Future<void> updateSyncMetadata(String syncType, int itemCount) {
+    return db.updateSyncMetadata(syncType, itemCount);
+  }
+
+  /// Clear all cached data (useful for logout)
+  Future<void> clearAllCache() => db.clearAllCache();
+}

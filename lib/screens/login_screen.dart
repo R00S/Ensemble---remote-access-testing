@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/music_assistant_provider.dart';
 import '../services/settings_service.dart';
+import '../services/database_service.dart';
+import '../services/profile_service.dart';
 import '../services/auth/auth_strategy.dart';
 import '../services/debug_logger.dart';
 import '../widgets/debug/debug_console.dart';
@@ -269,7 +271,13 @@ class _LoginScreenState extends State<LoginScreen> {
       // Save owner name (if provided) and port to settings
       // For MA auth, the owner name will be set from user profile after login
       if (!isMaAuth && _ownerNameController.text.trim().isNotEmpty) {
-        await SettingsService.setOwnerName(_ownerNameController.text.trim());
+        final ownerName = _ownerNameController.text.trim();
+        await SettingsService.setOwnerName(ownerName);
+
+        // Create/activate profile in local database for manual name entry
+        if (DatabaseService.instance.isInitialized) {
+          await ProfileService.instance.onManualNameEntered(ownerName);
+        }
       }
       await SettingsService.setWebSocketPort(portNum);
 

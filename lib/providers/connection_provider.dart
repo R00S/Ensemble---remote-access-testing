@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/music_assistant_api.dart';
 import '../services/settings_service.dart';
+import '../services/database_service.dart';
+import '../services/profile_service.dart';
 import '../services/debug_logger.dart';
 import '../services/error_handler.dart';
 import '../services/auth/auth_manager.dart';
@@ -109,7 +111,7 @@ class ConnectionProvider with ChangeNotifier {
     }
   }
 
-  /// Fetch user profile from MA and set owner name
+  /// Fetch user profile from MA and set owner name + create/activate local profile
   Future<void> _fetchAndSetUserProfileName() async {
     if (_api == null) return;
 
@@ -132,6 +134,15 @@ class ConnectionProvider with ChangeNotifier {
       if (profileName != null && profileName.isNotEmpty) {
         await SettingsService.setOwnerName(profileName);
         _logger.log('✅ Set owner name from MA profile: $profileName');
+
+        // Create/activate profile in local database
+        if (DatabaseService.instance.isInitialized && username != null) {
+          await ProfileService.instance.onMaAuthenticated(
+            username: username,
+            displayName: displayName,
+          );
+          _logger.log('✅ Local profile activated: $username');
+        }
       } else {
         _logger.log('⚠️ No valid name in profile');
       }

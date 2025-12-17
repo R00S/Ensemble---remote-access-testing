@@ -593,8 +593,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         icon: MdiIcons.bookOutline,
         title: 'No audiobooks',
         subtitle: 'Add audiobooks to your library to see them here',
-        actionLabel: 'Refresh',
-        onAction: () => _loadAudiobooks(),
+        onRefresh: () => _loadAudiobooks(),
       );
     }
 
@@ -752,8 +751,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         icon: MdiIcons.bookOutline,
         title: 'No audiobooks',
         subtitle: 'Add audiobooks to your library to see them here',
-        actionLabel: 'Refresh',
-        onAction: () => _loadAudiobooks(),
+        onRefresh: () => _loadAudiobooks(),
       );
     }
 

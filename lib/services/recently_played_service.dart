@@ -30,7 +30,6 @@ class RecentlyPlayedService {
         mediaType: 'album',
         name: album.name,
         artistName: album.artistsString,
-        imageUrl: album.imageUrl,
         metadata: {
           'provider': album.provider,
           'uri': album.uri,
@@ -51,7 +50,6 @@ class RecentlyPlayedService {
         mediaId: artist.itemId,
         mediaType: 'artist',
         name: artist.name,
-        imageUrl: artist.imageUrl,
         metadata: {
           'provider': artist.provider,
           'uri': artist.uri,
@@ -73,7 +71,6 @@ class RecentlyPlayedService {
         mediaType: 'track',
         name: track.name,
         artistName: track.artistsString,
-        imageUrl: track.imageUrl,
         metadata: {
           'provider': track.provider,
           'uri': track.uri,
@@ -95,7 +92,6 @@ class RecentlyPlayedService {
         mediaId: playlist.itemId,
         mediaType: 'playlist',
         name: playlist.name,
-        imageUrl: playlist.imageUrl,
         metadata: {
           'provider': playlist.provider,
           'uri': playlist.uri,
@@ -135,7 +131,6 @@ class RecentlyPlayedService {
           itemId: item.mediaId,
           provider: metadata?['provider'] ?? 'library',
           name: item.name,
-          imageUrl: item.imageUrl,
           uri: metadata?['uri'],
           // Create minimal artist info from stored name
           artists: item.artistName != null

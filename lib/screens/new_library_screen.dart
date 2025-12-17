@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
 import '../widgets/global_player_overlay.dart';
@@ -356,76 +357,68 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             elevation: 0,
             titleSpacing: 0,
             toolbarHeight: 56,
-            // Top left: Favorites toggle + Layout toggle (only for Music)
-            title: _selectedMediaType == LibraryMediaType.music
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(width: 4),
-                      // Favorites toggle button
-                      IconButton(
-                        icon: Icon(
-                          _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
-                          color: _showFavoritesOnly ? Colors.red : colorScheme.onSurface.withOpacity(0.7),
-                          size: 22,
-                        ),
-                        onPressed: () => _toggleFavoritesMode(!_showFavoritesOnly),
-                        tooltip: _showFavoritesOnly ? 'Show all' : 'Show favorites only',
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      // Layout toggle button
-                      IconButton(
-                        icon: Icon(
-                          _getViewModeIcon(_getCurrentViewMode()),
-                          color: colorScheme.onSurface.withOpacity(0.7),
-                          size: 22,
-                        ),
-                        onPressed: _cycleCurrentViewMode,
-                        tooltip: 'Change view',
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ],
-                  )
-                : null,
+            // Top left: Media type segmented selector
+            title: _buildMediaTypeSelector(colorScheme),
+            leadingWidth: 16,
+            leading: const SizedBox(),
             centerTitle: false,
             // Top right: Device selector
             actions: const [PlayerSelector()],
             bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(100), // Pills + Tabs
-              child: Column(
+              preferredSize: const Size.fromHeight(48),
+              child: Stack(
                 children: [
-                  // Media type pills (centered)
-                  _buildMediaTypePills(colorScheme),
-                  const SizedBox(height: 8),
-                  // Contextual tabs
-                  Stack(
+                  // Bottom border line extending full width
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      height: 1,
+                      color: colorScheme.outlineVariant.withOpacity(0.3),
+                    ),
+                  ),
+                  Row(
                     children: [
-                      // Bottom border line extending full width
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          height: 1,
-                          color: colorScheme.outlineVariant.withOpacity(0.3),
+                      // Tabs centered
+                      Expanded(
+                        child: TabBar(
+                          controller: _tabController,
+                          labelColor: colorScheme.primary,
+                          unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
+                          indicatorColor: colorScheme.primary,
+                          indicatorWeight: 3,
+                          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
+                          tabs: _buildTabs(),
                         ),
                       ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TabBar(
-                              controller: _tabController,
-                              labelColor: colorScheme.primary,
-                              unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
-                              indicatorColor: colorScheme.primary,
-                              indicatorWeight: 3,
-                              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
-                              tabs: _buildTabs(),
-                            ),
-                          ),
-                        ],
+                      // Favorites + Layout buttons on the right
+                      IconButton(
+                        icon: Icon(
+                          _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
+                          color: _showFavoritesOnly ? Colors.red : colorScheme.onSurface.withOpacity(0.7),
+                          size: 20,
+                        ),
+                        onPressed: () => _toggleFavoritesMode(!_showFavoritesOnly),
+                        tooltip: _showFavoritesOnly ? 'Show all' : 'Show favorites only',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                       ),
+                      IconButton(
+                        icon: Icon(
+                          _getViewModeIcon(_getCurrentViewMode()),
+                          color: colorScheme.onSurface.withOpacity(0.7),
+                          size: 20,
+                        ),
+                        onPressed: _cycleCurrentViewMode,
+                        tooltip: 'Change view',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      ),
+                      const SizedBox(width: 8),
                     ],
                   ),
                 ],
@@ -441,58 +434,53 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
-  // ============ MEDIA TYPE PILLS ============
-  Widget _buildMediaTypePills(ColorScheme colorScheme) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildPill(
-          label: 'Music',
-          isSelected: _selectedMediaType == LibraryMediaType.music,
-          onTap: () => _changeMediaType(LibraryMediaType.music),
-          colorScheme: colorScheme,
-        ),
-        const SizedBox(width: 12),
-        _buildPill(
-          label: 'Books',
-          isSelected: _selectedMediaType == LibraryMediaType.books,
-          onTap: () => _changeMediaType(LibraryMediaType.books),
-          colorScheme: colorScheme,
-        ),
-        const SizedBox(width: 12),
-        _buildPill(
-          label: 'Podcasts',
-          isSelected: _selectedMediaType == LibraryMediaType.podcasts,
-          onTap: () => _changeMediaType(LibraryMediaType.podcasts),
-          colorScheme: colorScheme,
-        ),
-      ],
+  // ============ MEDIA TYPE SELECTOR ============
+  Widget _buildMediaTypeSelector(ColorScheme colorScheme) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildMediaTypeSegment(
+            type: LibraryMediaType.music,
+            icon: MdiIcons.musicNote,
+            colorScheme: colorScheme,
+          ),
+          _buildMediaTypeSegment(
+            type: LibraryMediaType.books,
+            icon: MdiIcons.bookOutline,
+            colorScheme: colorScheme,
+          ),
+          _buildMediaTypeSegment(
+            type: LibraryMediaType.podcasts,
+            icon: MdiIcons.podcast,
+            colorScheme: colorScheme,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildPill({
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
+  Widget _buildMediaTypeSegment({
+    required LibraryMediaType type,
+    required IconData icon,
     required ColorScheme colorScheme,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? colorScheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
+    final isSelected = _selectedMediaType == type;
+    return Material(
+      color: isSelected
+          ? colorScheme.primaryContainer
+          : colorScheme.surfaceVariant.withOpacity(0.5),
+      child: InkWell(
+        onTap: () => _changeMediaType(type),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Icon(
+            icon,
             color: isSelected
-                ? colorScheme.onPrimary
-                : colorScheme.primary.withOpacity(0.4),
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            fontSize: 14,
+                ? colorScheme.onPrimaryContainer
+                : colorScheme.onSurfaceVariant.withOpacity(0.7),
+            size: 20,
           ),
         ),
       ),

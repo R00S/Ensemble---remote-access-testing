@@ -793,19 +793,20 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          subtitle: isInProgress
-              ? Text(
-                  'In progress',
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.primary,
-                  ),
-                )
-              : null,
+          subtitle: Text(
+            isInProgress
+                ? 'In progress • ${_formatPositionTime(chapter.positionMs)}'
+                : _formatPositionTime(chapter.positionMs),
+            style: textTheme.bodySmall?.copyWith(
+              color: isInProgress ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.5),
+            ),
+          ),
           trailing: chapter.duration != null
               ? Text(
                   _formatDuration(chapter.duration!),
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.5),
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontWeight: FontWeight.w500,
                   ),
                 )
               : null,
@@ -866,6 +867,19 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
         ),
       ],
     );
+  }
+
+  /// Format position time in milliseconds as "h:mm:ss" or "m:ss"
+  String _formatPositionTime(int positionMs) {
+    final duration = Duration(milliseconds: positionMs);
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+    final seconds = duration.inSeconds % 60;
+
+    if (hours > 0) {
+      return '${hours}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes}:${seconds.toString().padLeft(2, '0')}';
   }
 
   String _formatDuration(Duration duration) {

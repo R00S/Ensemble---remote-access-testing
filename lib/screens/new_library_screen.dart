@@ -16,6 +16,7 @@ import '../widgets/common/disconnected_state.dart';
 import '../services/settings_service.dart';
 import '../services/metadata_service.dart';
 import '../services/debug_logger.dart';
+import '../services/audiobookshelf_service.dart';
 import 'album_details_screen.dart';
 import 'artist_details_screen.dart';
 import 'playlist_details_screen.dart';
@@ -57,6 +58,11 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   // Author image cache
   final Map<String, String?> _authorImages = {};
+
+  // Series data from Audiobookshelf
+  List<AbsSeries> _series = [];
+  bool _isLoadingSeries = false;
+  bool _absConfigured = false;
 
   // Restoration: Remember selected tab across app restarts
   final RestorableInt _selectedTabIndex = RestorableInt(0);
@@ -214,6 +220,22 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   String _getCurrentViewMode() {
     // Return the view mode for the currently selected tab
     final tabIndex = _tabController.index;
+
+    // Handle books media type
+    if (_selectedMediaType == LibraryMediaType.books) {
+      switch (tabIndex) {
+        case 0:
+          return _authorsViewMode;
+        case 1:
+          return _audiobooksViewMode;
+        case 2:
+          return 'grid2'; // Series - default grid view
+        default:
+          return 'list';
+      }
+    }
+
+    // Handle music media type
     if (_showFavoritesOnly) {
       // Artists, Albums, Tracks, Playlists
       switch (tabIndex) {
@@ -245,6 +267,24 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   void _cycleCurrentViewMode() {
     final tabIndex = _tabController.index;
+
+    // Handle books media type
+    if (_selectedMediaType == LibraryMediaType.books) {
+      switch (tabIndex) {
+        case 0:
+          _cycleAuthorsViewMode();
+          break;
+        case 1:
+          _cycleAudiobooksViewMode();
+          break;
+        case 2:
+          // Series - could add view toggle later
+          break;
+      }
+      return;
+    }
+
+    // Handle music media type
     if (_showFavoritesOnly) {
       switch (tabIndex) {
         case 0:
@@ -297,11 +337,15 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       _selectedMediaType = type;
       _recreateTabController();
     });
-    // Load audiobooks when switching to books tab
+    // Load audiobooks and series when switching to books tab
     if (type == LibraryMediaType.books) {
       _logger.log('📚 Switched to Books, _audiobooks.isEmpty=${_audiobooks.isEmpty}');
       if (_audiobooks.isEmpty) {
         _loadAudiobooks(favoriteOnly: _showFavoritesOnly ? true : null);
+      }
+      // Also load series from Audiobookshelf
+      if (_series.isEmpty) {
+        _loadSeries();
       }
     }
   }
@@ -432,6 +476,47 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               _authorImages[authorName] = imageUrl;
             });
           }
+        });
+      }
+    }
+  }
+
+  /// Load series data from Audiobookshelf
+  Future<void> _loadSeries() async {
+    if (_isLoadingSeries) return;
+
+    final absService = AudiobookshelfService();
+    if (!absService.isConfigured) {
+      await absService.initialize();
+    }
+
+    setState(() {
+      _absConfigured = absService.isConfigured;
+    });
+
+    if (!absService.isConfigured) {
+      _logger.log('📚 Audiobookshelf not configured, skipping series load');
+      return;
+    }
+
+    setState(() {
+      _isLoadingSeries = true;
+    });
+
+    try {
+      final series = await absService.getSeries();
+      _logger.log('📚 Loaded ${series.length} series from Audiobookshelf');
+      if (mounted) {
+        setState(() {
+          _series = series;
+          _isLoadingSeries = false;
+        });
+      }
+    } catch (e) {
+      _logger.log('📚 Error loading series: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingSeries = false;
         });
       }
     }
@@ -1255,41 +1340,198 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   Widget _buildSeriesTab(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.collections_bookmark_rounded,
-            size: 64,
-            color: colorScheme.primary.withOpacity(0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Series',
-            style: TextStyle(
-              color: colorScheme.onSurface,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
+    final textTheme = Theme.of(context).textTheme;
+
+    // Loading state
+    if (_isLoadingSeries) {
+      return Center(
+        child: CircularProgressIndicator(color: colorScheme.primary),
+      );
+    }
+
+    // Not configured state
+    if (!_absConfigured) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.collections_bookmark_rounded,
+              size: 64,
+              color: colorScheme.primary.withOpacity(0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Series',
+              style: TextStyle(
+                color: colorScheme.onSurface,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Connect to Audiobookshelf in Settings\nto browse audiobook series',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: colorScheme.onSurface.withOpacity(0.6),
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.tonal(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                );
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Empty state
+    if (_series.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadSeries,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.collections_bookmark_rounded,
+                      size: 64,
+                      color: colorScheme.primary.withOpacity(0.3),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No series found',
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pull to refresh',
+                      style: TextStyle(
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Sort series alphabetically
+    final sortedSeries = List<AbsSeries>.from(_series)
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    return RefreshIndicator(
+      onRefresh: _loadSeries,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          // Header with count
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Text(
+                '${sortedSeries.length} ${sortedSeries.length == 1 ? 'Series' : 'Series'}',
+                style: textTheme.titleSmall?.copyWith(
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Browse audiobook series',
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.6),
-              fontSize: 14,
+          // Series grid
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 1.5,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _buildSeriesCard(sortedSeries[index], colorScheme, textTheme),
+                childCount: sortedSeries.length,
+              ),
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Coming soon',
-            style: TextStyle(
-              color: colorScheme.primary.withOpacity(0.5),
-              fontSize: 12,
-            ),
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 140)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSeriesCard(AbsSeries series, ColorScheme colorScheme, TextTheme textTheme) {
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () {
+          // Show snackbar with series info for now
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${series.name} - ${series.numBooks} ${series.numBooks == 1 ? 'book' : 'books'}'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.collections_bookmark_rounded,
+                    color: colorScheme.primary,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      series.name,
+                      style: textTheme.titleMedium?.copyWith(
+                        color: colorScheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${series.numBooks} ${series.numBooks == 1 ? 'book' : 'books'}',
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

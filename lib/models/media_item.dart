@@ -328,13 +328,49 @@ class Chapter {
   });
 
   factory Chapter.fromJson(Map<String, dynamic> json) {
+    // MA API returns chapters with format:
+    // {position: 1, name: "Opening Credits", start: 0.0, end: 17.6}
+    // We need to handle both this format and potential others
+
+    // Get chapter number (MA uses 'position' for chapter number)
+    int chapterNum = 0;
+    if (json['position'] is int) {
+      chapterNum = json['position'] as int;
+    } else if (json['chapter_number'] is int) {
+      chapterNum = json['chapter_number'] as int;
+    } else if (json['chapter_id'] is int) {
+      chapterNum = json['chapter_id'] as int;
+    }
+
+    // Get position in milliseconds (MA uses 'start' in seconds)
+    int posMs = 0;
+    if (json['start'] != null) {
+      // MA provides start time in seconds (can be double)
+      posMs = ((json['start'] as num) * 1000).toInt();
+    } else if (json['position_ms'] != null) {
+      posMs = json['position_ms'] as int;
+    }
+
+    // Get title (MA uses 'name')
+    String title = json['name'] as String? ??
+                   json['title'] as String? ??
+                   'Chapter $chapterNum';
+
+    // Calculate duration from start/end if available
+    Duration? dur;
+    if (json['start'] != null && json['end'] != null) {
+      final startSec = (json['start'] as num).toDouble();
+      final endSec = (json['end'] as num).toDouble();
+      dur = Duration(milliseconds: ((endSec - startSec) * 1000).toInt());
+    } else if (json['duration'] != null) {
+      dur = Duration(seconds: (json['duration'] as num).toInt());
+    }
+
     return Chapter(
-      chapterNumber: json['chapter_number'] as int? ?? json['chapter_id'] as int? ?? 0,
-      positionMs: json['position_ms'] as int? ?? json['position'] as int? ?? 0,
-      title: json['title'] as String? ?? 'Chapter ${json['chapter_number'] ?? 0}',
-      duration: json['duration'] != null
-          ? Duration(seconds: (json['duration'] as num).toInt())
-          : null,
+      chapterNumber: chapterNum,
+      positionMs: posMs,
+      title: title,
+      duration: dur,
     );
   }
 
@@ -411,6 +447,27 @@ class Audiobook extends MediaItem {
       }).toList();
     }
 
+    // Parse chapters - check top level first, then metadata
+    List<Chapter>? chapters;
+    final metadata = json['metadata'] as Map<String, dynamic>?;
+
+    dynamic chaptersData = json['chapters'];
+    if (chaptersData == null && metadata != null) {
+      chaptersData = metadata['chapters'];
+    }
+
+    if (chaptersData is List && chaptersData.isNotEmpty) {
+      chapters = chaptersData
+          .map((e) => Chapter.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+
+    // Parse description - check top level first, then metadata
+    String? description = json['description'] as String?;
+    if (description == null && metadata != null) {
+      description = metadata['description'] as String?;
+    }
+
     return Audiobook(
       itemId: item.itemId,
       provider: item.provider,
@@ -418,11 +475,9 @@ class Audiobook extends MediaItem {
       authors: parseArtistList(json['authors']),
       narrators: parseArtistList(json['narrators']),
       publisher: json['publisher'] as String?,
-      description: json['description'] as String?,
+      description: description,
       year: year,
-      chapters: (json['chapters'] as List<dynamic>?)
-          ?.map((e) => Chapter.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      chapters: chapters,
       resumePositionMs: json['resume_position_ms'] as int?,
       fullyPlayed: json['fully_played'] as bool?,
       sortName: item.sortName,

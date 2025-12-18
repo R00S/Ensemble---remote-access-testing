@@ -482,22 +482,31 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   }
 
   Future<void> _fetchAuthorImages(List<Audiobook> audiobooks) async {
-    // Get unique authors
-    final authors = <String>{};
+    // Get unique author display strings and their primary author for image lookup
+    final authorEntries = <String, String>{}; // displayName -> primaryAuthorName
     for (final book in audiobooks) {
-      authors.add(book.authorsString);
+      final displayName = book.authorsString;
+      if (!authorEntries.containsKey(displayName)) {
+        // Use first author's name for image lookup (API search works better with single names)
+        final primaryAuthor = book.authors?.isNotEmpty == true
+            ? book.authors!.first.name
+            : displayName;
+        authorEntries[displayName] = primaryAuthor;
+      }
     }
 
     // Fetch images for authors not already cached
-    for (final authorName in authors) {
-      if (!_authorImages.containsKey(authorName)) {
+    for (final entry in authorEntries.entries) {
+      final displayName = entry.key;
+      final lookupName = entry.value;
+      if (!_authorImages.containsKey(displayName)) {
         // Mark as loading to avoid duplicate requests
-        _authorImages[authorName] = null;
-        // Fetch in background
-        MetadataService.getAuthorImageUrl(authorName).then((imageUrl) {
+        _authorImages[displayName] = null;
+        // Fetch in background using primary author name
+        MetadataService.getAuthorImageUrl(lookupName).then((imageUrl) {
           if (mounted && imageUrl != null) {
             setState(() {
-              _authorImages[authorName] = imageUrl;
+              _authorImages[displayName] = imageUrl;
             });
           }
         });

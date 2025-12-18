@@ -327,7 +327,7 @@ class MetadataService {
   }
 
   /// Fetches author image URL from multiple sources
-  /// Priority: 1. Audnexus, 2. Open Library
+  /// Priority: 1. Audnexus, 2. Open Library, 3. Wikipedia
   /// Returns the image URL if found, null otherwise
   static Future<String?> getAuthorImageUrl(String authorName) async {
     // Check cache first
@@ -402,6 +402,64 @@ class MetadataService {
       }
     } catch (e) {
       _logger.warning('Open Library author image error: $e', context: 'Metadata');
+    }
+
+    // Fall back to Wikipedia API
+    try {
+      // Search for author on Wikipedia
+      final searchUri = Uri.https(
+        'en.wikipedia.org',
+        '/w/api.php',
+        {
+          'action': 'query',
+          'list': 'search',
+          'srsearch': '$authorName writer',
+          'srlimit': '1',
+          'format': 'json',
+        },
+      );
+
+      final searchResponse = await http.get(searchUri).timeout(const Duration(seconds: 5));
+
+      if (searchResponse.statusCode == 200) {
+        final searchData = json.decode(searchResponse.body);
+        final searchResults = searchData['query']?['search'] as List?;
+        if (searchResults != null && searchResults.isNotEmpty) {
+          final pageTitle = searchResults[0]['title'] as String?;
+          if (pageTitle != null) {
+            // Get page image
+            final imageUri = Uri.https(
+              'en.wikipedia.org',
+              '/w/api.php',
+              {
+                'action': 'query',
+                'titles': pageTitle,
+                'prop': 'pageimages',
+                'pithumbsize': '500',
+                'format': 'json',
+              },
+            );
+
+            final imageResponse = await http.get(imageUri).timeout(const Duration(seconds: 5));
+
+            if (imageResponse.statusCode == 200) {
+              final imageData = json.decode(imageResponse.body);
+              final pages = imageData['query']?['pages'] as Map<String, dynamic>?;
+              if (pages != null && pages.isNotEmpty) {
+                final page = pages.values.first as Map<String, dynamic>?;
+                final thumbnail = page?['thumbnail'] as Map<String, dynamic>?;
+                final imageUrl = thumbnail?['source'] as String?;
+                if (imageUrl != null && imageUrl.isNotEmpty) {
+                  _authorImageCache[cacheKey] = imageUrl;
+                  return imageUrl;
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      _logger.warning('Wikipedia author image error: $e', context: 'Metadata');
     }
 
     // Cache the null result to avoid repeated failed lookups

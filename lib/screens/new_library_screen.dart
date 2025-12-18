@@ -1576,34 +1576,53 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       gridSize = gridSize.clamp(1, maxGridSize);
       final displayCovers = covers.take(gridSize * gridSize).toList();
 
-      return GridView.builder(
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: gridSize,
-          childAspectRatio: 1,
-          crossAxisSpacing: 1,
-          mainAxisSpacing: 1,
-        ),
-        itemCount: displayCovers.length,
-        itemBuilder: (context, index) {
-          return CachedNetworkImage(
-            imageUrl: displayCovers[index],
-            fit: BoxFit.cover,
-            fadeInDuration: Duration.zero,
-            fadeOutDuration: Duration.zero,
-            placeholder: (_, __) => Container(
-              color: colorScheme.surfaceContainerHighest,
-            ),
-            errorWidget: (_, __, ___) => Container(
-              color: colorScheme.surfaceContainerHighest,
-              child: Icon(
-                Icons.book,
-                color: colorScheme.onSurfaceVariant.withOpacity(0.3),
-                size: 20,
-              ),
+      // Use simple Column/Row layout instead of GridView to avoid scroll-related animations
+      return Column(
+        children: List.generate(gridSize, (row) {
+          return Expanded(
+            child: Row(
+              children: List.generate(gridSize, (col) {
+                final index = row * gridSize + col;
+                if (index >= displayCovers.length) {
+                  return Expanded(
+                    child: Container(
+                      margin: EdgeInsets.only(
+                        left: col > 0 ? 1 : 0,
+                        top: row > 0 ? 1 : 0,
+                      ),
+                      color: colorScheme.surfaceContainerHighest,
+                    ),
+                  );
+                }
+                return Expanded(
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      left: col > 0 ? 1 : 0,
+                      top: row > 0 ? 1 : 0,
+                    ),
+                    child: CachedNetworkImage(
+                      imageUrl: displayCovers[index],
+                      fit: BoxFit.cover,
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      placeholder: (_, __) => Container(
+                        color: colorScheme.surfaceContainerHighest,
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: colorScheme.surfaceContainerHighest,
+                        child: Icon(
+                          Icons.book,
+                          color: colorScheme.onSurfaceVariant.withOpacity(0.3),
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
             ),
           );
-        },
+        }),
       );
     }
 
@@ -1617,21 +1636,25 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   }
 
   Widget _buildSeriesLoadingGrid(ColorScheme colorScheme) {
-    // Static placeholder grid - no animations
-    return GridView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1,
-        crossAxisSpacing: 1,
-        mainAxisSpacing: 1,
-      ),
-      itemCount: 9,
-      itemBuilder: (context, index) {
-        return Container(
-          color: colorScheme.surfaceContainerHighest,
+    // Static placeholder grid using Column/Row - no animations
+    return Column(
+      children: List.generate(3, (row) {
+        return Expanded(
+          child: Row(
+            children: List.generate(3, (col) {
+              return Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(
+                    left: col > 0 ? 1 : 0,
+                    top: row > 0 ? 1 : 0,
+                  ),
+                  color: colorScheme.surfaceContainerHighest,
+                ),
+              );
+            }),
+          ),
         );
-      },
+      }),
     );
   }
 

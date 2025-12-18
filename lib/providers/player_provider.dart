@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart';
 import '../models/media_item.dart';
 import '../models/player.dart';
 import '../services/music_assistant_api.dart';

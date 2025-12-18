@@ -1515,7 +1515,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
 
     // Matches books tab style - square artwork with text below
-    // No Hero animation for series cards - causes issues with dynamic cover loading
+    final heroTag = 'series_cover_${series.id}';
     return GestureDetector(
       onTap: () {
         _logger.log('📚 Tapped series: ${series.name}, path: ${series.id}');
@@ -1524,6 +1524,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           MaterialPageRoute(
             builder: (context) => AudiobookSeriesScreen(
               series: series,
+              heroTag: heroTag,
             ),
           ),
         );
@@ -1531,14 +1532,17 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Square cover grid - no animation
-          AspectRatio(
-            aspectRatio: 1.0,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                color: colorScheme.surfaceVariant,
-                child: _buildSeriesCoverGrid(series, colorScheme, maProvider, maxGridSize: maxCoverGridSize),
+          // Square cover grid with Hero animation
+          Hero(
+            tag: heroTag,
+            child: AspectRatio(
+              aspectRatio: 1.0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  color: colorScheme.surfaceVariant,
+                  child: _buildSeriesCoverGrid(series, colorScheme, maProvider, maxGridSize: maxCoverGridSize),
+                ),
               ),
             ),
           ),

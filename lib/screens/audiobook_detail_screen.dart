@@ -388,7 +388,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
         body: CustomScrollView(
           slivers: [
             SliverAppBar(
-              expandedHeight: 320,
+              expandedHeight: 350,
               pinned: true,
               backgroundColor: colorScheme.surface,
               leading: IconButton(

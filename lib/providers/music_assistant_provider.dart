@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart';
 import 'package:audio_service/audio_service.dart' as audio_service;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';

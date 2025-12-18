@@ -1465,8 +1465,17 @@ class MusicAssistantProvider with ChangeNotifier {
           return false;
         }
 
-        if (nameLower == 'this device' || player.playerId.startsWith('ma_')) {
-          _logger.log('🚫 Filtering out MA Web UI player: ${player.name}');
+        // Filter out MA Web UI's built-in player (provider is 'builtin_player' and starts with 'ma_')
+        // Note: We check BOTH conditions to avoid filtering snapcast/other players that may have 'ma_' prefix
+        if (player.provider == 'builtin_player' && player.playerId.startsWith('ma_')) {
+          _logger.log('🚫 Filtering out MA Web UI player: ${player.name} (provider: ${player.provider}, id: ${player.playerId})');
+          filteredCount++;
+          return false;
+        }
+
+        // Also filter "This Device" named players without proper provider
+        if (nameLower == 'this device') {
+          _logger.log('🚫 Filtering out "This Device" player: ${player.name}');
           filteredCount++;
           return false;
         }

@@ -506,7 +506,15 @@ class PlayerProvider with ChangeNotifier {
           return false;
         }
 
-        if (nameLower == 'this device' || player.playerId.startsWith('ma_')) {
+        // Filter out MA Web UI's built-in player (provider is 'builtin_player' and starts with 'ma_')
+        // Note: We check BOTH conditions to avoid filtering snapcast/other players that may have 'ma_' prefix
+        if (player.provider == 'builtin_player' && player.playerId.startsWith('ma_')) {
+          filteredCount++;
+          return false;
+        }
+
+        // Also filter "This Device" named players without proper provider
+        if (nameLower == 'this device') {
           filteredCount++;
           return false;
         }

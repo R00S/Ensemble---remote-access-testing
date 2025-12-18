@@ -8,6 +8,7 @@ import '../widgets/global_player_overlay.dart';
 import '../theme/palette_helper.dart';
 import '../theme/theme_provider.dart';
 import '../services/debug_logger.dart';
+import '../services/recently_played_service.dart';
 import '../constants/hero_tags.dart';
 
 class AudiobookDetailScreen extends StatefulWidget {
@@ -204,6 +205,9 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
     try {
       // Set the audiobook context for player controls (uses full audiobook with chapters if available)
       maProvider.setCurrentAudiobook(_audiobook);
+
+      // Record to local recently played (per-profile)
+      RecentlyPlayedService.instance.recordAudiobookPlayed(_audiobook);
 
       // Play the audiobook
       await maProvider.api?.playAudiobook(

@@ -103,6 +103,30 @@ class RecentlyPlayedService {
     }
   }
 
+  /// Record an audiobook being played
+  Future<void> recordAudiobookPlayed(Audiobook audiobook) async {
+    if (!_db.isInitialized) return;
+
+    try {
+      await _db.addRecentlyPlayed(
+        mediaId: audiobook.itemId,
+        mediaType: 'audiobook',
+        name: audiobook.name,
+        artistName: audiobook.authorsString,
+        metadata: {
+          'provider': audiobook.provider,
+          'uri': audiobook.uri,
+          'narrators': audiobook.narratorsString,
+          'duration': audiobook.duration?.inSeconds,
+          'resumePositionMs': audiobook.resumePositionMs,
+        },
+      );
+      _logger.log('📝 Recorded audiobook play: ${audiobook.name}');
+    } catch (e) {
+      _logger.log('⚠️ Failed to record audiobook play: $e');
+    }
+  }
+
   /// Get recently played albums for the current profile
   /// Returns Album objects reconstructed from local data
   Future<List<Album>> getRecentAlbums({int limit = 20}) async {
@@ -144,6 +168,55 @@ class RecentlyPlayedService {
       return albums;
     } catch (e) {
       _logger.log('⚠️ Failed to get recent albums: $e');
+      return [];
+    }
+  }
+
+  /// Get recently played audiobooks for the current profile
+  /// Returns Audiobook objects reconstructed from local data
+  Future<List<Audiobook>> getRecentAudiobooks({int limit = 20}) async {
+    if (!_db.isInitialized) return [];
+
+    try {
+      final items = await _db.getRecentlyPlayed(limit: limit * 2); // Get more to filter
+
+      // Filter for audiobooks and convert to Audiobook objects
+      final audiobooks = <Audiobook>[];
+      final seenIds = <String>{};
+
+      for (final item in items) {
+        if (item.mediaType != 'audiobook') continue;
+        if (seenIds.contains(item.mediaId)) continue;
+        seenIds.add(item.mediaId);
+
+        Map<String, dynamic>? metadata;
+        if (item.metadata != null) {
+          try {
+            metadata = jsonDecode(item.metadata!) as Map<String, dynamic>;
+          } catch (_) {}
+        }
+
+        audiobooks.add(Audiobook(
+          itemId: item.mediaId,
+          provider: metadata?['provider'] ?? 'library',
+          name: item.name,
+          uri: metadata?['uri'],
+          // Create minimal author info from stored name
+          authors: item.artistName != null
+              ? [Artist(itemId: '', provider: '', name: item.artistName!)]
+              : null,
+          duration: metadata?['duration'] != null
+              ? Duration(seconds: metadata!['duration'] as int)
+              : null,
+          resumePositionMs: metadata?['resumePositionMs'] as int?,
+        ));
+
+        if (audiobooks.length >= limit) break;
+      }
+
+      return audiobooks;
+    } catch (e) {
+      _logger.log('⚠️ Failed to get recent audiobooks: $e');
       return [];
     }
   }

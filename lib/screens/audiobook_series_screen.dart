@@ -156,9 +156,9 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
       backgroundColor: colorScheme.surface,
       body: CustomScrollView(
         slivers: [
-          // App bar with series cover collage
+          // App bar with series cover collage (matches audiobook detail screen)
           SliverAppBar(
-            expandedHeight: 200,
+            expandedHeight: 350,
             pinned: true,
             backgroundColor: colorScheme.surface,
             leading: IconButton(
@@ -171,12 +171,12 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const SizedBox(height: 60),
-                  // Series cover collage - centered square with rounded corners
+                  // Series cover collage - same size as audiobook detail cover
                   Hero(
                     tag: widget.heroTag ?? 'series_cover_${widget.series.id}',
                     child: Container(
-                      width: 160,
-                      height: 160,
+                      width: 280,
+                      height: 280,
                       decoration: BoxDecoration(
                         color: colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(12),

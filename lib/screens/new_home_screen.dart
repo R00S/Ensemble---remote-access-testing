@@ -208,7 +208,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
                         const SizedBox(width: 8),
                         Text(
                           'Connecting...',
-                          style: textTheme.bodySmall?.copyWith(
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: colorScheme.onPrimaryContainer,
                           ),
                         ),

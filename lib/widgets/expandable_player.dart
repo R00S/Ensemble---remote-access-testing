@@ -1327,24 +1327,27 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     ),
                   ),
 
-                // Album name (expanded only)
+                // Album name OR Chapter name (expanded only)
                 // GPU PERF: Use color alpha instead of Opacity widget
-                if (currentTrack.album != null && t > 0.3)
+                // For audiobooks: show current chapter; for music: show album
+                if (t > 0.3 && (currentTrack.album != null || maProvider.isPlayingAudiobook))
                   Positioned(
                     left: contentPadding,
                     right: contentPadding,
                     top: _lerpDouble(artistTop + 24, expandedAlbumTop, t),
-                    child: Text(
-                      currentTrack.album!.name,
-                      style: TextStyle(
-                        color: textColor.withOpacity(0.45 * ((t - 0.3) / 0.7).clamp(0.0, 1.0)),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w300,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: maProvider.isPlayingAudiobook
+                        ? _buildChapterInfo(maProvider, textColor, t)
+                        : Text(
+                            currentTrack.album!.name,
+                            style: TextStyle(
+                              color: textColor.withOpacity(0.45 * ((t - 0.3) / 0.7).clamp(0.0, 1.0)),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w300,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                   ),
 
                 // Audio source/format info (expanded only, when Sendspin active)
@@ -1480,7 +1483,20 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   left: t > 0.5 ? 0 : null,
                   right: t > 0.5 ? 0 : collapsedControlsRight - miniPlayerSlideOffset,
                   top: controlsTop,
-                  child: Row(
+                  child: maProvider.isPlayingAudiobook
+                      ? _buildAudiobookControls(
+                          maProvider: maProvider,
+                          selectedPlayer: selectedPlayer,
+                          textColor: textColor,
+                          primaryColor: primaryColor,
+                          backgroundColor: backgroundColor,
+                          skipButtonSize: skipButtonSize,
+                          playButtonSize: playButtonSize,
+                          playButtonContainerSize: playButtonContainerSize,
+                          t: t,
+                          expandedElementsOpacity: expandedElementsOpacity,
+                        )
+                      : Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: t > 0.5 ? MainAxisAlignment.center : MainAxisAlignment.end,
                     children: [
@@ -1878,6 +1894,121 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         color: Color.lerp(colorScheme.onSurfaceVariant, Colors.white24, t),
         size: _lerpDouble(24, 120, t),
       ),
+    );
+  }
+
+  /// Build chapter info display for audiobooks
+  Widget _buildChapterInfo(MusicAssistantProvider maProvider, Color textColor, double t) {
+    final chapter = maProvider.getCurrentChapter();
+    final chapterIndex = maProvider.getCurrentChapterIndex();
+    final totalChapters = maProvider.currentAudiobook?.chapters?.length ?? 0;
+
+    if (chapter == null) {
+      return const SizedBox.shrink();
+    }
+
+    final chapterText = totalChapters > 0
+        ? 'Chapter ${chapterIndex + 1}/$totalChapters: ${chapter.title}'
+        : chapter.title;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.bookmark_outline_rounded,
+          size: 14,
+          color: textColor.withOpacity(0.45 * ((t - 0.3) / 0.7).clamp(0.0, 1.0)),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            chapterText,
+            style: TextStyle(
+              color: textColor.withOpacity(0.45 * ((t - 0.3) / 0.7).clamp(0.0, 1.0)),
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build audiobook-specific playback controls
+  /// Layout: [Prev Chapter] [-30s] [Play/Pause] [+30s] [Next Chapter]
+  Widget _buildAudiobookControls({
+    required MusicAssistantProvider maProvider,
+    required dynamic selectedPlayer,
+    required Color textColor,
+    required Color primaryColor,
+    required Color backgroundColor,
+    required double skipButtonSize,
+    required double playButtonSize,
+    required double playButtonContainerSize,
+    required double t,
+    required double expandedElementsOpacity,
+  }) {
+    final hasChapters = maProvider.currentAudiobook?.chapters?.isNotEmpty ?? false;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: t > 0.5 ? MainAxisAlignment.center : MainAxisAlignment.end,
+      children: [
+        // Previous Chapter (expanded only, if chapters available)
+        if (t > 0.5 && expandedElementsOpacity > 0.1 && hasChapters)
+          _buildSecondaryButton(
+            icon: Icons.skip_previous_rounded,
+            color: textColor.withOpacity(expandedElementsOpacity),
+            onPressed: () => maProvider.seekToPreviousChapter(selectedPlayer.playerId),
+          ),
+        if (t > 0.5 && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
+
+        // Rewind 30 seconds
+        _buildControlButton(
+          icon: Icons.replay_30_rounded,
+          color: textColor,
+          size: skipButtonSize,
+          onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, -30),
+          useAnimation: t > 0.5,
+        ),
+        SizedBox(width: _lerpDouble(0, 20, t)),
+
+        // Play/Pause
+        _buildPlayButton(
+          isPlaying: selectedPlayer.isPlaying,
+          textColor: textColor,
+          primaryColor: primaryColor,
+          backgroundColor: backgroundColor,
+          size: playButtonSize,
+          containerSize: playButtonContainerSize,
+          progress: t,
+          onPressed: () => maProvider.playPauseSelectedPlayer(),
+          onLongPress: () => maProvider.stopPlayer(selectedPlayer.playerId),
+        ),
+        SizedBox(width: _lerpDouble(0, 20, t)),
+
+        // Forward 30 seconds
+        _buildControlButton(
+          icon: Icons.forward_30_rounded,
+          color: textColor,
+          size: skipButtonSize,
+          onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, 30),
+          useAnimation: t > 0.5,
+        ),
+
+        // Next Chapter (expanded only, if chapters available)
+        if (t > 0.5 && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
+        if (t > 0.5 && expandedElementsOpacity > 0.1 && hasChapters)
+          _buildSecondaryButton(
+            icon: Icons.skip_next_rounded,
+            color: textColor.withOpacity(expandedElementsOpacity),
+            onPressed: () => maProvider.seekToNextChapter(selectedPlayer.playerId),
+          ),
+      ],
     );
   }
 

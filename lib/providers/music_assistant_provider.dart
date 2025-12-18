@@ -54,6 +54,7 @@ class MusicAssistantProvider with ChangeNotifier {
   Player? _selectedPlayer;
   List<Player> _availablePlayers = [];
   Track? _currentTrack;
+  Audiobook? _currentAudiobook; // Currently playing audiobook context (with chapters)
   Timer? _playerStateTimer;
   Timer? _notificationPositionTimer; // Updates notification position every second for remote players
 
@@ -111,6 +112,12 @@ class MusicAssistantProvider with ChangeNotifier {
   Player? get selectedPlayer => _selectedPlayer;
   List<Player> get availablePlayers => _availablePlayers;
   Track? get currentTrack => _currentTrack;
+
+  /// Currently playing audiobook context (with chapters) - set when playing an audiobook
+  Audiobook? get currentAudiobook => _currentAudiobook;
+
+  /// Whether we're currently playing an audiobook
+  bool get isPlayingAudiobook => _currentAudiobook != null;
 
   String get lastSearchQuery => _lastSearchQuery;
   Map<String, List<MediaItem>> get lastSearchResults => _lastSearchResults;
@@ -2577,6 +2584,114 @@ class MusicAssistantProvider with ChangeNotifier {
     } catch (e) {
       ErrorHandler.logError('Seek', e);
       rethrow;
+    }
+  }
+
+  /// Seek relative to current position (e.g., +30 or -30 seconds)
+  Future<void> seekRelative(String playerId, int deltaSeconds) async {
+    try {
+      final currentPosition = _positionTracker.currentPosition.inSeconds;
+      final totalDuration = _currentTrack?.duration?.inSeconds ?? 0;
+      final newPosition = (currentPosition + deltaSeconds).clamp(0, totalDuration);
+      await seek(playerId, newPosition);
+    } catch (e) {
+      ErrorHandler.logError('Seek relative', e);
+      rethrow;
+    }
+  }
+
+  // ============================================================================
+  // AUDIOBOOK CONTEXT
+  // ============================================================================
+
+  /// Set the currently playing audiobook context (with chapters)
+  void setCurrentAudiobook(Audiobook audiobook) {
+    _currentAudiobook = audiobook;
+    _logger.log('📚 Set current audiobook: ${audiobook.name}, chapters: ${audiobook.chapters?.length ?? 0}');
+    notifyListeners();
+  }
+
+  /// Clear the audiobook context
+  void clearCurrentAudiobook() {
+    if (_currentAudiobook != null) {
+      _logger.log('📚 Cleared audiobook context');
+      _currentAudiobook = null;
+      notifyListeners();
+    }
+  }
+
+  /// Get the current chapter based on playback position
+  Chapter? getCurrentChapter() {
+    if (_currentAudiobook == null || _currentAudiobook!.chapters == null) return null;
+    final chapters = _currentAudiobook!.chapters!;
+    if (chapters.isEmpty) return null;
+
+    final currentPositionMs = _positionTracker.currentPosition.inMilliseconds;
+
+    // Find the chapter that contains the current position
+    for (int i = chapters.length - 1; i >= 0; i--) {
+      if (currentPositionMs >= chapters[i].positionMs) {
+        return chapters[i];
+      }
+    }
+    return chapters.first;
+  }
+
+  /// Get the index of the current chapter
+  int getCurrentChapterIndex() {
+    if (_currentAudiobook == null || _currentAudiobook!.chapters == null) return -1;
+    final chapters = _currentAudiobook!.chapters!;
+    if (chapters.isEmpty) return -1;
+
+    final currentPositionMs = _positionTracker.currentPosition.inMilliseconds;
+
+    for (int i = chapters.length - 1; i >= 0; i--) {
+      if (currentPositionMs >= chapters[i].positionMs) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  /// Seek to the next chapter
+  Future<void> seekToNextChapter(String playerId) async {
+    if (_currentAudiobook == null || _currentAudiobook!.chapters == null) return;
+    final chapters = _currentAudiobook!.chapters!;
+    if (chapters.isEmpty) return;
+
+    final currentIndex = getCurrentChapterIndex();
+    if (currentIndex < chapters.length - 1) {
+      final nextChapter = chapters[currentIndex + 1];
+      final positionSeconds = nextChapter.positionMs ~/ 1000;
+      await seek(playerId, positionSeconds);
+      _logger.log('📚 Jumped to next chapter: ${nextChapter.title}');
+    }
+  }
+
+  /// Seek to the previous chapter (or start of current chapter if > 3 seconds in)
+  Future<void> seekToPreviousChapter(String playerId) async {
+    if (_currentAudiobook == null || _currentAudiobook!.chapters == null) return;
+    final chapters = _currentAudiobook!.chapters!;
+    if (chapters.isEmpty) return;
+
+    final currentIndex = getCurrentChapterIndex();
+    if (currentIndex < 0) return;
+
+    final currentChapter = chapters[currentIndex];
+    final currentPositionMs = _positionTracker.currentPosition.inMilliseconds;
+    final chapterProgressMs = currentPositionMs - currentChapter.positionMs;
+
+    // If more than 3 seconds into current chapter, go to start of current chapter
+    // Otherwise, go to previous chapter
+    if (chapterProgressMs > 3000 || currentIndex == 0) {
+      final positionSeconds = currentChapter.positionMs ~/ 1000;
+      await seek(playerId, positionSeconds);
+      _logger.log('📚 Jumped to start of chapter: ${currentChapter.title}');
+    } else {
+      final previousChapter = chapters[currentIndex - 1];
+      final positionSeconds = previousChapter.positionMs ~/ 1000;
+      await seek(playerId, positionSeconds);
+      _logger.log('📚 Jumped to previous chapter: ${previousChapter.title}');
     }
   }
 

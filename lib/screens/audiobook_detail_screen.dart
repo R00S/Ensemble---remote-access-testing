@@ -202,6 +202,9 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
     }
 
     try {
+      // Set the audiobook context for player controls (uses full audiobook with chapters if available)
+      maProvider.setCurrentAudiobook(_audiobook);
+
       // Play the audiobook
       await maProvider.api?.playAudiobook(
         selectedPlayer.playerId,

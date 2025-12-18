@@ -568,9 +568,17 @@ class MusicAssistantAPI {
       // Get enabled libraries for filtering
       final enabledLibraries = await SettingsService.getEnabledAbsLibraries();
 
+      // Debug: log enabled libraries
+      if (enabledLibraries != null) {
+        _logger.log('📚 Enabled libraries (${enabledLibraries.length}): $enabledLibraries');
+      } else {
+        _logger.log('📚 No library filtering (all enabled)');
+      }
+
       final audiobooks = <Audiobook>[];
       final parseErrors = <String>[];
       int filteredCount = 0;
+      bool loggedFirstMapping = false;
 
       for (int i = 0; i < items.length; i++) {
         try {
@@ -578,6 +586,15 @@ class MusicAssistantAPI {
 
           // Filter by enabled libraries if any are configured
           if (enabledLibraries != null && book.providerMappings != null) {
+            // Debug: log first audiobook's provider mappings
+            if (!loggedFirstMapping && book.providerMappings!.isNotEmpty) {
+              _logger.log('📚 First audiobook providerMappings:');
+              for (final m in book.providerMappings!) {
+                _logger.log('📚   itemId: ${m.itemId}, provider: ${m.providerInstance}');
+              }
+              loggedFirstMapping = true;
+            }
+
             // Check if this audiobook belongs to an enabled library
             bool isEnabled = false;
             for (final mapping in book.providerMappings!) {

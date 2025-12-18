@@ -62,6 +62,10 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   // Series state
   List<AudiobookSeries> _series = [];
   bool _isLoadingSeries = false;
+
+  // Series book covers cache: seriesId -> list of book thumbnail URLs
+  final Map<String, List<String>> _seriesBookCovers = {};
+  final Set<String> _seriesCoversLoading = {};
   bool _seriesLoaded = false;
 
   // Restoration: Remember selected tab across app restarts
@@ -516,6 +520,40 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           _isLoadingSeries = false;
         });
       }
+    }
+  }
+
+  /// Fetch book covers for a series (for 3x3 grid display)
+  Future<void> _loadSeriesCovers(String seriesId, MusicAssistantProvider maProvider) async {
+    // Already cached or loading
+    if (_seriesBookCovers.containsKey(seriesId) || _seriesCoversLoading.contains(seriesId)) {
+      return;
+    }
+
+    _seriesCoversLoading.add(seriesId);
+
+    try {
+      if (maProvider.api != null) {
+        final books = await maProvider.api!.getSeriesAudiobooks(seriesId);
+        final covers = <String>[];
+
+        for (final book in books.take(9)) {
+          final imageUrl = maProvider.getImageUrl(book);
+          if (imageUrl != null) {
+            covers.add(imageUrl);
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _seriesBookCovers[seriesId] = covers;
+            _seriesCoversLoading.remove(seriesId);
+          });
+        }
+      }
+    } catch (e) {
+      _logger.log('📚 Error loading series covers for $seriesId: $e');
+      _seriesCoversLoading.remove(seriesId);
     }
   }
 
@@ -1439,6 +1477,14 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
+    // Trigger loading of series covers if not cached
+    if (!_seriesBookCovers.containsKey(series.id) && !_seriesCoversLoading.contains(series.id)) {
+      // Use addPostFrameCallback to avoid calling setState during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadSeriesCovers(series.id, maProvider);
+      });
+    }
+
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 2,
@@ -1458,14 +1504,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             Expanded(
               child: Container(
                 color: colorScheme.surfaceContainerHighest,
-                child: series.thumbnailUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: series.thumbnailUrl!,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => _buildSeriesPlaceholder(colorScheme),
-                        errorWidget: (_, __, ___) => _buildSeriesPlaceholder(colorScheme),
-                      )
-                    : _buildSeriesPlaceholder(colorScheme),
+                child: _buildSeriesCoverGrid(series, colorScheme, maProvider),
               ),
             ),
             Padding(
@@ -1497,6 +1536,82 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSeriesCoverGrid(AudiobookSeries series, ColorScheme colorScheme, MusicAssistantProvider maProvider) {
+    final covers = _seriesBookCovers[series.id];
+    final isLoading = _seriesCoversLoading.contains(series.id);
+
+    // If we have covers, show the grid
+    if (covers != null && covers.isNotEmpty) {
+      // Determine grid size based on number of covers
+      final gridSize = covers.length >= 4 ? 3 : (covers.length >= 2 ? 2 : 1);
+      final displayCovers = covers.take(gridSize * gridSize).toList();
+
+      return GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: gridSize,
+          childAspectRatio: 1,
+          crossAxisSpacing: 1,
+          mainAxisSpacing: 1,
+        ),
+        itemCount: displayCovers.length,
+        itemBuilder: (context, index) {
+          return CachedNetworkImage(
+            imageUrl: displayCovers[index],
+            fit: BoxFit.cover,
+            placeholder: (_, __) => Container(
+              color: colorScheme.surfaceContainerHighest,
+            ),
+            errorWidget: (_, __, ___) => Container(
+              color: colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.book,
+                color: colorScheme.onSurfaceVariant.withOpacity(0.3),
+                size: 20,
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    // Show loading shimmer or placeholder
+    if (isLoading) {
+      return _buildSeriesLoadingGrid(colorScheme);
+    }
+
+    // Fallback placeholder
+    return _buildSeriesPlaceholder(colorScheme);
+  }
+
+  Widget _buildSeriesLoadingGrid(ColorScheme colorScheme) {
+    return GridView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 1,
+        crossAxisSpacing: 1,
+        mainAxisSpacing: 1,
+      ),
+      itemCount: 9,
+      itemBuilder: (context, index) {
+        return Container(
+          color: colorScheme.surfaceContainerHighest,
+          child: Center(
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: colorScheme.onSurfaceVariant.withOpacity(0.3),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

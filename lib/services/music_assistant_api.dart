@@ -808,7 +808,25 @@ class MusicAssistantAPI {
       final providerRoot = await browse(providerPath);
       _logger.log('📚 Provider has ${providerRoot.length} items (libraries)');
 
-      // Collect series from all libraries
+      // Discover and save libraries
+      final discoveredLibraries = <Map<String, String>>[];
+      for (final item in providerRoot) {
+        final itemMap = item as Map<String, dynamic>;
+        final path = itemMap['path'] as String? ?? '';
+        final name = itemMap['name'] as String? ?? '';
+        if (path != 'root' && name != '..') {
+          discoveredLibraries.add({'path': path, 'name': name});
+        }
+      }
+      if (discoveredLibraries.isNotEmpty) {
+        await SettingsService.setDiscoveredAbsLibraries(discoveredLibraries);
+        _logger.log('📚 Saved ${discoveredLibraries.length} discovered libraries');
+      }
+
+      // Get enabled libraries (null means all enabled)
+      final enabledLibraries = await SettingsService.getEnabledAbsLibraries();
+
+      // Collect series from enabled libraries only
       final allSeries = <AudiobookSeries>[];
 
       for (final libraryItem in providerRoot) {
@@ -818,6 +836,12 @@ class MusicAssistantAPI {
 
         // Skip "root" (parent navigation) item
         if (libraryPath == 'root' || libraryName == '..') continue;
+
+        // Check if this library is enabled
+        if (enabledLibraries != null && !enabledLibraries.contains(libraryPath)) {
+          _logger.log('📚 Skipping disabled library: $libraryName');
+          continue;
+        }
 
         _logger.log('📚 Checking library: $libraryName at $libraryPath');
 

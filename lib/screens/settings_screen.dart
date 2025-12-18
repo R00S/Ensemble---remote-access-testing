@@ -26,6 +26,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showFavoriteAlbums = false;
   bool _showFavoriteArtists = false;
   bool _showFavoriteTracks = false;
+  // Audiobook libraries
+  List<Map<String, String>> _discoveredLibraries = [];
+  Map<String, bool> _libraryEnabled = {};
 
   @override
   void initState() {
@@ -51,6 +54,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final showFavAlbums = await SettingsService.getShowFavoriteAlbums();
     final showFavArtists = await SettingsService.getShowFavoriteArtists();
     final showFavTracks = await SettingsService.getShowFavoriteTracks();
+
+    // Load audiobook library settings
+    final discovered = await SettingsService.getDiscoveredAbsLibraries() ?? [];
+    final enabled = await SettingsService.getEnabledAbsLibraries();
+    final libraryEnabled = <String, bool>{};
+    for (final lib in discovered) {
+      final path = lib['path'] ?? '';
+      // null means all enabled
+      libraryEnabled[path] = enabled == null || enabled.contains(path);
+    }
+
     if (mounted) {
       setState(() {
         _showRecentAlbums = showRecent;
@@ -59,6 +73,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _showFavoriteAlbums = showFavAlbums;
         _showFavoriteArtists = showFavArtists;
         _showFavoriteTracks = showFavTracks;
+        _discoveredLibraries = discovered;
+        _libraryEnabled = libraryEnabled;
       });
     }
   }
@@ -584,6 +600,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
 
             const SizedBox(height: 32),
+
+            // Audiobook Libraries section
+            if (_discoveredLibraries.isNotEmpty) ...[
+              Text(
+                'Audiobook Libraries',
+                style: textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onBackground,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Choose which Audiobookshelf libraries to include',
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onBackground.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: _discoveredLibraries.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final library = entry.value;
+                    final path = library['path'] ?? '';
+                    final name = library['name'] ?? 'Unknown Library';
+                    final isEnabled = _libraryEnabled[path] ?? true;
+
+                    return Column(
+                      children: [
+                        SwitchListTile(
+                          title: Text(
+                            name,
+                            style: TextStyle(color: colorScheme.onSurface),
+                          ),
+                          value: isEnabled,
+                          onChanged: (value) async {
+                            setState(() {
+                              _libraryEnabled[path] = value;
+                            });
+                            await SettingsService.toggleAbsLibrary(path, value);
+                          },
+                          activeColor: colorScheme.primary,
+                        ),
+                        if (index < _discoveredLibraries.length - 1)
+                          Divider(
+                            height: 1,
+                            indent: 16,
+                            endIndent: 16,
+                            color: colorScheme.onSurface.withOpacity(0.1),
+                          ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 32),
+            ],
 
             SizedBox(
               width: double.infinity,

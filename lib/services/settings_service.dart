@@ -47,6 +47,10 @@ class SettingsService {
   static const String _keyAbsApiToken = 'abs_api_token';
   static const String _keyAbsEnabled = 'abs_enabled';
 
+  // Audiobookshelf Library Settings (via MA browse)
+  static const String _keyEnabledAbsLibraries = 'enabled_abs_libraries'; // JSON list of library paths
+  static const String _keyDiscoveredAbsLibraries = 'discovered_abs_libraries'; // JSON list of {path, name}
+
   static Future<String?> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyServerUrl);
@@ -544,5 +548,76 @@ class SettingsService {
     await prefs.remove(_keyAbsServerUrl);
     await prefs.remove(_keyAbsApiToken);
     await prefs.remove(_keyAbsEnabled);
+  }
+
+  // Audiobookshelf Library Settings (via MA browse API)
+
+  /// Get list of enabled library paths (all enabled by default if not set)
+  static Future<List<String>?> getEnabledAbsLibraries() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_keyEnabledAbsLibraries);
+    if (json == null) return null; // null means all libraries are enabled
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      return list.cast<String>();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Set list of enabled library paths
+  static Future<void> setEnabledAbsLibraries(List<String> paths) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyEnabledAbsLibraries, jsonEncode(paths));
+  }
+
+  /// Clear enabled libraries (reverts to all enabled)
+  static Future<void> clearEnabledAbsLibraries() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyEnabledAbsLibraries);
+  }
+
+  /// Get discovered libraries [{path: String, name: String}]
+  static Future<List<Map<String, String>>?> getDiscoveredAbsLibraries() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_keyDiscoveredAbsLibraries);
+    if (json == null) return null;
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      return list.map((e) => Map<String, String>.from(e as Map)).toList();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Save discovered libraries
+  static Future<void> setDiscoveredAbsLibraries(List<Map<String, String>> libraries) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyDiscoveredAbsLibraries, jsonEncode(libraries));
+  }
+
+  /// Check if a specific library is enabled
+  static Future<bool> isAbsLibraryEnabled(String libraryPath) async {
+    final enabled = await getEnabledAbsLibraries();
+    if (enabled == null) return true; // All enabled by default
+    return enabled.contains(libraryPath);
+  }
+
+  /// Toggle a specific library
+  static Future<void> toggleAbsLibrary(String libraryPath, bool enable) async {
+    final discovered = await getDiscoveredAbsLibraries();
+    if (discovered == null) return;
+
+    var enabled = await getEnabledAbsLibraries();
+    // If null (all enabled), initialize with all library paths
+    enabled ??= discovered.map((lib) => lib['path']!).toList();
+
+    if (enable && !enabled.contains(libraryPath)) {
+      enabled.add(libraryPath);
+    } else if (!enable && enabled.contains(libraryPath)) {
+      enabled.remove(libraryPath);
+    }
+
+    await setEnabledAbsLibraries(enabled);
   }
 }

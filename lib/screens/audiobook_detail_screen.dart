@@ -191,6 +191,108 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
     }
   }
 
+  Future<void> _markAsFinished() async {
+    try {
+      // Update local audiobook state to show as finished
+      final updatedAudiobook = Audiobook(
+        itemId: _audiobook.itemId,
+        provider: _audiobook.provider,
+        name: _audiobook.name,
+        authors: _audiobook.authors,
+        narrators: _audiobook.narrators,
+        publisher: _audiobook.publisher,
+        description: _audiobook.description,
+        year: _audiobook.year,
+        chapters: _audiobook.chapters,
+        resumePositionMs: _audiobook.duration?.inMilliseconds, // Set to end
+        fullyPlayed: true,
+        sortName: _audiobook.sortName,
+        uri: _audiobook.uri,
+        providerMappings: _audiobook.providerMappings,
+        metadata: _audiobook.metadata,
+        favorite: _audiobook.favorite,
+        duration: _audiobook.duration,
+      );
+
+      setState(() {
+        _audiobook = updatedAudiobook;
+      });
+
+      // TODO: Call MA/ABS API to update server-side progress when available
+      _logger.log('📚 Marked audiobook as finished: ${_audiobook.name}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${_audiobook.name} marked as finished'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      _logger.log('Error marking audiobook as finished: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to mark as finished: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _markAsUnplayed() async {
+    try {
+      // Update local audiobook state to show as unplayed
+      final updatedAudiobook = Audiobook(
+        itemId: _audiobook.itemId,
+        provider: _audiobook.provider,
+        name: _audiobook.name,
+        authors: _audiobook.authors,
+        narrators: _audiobook.narrators,
+        publisher: _audiobook.publisher,
+        description: _audiobook.description,
+        year: _audiobook.year,
+        chapters: _audiobook.chapters,
+        resumePositionMs: 0, // Reset to start
+        fullyPlayed: false,
+        sortName: _audiobook.sortName,
+        uri: _audiobook.uri,
+        providerMappings: _audiobook.providerMappings,
+        metadata: _audiobook.metadata,
+        favorite: _audiobook.favorite,
+        duration: _audiobook.duration,
+      );
+
+      setState(() {
+        _audiobook = updatedAudiobook;
+      });
+
+      // TODO: Call MA/ABS API to update server-side progress when available
+      _logger.log('📚 Marked audiobook as unplayed: ${_audiobook.name}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${_audiobook.name} marked as unplayed'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      _logger.log('Error marking audiobook as unplayed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to mark as unplayed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _playAudiobook({int? startPositionMs}) async {
     final maProvider = context.read<MusicAssistantProvider>();
     final selectedPlayer = maProvider.selectedPlayer;
@@ -297,6 +399,54 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                 },
                 color: colorScheme.onSurface,
               ),
+              actions: [
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.more_vert,
+                    color: colorScheme.onSurface,
+                  ),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'mark_finished':
+                        _markAsFinished();
+                        break;
+                      case 'mark_unplayed':
+                        _markAsUnplayed();
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'mark_finished',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: colorScheme.onSurface,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text('Mark as Finished'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'mark_unplayed',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.restart_alt,
+                            color: colorScheme.onSurface,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text('Mark as Unplayed'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 background: Column(
                   mainAxisAlignment: MainAxisAlignment.center,

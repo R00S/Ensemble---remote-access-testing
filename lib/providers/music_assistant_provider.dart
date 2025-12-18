@@ -2008,6 +2008,12 @@ class MusicAssistantProvider with ChangeNotifier {
           _currentTrack = null;
           stateChanged = true;
         }
+        // Clear audiobook context when playback stops
+        if (_currentAudiobook != null) {
+          _logger.log('📚 Playback stopped, clearing audiobook context');
+          _currentAudiobook = null;
+          stateChanged = true;
+        }
 
         if (stateChanged) {
           notifyListeners();
@@ -2025,6 +2031,19 @@ class MusicAssistantProvider with ChangeNotifier {
         if (trackChanged) {
           _currentTrack = queue.currentItem!.track;
           stateChanged = true;
+
+          // Clear audiobook context if switched to a different media item
+          // Check if the new track is from the same audiobook (by comparing URIs)
+          if (_currentAudiobook != null) {
+            final currentUri = _currentTrack!.uri ?? '';
+            final audiobookUri = _currentAudiobook!.uri ?? 'library://audiobook/${_currentAudiobook!.itemId}';
+            // The audiobook chapter URIs should contain the audiobook URI pattern
+            if (!currentUri.contains(_currentAudiobook!.itemId) &&
+                !currentUri.contains(audiobookUri)) {
+              _logger.log('📚 Track changed to non-audiobook, clearing context');
+              _currentAudiobook = null;
+            }
+          }
         }
 
         // Update notification for ALL players

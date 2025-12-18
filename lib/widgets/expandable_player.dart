@@ -286,8 +286,14 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
   String _formatDuration(int seconds) {
     final duration = Duration(seconds: seconds);
-    final minutes = duration.inMinutes;
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
     final secs = duration.inSeconds % 60;
+
+    // For audiobooks and long content (>= 1 hour), show hours
+    if (hours > 0) {
+      return '${hours}:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
     return '${minutes.toString().padLeft(1, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 

@@ -263,6 +263,8 @@ class _SeriesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final heroTag = 'series_cover_home_${series.id}';
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -270,6 +272,7 @@ class _SeriesCard extends StatelessWidget {
           MaterialPageRoute(
             builder: (context) => AudiobookSeriesScreen(
               series: series,
+              heroTag: heroTag,
               initialCovers: covers,
             ),
           ),
@@ -279,11 +282,14 @@ class _SeriesCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Use AspectRatio to guarantee square cover
-          AspectRatio(
-            aspectRatio: 1,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: _buildCoverGrid(),
+          Hero(
+            tag: heroTag,
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: _buildCoverGrid(),
+              ),
             ),
           ),
           const SizedBox(height: 8),

@@ -1009,9 +1009,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
     final collapsedTitleTop = (_collapsedHeight - 36) / 2; // Centered vertically (adjusted for increased track/artist gap)
 
-    // Controls: 36 (prev) + 34 (play) + 36 (next) + 8 (right margin) = 114px from right
-    // For 8px gap: text ends at screenWidth - 114 - 8 = screenWidth - 122
-    final collapsedTitleWidth = screenSize.width - collapsedTitleLeft - 122;
+    // Controls: 36 (prev) + 34 (play) + 36 (next) + 8 (right margin) = 114px from widget right
+    // For 8px gap: text ends at widgetWidth - 114 - 8 = widgetWidth - 122
+    // Note: collapsedWidth = screenSize.width - 24 (12px margin each side)
+    final collapsedTitleWidth = collapsedWidth - collapsedTitleLeft - 122;
     final expandedTitleWidth = screenSize.width - (contentPadding * 2);
     final titleWidth = _lerpDouble(collapsedTitleWidth, expandedTitleWidth, t);
 

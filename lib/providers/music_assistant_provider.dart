@@ -1082,23 +1082,48 @@ class MusicAssistantProvider with ChangeNotifier {
             };
           }
 
+          // Parse artist from title if artist is missing but title contains " - "
+          var trackTitle = currentMedia['title'] as String? ?? 'Unknown Track';
+          var artistName = currentMedia['artist'] as String?;
+
+          if ((artistName == null || artistName == 'Unknown Artist') && trackTitle.contains(' - ')) {
+            final parts = trackTitle.split(' - ');
+            if (parts.length >= 2) {
+              artistName = parts[0].trim();
+              trackTitle = parts.sublist(1).join(' - ').trim();
+            }
+          }
+          artistName ??= 'Unknown Artist';
+
           final trackFromEvent = Track(
             itemId: currentMedia['queue_item_id'] as String? ?? '',
             provider: 'library',
-            name: currentMedia['title'] as String? ?? 'Unknown Track',
+            name: trackTitle,
             uri: currentMedia['uri'] as String?,
             duration: durationSecs != null ? Duration(seconds: durationSecs) : null,
-            artists: [Artist(itemId: '', provider: 'library', name: currentMedia['artist'] as String? ?? 'Unknown Artist')],
+            artists: [Artist(itemId: '', provider: 'library', name: artistName)],
             album: albumName != null ? Album(itemId: '', provider: 'library', name: albumName) : null,
             metadata: metadata,
           );
-          _cacheService.setCachedTrackForPlayer(playerId, trackFromEvent);
 
-          if (_selectedPlayer != null && playerId == _selectedPlayer!.playerId) {
-            _currentTrack = trackFromEvent;
+          // Only cache if we don't already have better data from queue
+          final existingTrack = _cacheService.getCachedTrackForPlayer(playerId);
+          final existingHasProperArtist = existingTrack != null &&
+              existingTrack.artistsString != 'Unknown Artist' &&
+              !existingTrack.name.contains(' - ');
+
+          if (!existingHasProperArtist) {
+            _cacheService.setCachedTrackForPlayer(playerId, trackFromEvent);
+            _logger.log('📋 Cached track for $playerName from player_updated: ${trackFromEvent.name}');
+          } else {
+            _logger.log('📋 Skipped caching for $playerName - already have better data');
           }
 
-          _logger.log('📋 Cached track for $playerName from player_updated: ${trackFromEvent.name}');
+          // For selected player, _updatePlayerState() is already called above which fetches queue data
+          // Only update _currentTrack here if we don't have it yet (initial load)
+          if (_selectedPlayer != null && playerId == _selectedPlayer!.playerId && _currentTrack == null) {
+            _currentTrack = trackFromEvent;
+          }
 
           notifyListeners();
         }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
+import 'package:palette_generator/palette_generator.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
 import '../widgets/global_player_overlay.dart';
@@ -68,6 +69,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   // Series book covers cache: seriesId -> list of book thumbnail URLs
   final Map<String, List<String>> _seriesBookCovers = {};
   final Set<String> _seriesCoversLoading = {};
+  // Series extracted colors cache: seriesId -> list of colors from book covers
+  final Map<String, List<Color>> _seriesExtractedColors = {};
   bool _seriesLoaded = false;
 
   // Restoration: Remember selected tab across app restarts
@@ -579,11 +582,55 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             _seriesBookCovers[seriesId] = covers;
             _seriesCoversLoading.remove(seriesId);
           });
+
+          // Extract colors from covers asynchronously (don't block UI)
+          _extractSeriesColors(seriesId, covers);
         }
       }
     } catch (e) {
       _logger.log('📚 Error loading series covers for $seriesId: $e');
       _seriesCoversLoading.remove(seriesId);
+    }
+  }
+
+  /// Extract dominant colors from series book covers for empty cell backgrounds
+  Future<void> _extractSeriesColors(String seriesId, List<String> coverUrls) async {
+    if (coverUrls.isEmpty) return;
+
+    final extractedColors = <Color>[];
+
+    // Extract colors from first few covers (limit to avoid too much processing)
+    for (final url in coverUrls.take(4)) {
+      try {
+        final palette = await PaletteGenerator.fromImageProvider(
+          CachedNetworkImageProvider(url),
+          maximumColorCount: 8,
+        );
+
+        // Get dark muted colors for grid squares (matches the aesthetic)
+        if (palette.darkMutedColor != null) {
+          extractedColors.add(palette.darkMutedColor!.color);
+        }
+        if (palette.mutedColor != null) {
+          extractedColors.add(palette.mutedColor!.color);
+        }
+        if (palette.darkVibrantColor != null) {
+          extractedColors.add(palette.darkVibrantColor!.color);
+        }
+        if (palette.dominantColor != null) {
+          // Darken the dominant color for better appearance
+          final hsl = HSLColor.fromColor(palette.dominantColor!.color);
+          extractedColors.add(hsl.withLightness((hsl.lightness * 0.4).clamp(0.1, 0.3)).toColor());
+        }
+      } catch (e) {
+        _logger.log('📚 Error extracting colors from $url: $e');
+      }
+    }
+
+    if (extractedColors.isNotEmpty && mounted) {
+      setState(() {
+        _seriesExtractedColors[seriesId] = extractedColors;
+      });
     }
   }
 
@@ -1626,8 +1673,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       gridSize = gridSize.clamp(1, maxGridSize);
       final displayCovers = covers.take(gridSize * gridSize).toList();
 
-      // Dark pastel colors for empty cells - muted and book-like
-      const emptyColors = [
+      // Use extracted colors from book covers if available, otherwise fall back to static palette
+      final extractedColors = _seriesExtractedColors[series.id];
+      const fallbackColors = [
         Color(0xFF2D3436), // Dark slate
         Color(0xFF34495E), // Dark blue-grey
         Color(0xFF4A3728), // Dark brown
@@ -1637,6 +1685,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         Color(0xFF3E4A47), // Dark teal-grey
         Color(0xFF4A3F35), // Dark warm grey
       ];
+      final emptyColors = (extractedColors != null && extractedColors.isNotEmpty)
+          ? extractedColors
+          : fallbackColors;
 
       // Use series ID to pick consistent colors for this series
       final colorSeed = series.id.hashCode;

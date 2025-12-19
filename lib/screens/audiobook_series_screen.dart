@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
+import 'package:palette_generator/palette_generator.dart';
 import '../models/media_item.dart';
 import '../providers/music_assistant_provider.dart';
 import '../widgets/global_player_overlay.dart' show BottomSpacing;
@@ -34,6 +35,9 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
   // View preferences
   String _sortOrder = 'series'; // 'series' (by series number) or 'alpha'
   String _viewMode = 'grid2'; // 'grid2', 'grid3', 'list'
+
+  // Extracted colors from book covers
+  List<Color> _extractedColors = [];
 
   @override
   void initState() {
@@ -142,6 +146,9 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
         for (final book in _audiobooks) {
           _logger.log('  - ${book.seriesSequence ?? "null"}: ${book.name}');
         }
+
+        // Extract colors from book covers asynchronously
+        _extractCoverColors(maProvider);
       }
     } catch (e, stack) {
       _logger.log('📚 SeriesScreen error: $e');
@@ -152,6 +159,48 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  /// Extract colors from book covers for empty grid cells
+  Future<void> _extractCoverColors(MusicAssistantProvider maProvider) async {
+    final extractedColors = <Color>[];
+
+    // Extract colors from first few book covers
+    for (final book in _audiobooks.take(4)) {
+      final imageUrl = maProvider.getImageUrl(book);
+      if (imageUrl == null) continue;
+
+      try {
+        final palette = await PaletteGenerator.fromImageProvider(
+          CachedNetworkImageProvider(imageUrl),
+          maximumColorCount: 8,
+        );
+
+        // Get dark muted colors for grid squares
+        if (palette.darkMutedColor != null) {
+          extractedColors.add(palette.darkMutedColor!.color);
+        }
+        if (palette.mutedColor != null) {
+          extractedColors.add(palette.mutedColor!.color);
+        }
+        if (palette.darkVibrantColor != null) {
+          extractedColors.add(palette.darkVibrantColor!.color);
+        }
+        if (palette.dominantColor != null) {
+          // Darken the dominant color for better appearance
+          final hsl = HSLColor.fromColor(palette.dominantColor!.color);
+          extractedColors.add(hsl.withLightness((hsl.lightness * 0.4).clamp(0.1, 0.3)).toColor());
+        }
+      } catch (e) {
+        _logger.log('📚 Error extracting colors: $e');
+      }
+    }
+
+    if (extractedColors.isNotEmpty && mounted) {
+      setState(() {
+        _extractedColors = extractedColors;
+      });
     }
   }
 
@@ -446,6 +495,9 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
   /// Builds an empty cell with either a solid color or a nested grid
   /// The pattern is deterministic based on series ID and cell index
   Widget _buildEmptyCell(int colorSeed, int cellIndex) {
+    // Use extracted colors if available, otherwise fall back to static palette
+    final colors = _extractedColors.isNotEmpty ? _extractedColors : _emptyColors;
+
     // Use combined seed for deterministic but varied patterns
     final seed = colorSeed + cellIndex * 17; // Prime multiplier for better distribution
 
@@ -465,8 +517,8 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
 
     if (nestedSize == 1) {
       // Solid color
-      final colorIndex = seed.abs() % _emptyColors.length;
-      return Container(color: _emptyColors[colorIndex]);
+      final colorIndex = seed.abs() % colors.length;
+      return Container(color: colors[colorIndex]);
     }
 
     // Build nested grid
@@ -478,14 +530,14 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
               final nestedIndex = row * nestedSize + col;
               // Use different seed for each nested cell
               final nestedSeed = seed + nestedIndex * 7;
-              final colorIndex = nestedSeed.abs() % _emptyColors.length;
+              final colorIndex = nestedSeed.abs() % colors.length;
               return Expanded(
                 child: Container(
                   margin: EdgeInsets.only(
                     right: col < nestedSize - 1 ? 0.5 : 0,
                     bottom: row < nestedSize - 1 ? 0.5 : 0,
                   ),
-                  color: _emptyColors[colorIndex],
+                  color: colors[colorIndex],
                 ),
               );
             }),

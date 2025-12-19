@@ -32,6 +32,8 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
   bool _showDebug = false;
   List<String> _debugLogs = [];
+  String? _resolvedServerUrl; // The actual URL after fallback (e.g., HTTP if HTTPS failed)
+  bool _usedHttpFallback = false; // True if HTTPS failed and we fell back to HTTP
 
   @override
   void initState() {
@@ -96,8 +98,25 @@ class _LoginScreenState extends State<LoginScreen> {
       return 'http://$url';
     }
 
+    // Tailscale URLs (*.ts.net) - default to http:// since VPN tunnel is already encrypted
+    if (url.endsWith('.ts.net') || url.contains('.ts.net:')) {
+      return 'http://$url';
+    }
+
     // For domain names, default to https://
     return 'https://$url';
+  }
+
+  /// Check if the URL is using HTTP (for security warning display)
+  bool _isHttpConnection(String url) {
+    final normalized = _normalizeServerUrl(url);
+    return normalized.startsWith('http://') && !normalized.startsWith('https://');
+  }
+
+  /// Check if the URL is a Tailscale URL (safe for HTTP)
+  bool _isTailscaleUrl(String url) {
+    final normalized = url.trim().toLowerCase();
+    return normalized.contains('.ts.net');
   }
 
   String _buildServerUrl() {
@@ -149,6 +168,8 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
       _detectedAuthStrategy = null;
       _detectedAuthType = null;
+      _resolvedServerUrl = null;
+      _usedHttpFallback = false;
       _debugLogs.clear();
     });
 
@@ -161,6 +182,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _addDebugLog('Starting auth detection...');
       // Auto-detect authentication requirements
       final strategy = await provider.authManager.detectAuthStrategy(serverUrl);
+
+      // Check if auth manager used a different URL (e.g., HTTP fallback)
+      final resolvedUrl = provider.authManager.lastSuccessfulUrl;
+      if (resolvedUrl != null && resolvedUrl != serverUrl) {
+        _addDebugLog('URL resolved via fallback: $resolvedUrl');
+        _usedHttpFallback = serverUrl.startsWith('https://') && resolvedUrl.startsWith('http://');
+      }
 
       _addDebugLog('Detection complete. Strategy: ${strategy?.name ?? 'null'}');
 
@@ -175,6 +203,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _detectedAuthStrategy = strategy;
         _detectedAuthType = _getAuthTypeName(strategy.name);
+        _resolvedServerUrl = resolvedUrl;
         _isDetectingAuth = false;
       });
 
@@ -252,7 +281,9 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final serverUrl = _buildServerUrl();
+      // Use the resolved URL if available (e.g., from HTTP fallback), otherwise build it
+      final serverUrl = _resolvedServerUrl ?? _buildServerUrl();
+      _addDebugLog('Using server URL for connection: $serverUrl');
       final port = _portController.text.trim();
 
       // Validate port (if provided)
@@ -628,6 +659,71 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // HTTP connection info banner
+              if (_resolvedServerUrl != null && _isHttpConnection(_resolvedServerUrl!))
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: _isTailscaleUrl(_serverUrlController.text)
+                        ? colorScheme.secondaryContainer.withOpacity(0.3)
+                        : colorScheme.errorContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: _isTailscaleUrl(_serverUrlController.text)
+                        ? null
+                        : Border.all(color: colorScheme.error.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isTailscaleUrl(_serverUrlController.text)
+                            ? Icons.vpn_lock_rounded
+                            : Icons.warning_amber_rounded,
+                        color: _isTailscaleUrl(_serverUrlController.text)
+                            ? colorScheme.secondary
+                            : colorScheme.error,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isTailscaleUrl(_serverUrlController.text)
+                                  ? 'Tailscale VPN Connection'
+                                  : 'Unencrypted Connection',
+                              style: TextStyle(
+                                color: _isTailscaleUrl(_serverUrlController.text)
+                                    ? colorScheme.onSecondaryContainer
+                                    : colorScheme.onErrorContainer,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                _isTailscaleUrl(_serverUrlController.text)
+                                    ? 'Using HTTP over Tailscale (encrypted tunnel)'
+                                    : _usedHttpFallback
+                                        ? 'HTTPS failed, using HTTP fallback'
+                                        : 'HTTP connection - data is not encrypted',
+                                style: TextStyle(
+                                  color: (_isTailscaleUrl(_serverUrlController.text)
+                                      ? colorScheme.onSecondaryContainer
+                                      : colorScheme.onErrorContainer).withOpacity(0.7),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),

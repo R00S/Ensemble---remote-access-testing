@@ -31,11 +31,42 @@ class AuthManager {
 
   /// Auto-detect authentication requirements for a server
   /// Returns null if server is unreachable or auth method unknown
+  /// Also returns the final URL used (in case of HTTP fallback) via the callback
+  String? _lastSuccessfulUrl;
+  String? get lastSuccessfulUrl => _lastSuccessfulUrl;
+
   Future<AuthStrategy?> detectAuthStrategy(String serverUrl) async {
     _logger.log('🔍 Auto-detecting auth strategy for $serverUrl');
+    _lastSuccessfulUrl = null;
 
     // Normalize URL
-    var baseUrl = serverUrl;
+    var baseUrl = _normalizeUrl(serverUrl);
+    _logger.log('Normalized URL: $baseUrl');
+
+    // Try detection with the initial URL
+    var result = await _tryDetectAuth(baseUrl);
+
+    // If HTTPS failed and we haven't tried HTTP yet, try HTTP fallback
+    if (result == null && baseUrl.startsWith('https://')) {
+      final httpUrl = baseUrl.replaceFirst('https://', 'http://');
+      _logger.log('🔄 HTTPS failed, trying HTTP fallback: $httpUrl');
+      result = await _tryDetectAuth(httpUrl);
+      if (result != null) {
+        baseUrl = httpUrl;
+      }
+    }
+
+    if (result != null) {
+      _lastSuccessfulUrl = baseUrl;
+      _logger.log('✅ Auth detection successful with URL: $baseUrl');
+    }
+
+    return result;
+  }
+
+  /// Normalize a server URL with appropriate protocol
+  String _normalizeUrl(String url) {
+    var baseUrl = url;
     if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
       // Use http for local IPs, https for domains
       if (baseUrl.startsWith('192.') ||
@@ -44,13 +75,22 @@ class AuthManager {
           baseUrl == 'localhost' ||
           baseUrl.startsWith('127.')) {
         baseUrl = 'http://$baseUrl';
+      } else if (baseUrl.endsWith('.ts.net') || baseUrl.contains('.ts.net:')) {
+        // Tailscale URLs - default to http:// since VPN tunnel is already encrypted
+        baseUrl = 'http://$baseUrl';
+        _logger.log('🔗 Detected Tailscale URL, using HTTP');
       } else {
         baseUrl = 'https://$baseUrl';
       }
     }
+    return baseUrl;
+  }
 
+  /// Try to detect auth strategy for a given URL
+  /// Returns the strategy if successful, null if connection failed
+  Future<AuthStrategy?> _tryDetectAuth(String baseUrl) async {
     // First, check if this is a Music Assistant server with native auth
-    _logger.log('Checking for Music Assistant native auth...');
+    _logger.log('Checking for Music Assistant native auth at $baseUrl...');
     final maAuthResult = await _checkMusicAssistantAuth(baseUrl);
     if (maAuthResult != null) {
       if (maAuthResult == 'required') {
@@ -124,7 +164,7 @@ class AuthManager {
       }
     } catch (e) {
       _logger.log('✗ Auth detection error: $e');
-      return null; // Return null instead of rethrow to show generic error
+      return null; // Return null to trigger fallback
     }
 
     _logger.log('⚠️ Could not determine auth method');

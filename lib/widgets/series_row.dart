@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:palette_generator/palette_generator.dart';
 import '../models/media_item.dart';
 import '../providers/music_assistant_provider.dart';
 import '../services/debug_logger.dart';
@@ -32,6 +33,8 @@ class _SeriesRowState extends State<SeriesRow> with AutomaticKeepAliveClientMixi
   final Set<String> _loadingCovers = {};
   // Cache for series book counts
   final Map<String, int> _seriesBookCounts = {};
+  // Cache for extracted colors from covers
+  final Map<String, List<Color>> _seriesExtractedColors = {};
 
   @override
   bool get wantKeepAlive => true;
@@ -74,10 +77,50 @@ class _SeriesRowState extends State<SeriesRow> with AutomaticKeepAliveClientMixi
             _seriesCovers[seriesId] = covers;
             _seriesBookCounts[seriesId] = books.length;
           });
+          // Extract colors asynchronously
+          _extractSeriesColors(seriesId, covers);
         }
       }
     } finally {
       _loadingCovers.remove(seriesId);
+    }
+  }
+
+  /// Extract colors from series book covers for empty cell backgrounds
+  Future<void> _extractSeriesColors(String seriesId, List<String> covers) async {
+    if (_seriesExtractedColors.containsKey(seriesId) || covers.isEmpty) return;
+
+    final extractedColors = <Color>[];
+
+    for (final url in covers.take(4)) {
+      try {
+        final palette = await PaletteGenerator.fromImageProvider(
+          CachedNetworkImageProvider(url),
+          maximumColorCount: 8,
+        );
+
+        if (palette.darkMutedColor != null) {
+          extractedColors.add(palette.darkMutedColor!.color);
+        }
+        if (palette.mutedColor != null) {
+          extractedColors.add(palette.mutedColor!.color);
+        }
+        if (palette.darkVibrantColor != null) {
+          extractedColors.add(palette.darkVibrantColor!.color);
+        }
+        if (palette.dominantColor != null) {
+          final hsl = HSLColor.fromColor(palette.dominantColor!.color);
+          extractedColors.add(hsl.withLightness((hsl.lightness * 0.4).clamp(0.1, 0.3)).toColor());
+        }
+      } catch (e) {
+        _logger.log('📚 Error extracting colors: $e');
+      }
+    }
+
+    if (extractedColors.isNotEmpty && mounted) {
+      setState(() {
+        _seriesExtractedColors[seriesId] = extractedColors;
+      });
     }
   }
 
@@ -169,6 +212,7 @@ class _SeriesRowState extends State<SeriesRow> with AutomaticKeepAliveClientMixi
                             series: s,
                             covers: _seriesCovers[s.id],
                             cachedBookCount: _seriesBookCounts[s.id],
+                            extractedColors: _seriesExtractedColors[s.id],
                             colorScheme: colorScheme,
                             textTheme: textTheme,
                           ),
@@ -192,13 +236,27 @@ class _SeriesCard extends StatelessWidget {
   final AudiobookSeries series;
   final List<String>? covers;
   final int? cachedBookCount;
+  final List<Color>? extractedColors;
   final ColorScheme colorScheme;
   final TextTheme textTheme;
+
+  // Fallback colors when no extracted colors available
+  static const _fallbackColors = [
+    Color(0xFF2D3436), // Dark slate
+    Color(0xFF34495E), // Dark blue-grey
+    Color(0xFF4A3728), // Dark brown
+    Color(0xFF2C3E50), // Midnight blue
+    Color(0xFF3D3D3D), // Charcoal
+    Color(0xFF4A4458), // Dark purple-grey
+    Color(0xFF3E4A47), // Dark teal-grey
+    Color(0xFF4A3F35), // Dark warm grey
+  ];
 
   const _SeriesCard({
     required this.series,
     required this.covers,
     this.cachedBookCount,
+    this.extractedColors,
     required this.colorScheme,
     required this.textTheme,
   });
@@ -210,22 +268,22 @@ class _SeriesCard extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => AudiobookSeriesScreen(series: series),
+            builder: (context) => AudiobookSeriesScreen(
+              series: series,
+              initialCovers: covers,
+            ),
           ),
         );
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
+          // Use AspectRatio to guarantee square cover
+          AspectRatio(
+            aspectRatio: 1,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: colorScheme.surfaceVariant,
-                child: _buildCoverGrid(),
-              ),
+              child: _buildCoverGrid(),
             ),
           ),
           const SizedBox(height: 8),
@@ -258,17 +316,14 @@ class _SeriesCard extends StatelessWidget {
 
   Widget _buildCoverGrid() {
     if (covers == null || covers!.isEmpty) {
-      // Static placeholder - no animation
-      return AspectRatio(
-        aspectRatio: 1,
-        child: Container(
-          color: colorScheme.surfaceContainerHighest,
-          child: Center(
-            child: Icon(
-              Icons.collections_bookmark_rounded,
-              size: 48,
-              color: colorScheme.onSurfaceVariant.withOpacity(0.5),
-            ),
+      // Static placeholder
+      return Container(
+        color: colorScheme.surfaceContainerHighest,
+        child: Center(
+          child: Icon(
+            Icons.collections_bookmark_rounded,
+            size: 48,
+            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
           ),
         ),
       );
@@ -284,37 +339,97 @@ class _SeriesCard extends StatelessWidget {
       gridSize = 3;
     }
 
-    final displayCovers = covers!.take(gridSize * gridSize).toList();
+    // Pad covers to fill grid
+    final displayCovers = List<String?>.filled(gridSize * gridSize, null);
+    for (var i = 0; i < covers!.length && i < displayCovers.length; i++) {
+      displayCovers[i] = covers![i];
+    }
 
-    // Use Column/Row for proper square aspect ratio (no scroll issues)
-    return AspectRatio(
-      aspectRatio: 1,
-      child: Column(
-        children: List.generate(gridSize, (row) {
-          return Expanded(
-            child: Row(
-              children: List.generate(gridSize, (col) {
-                final index = row * gridSize + col;
-                if (index >= displayCovers.length) {
-                  return Expanded(child: Container(color: colorScheme.surfaceContainerHighest));
-                }
-                return Expanded(
-                  child: CachedNetworkImage(
-                    imageUrl: displayCovers[index],
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(
-                      color: colorScheme.surfaceContainerHighest,
-                    ),
-                    errorWidget: (_, __, ___) => Container(
-                      color: colorScheme.surfaceContainerHighest,
-                    ),
-                  ),
-                );
-              }),
-            ),
-          );
-        }),
-      ),
+    // Use series ID to pick consistent colors
+    final colorSeed = series.id.hashCode;
+
+    // Get colors for empty cells
+    final emptyColors = (extractedColors != null && extractedColors!.isNotEmpty)
+        ? extractedColors!
+        : _fallbackColors;
+
+    // Build grid using Column/Row (parent AspectRatio ensures square)
+    return Column(
+      children: List.generate(gridSize, (row) {
+        return Expanded(
+          child: Row(
+            children: List.generate(gridSize, (col) {
+              final index = row * gridSize + col;
+              final coverUrl = displayCovers[index];
+
+              return Expanded(
+                child: coverUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: coverUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          color: colorScheme.surfaceContainerHighest,
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          color: colorScheme.surfaceContainerHighest,
+                        ),
+                      )
+                    : _buildEmptyCell(colorSeed, index, emptyColors),
+              );
+            }),
+          ),
+        );
+      }),
+    );
+  }
+
+  /// Builds an empty cell with either a solid color or a nested grid
+  Widget _buildEmptyCell(int colorSeed, int cellIndex, List<Color> emptyColors) {
+    // Tone down colors
+    final colors = emptyColors.map((c) {
+      final hsl = HSLColor.fromColor(c);
+      return hsl
+          .withSaturation((hsl.saturation * 0.5).clamp(0.05, 0.25))
+          .withLightness((hsl.lightness * 0.7).clamp(0.08, 0.20))
+          .toColor();
+    }).toList();
+
+    // Use combined seed for deterministic but varied patterns
+    final seed = colorSeed + cellIndex * 17;
+
+    // Determine nested grid size: 1 (solid), 2 (2x2), or 3 (3x3)
+    // Distribution: ~50% solid, ~30% 2x2, ~20% 3x3
+    final sizeRoll = seed.abs() % 100;
+    int nestedSize;
+    if (sizeRoll < 50) {
+      nestedSize = 1;
+    } else if (sizeRoll < 80) {
+      nestedSize = 2;
+    } else {
+      nestedSize = 3;
+    }
+
+    if (nestedSize == 1) {
+      final colorIndex = seed.abs() % colors.length;
+      return Container(color: colors[colorIndex]);
+    }
+
+    // Build nested grid (seamless)
+    return Column(
+      children: List.generate(nestedSize, (row) {
+        return Expanded(
+          child: Row(
+            children: List.generate(nestedSize, (col) {
+              final nestedIndex = row * nestedSize + col;
+              final nestedSeed = seed + nestedIndex * 7;
+              final colorIndex = nestedSeed.abs() % colors.length;
+              return Expanded(
+                child: Container(color: colors[colorIndex]),
+              );
+            }),
+          ),
+        );
+      }),
     );
   }
 }

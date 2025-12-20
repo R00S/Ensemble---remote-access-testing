@@ -682,6 +682,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               actions: const [PlayerSelector()],
             ),
             body: DisconnectedState.withSettingsAction(
+              context: context,
               onSettings: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const SettingsScreen()),

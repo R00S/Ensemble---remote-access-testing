@@ -180,6 +180,7 @@ class _NewHomeScreenState extends State<NewHomeScreen> with AutomaticKeepAliveCl
             // Only show disconnected state if we have no cached data at all
             if (!isConnected && !syncService.hasCache) {
               return DisconnectedState.full(
+                context: context,
                 onSettings: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const SettingsScreen()),

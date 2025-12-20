@@ -357,33 +357,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 12),
                   Consumer<ThemeProvider>(
                     builder: (context, themeProvider, _) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildThemeSegment(
-                              mode: ThemeMode.light,
-                              icon: Icons.light_mode_rounded,
-                              isSelected: themeProvider.themeMode == ThemeMode.light,
-                              colorScheme: colorScheme,
-                              onTap: () => themeProvider.setThemeMode(ThemeMode.light),
+                      return SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<ThemeMode>(
+                          segments: [
+                            ButtonSegment<ThemeMode>(
+                              value: ThemeMode.light,
+                              label: Text(S.of(context)!.light),
+                              icon: const Icon(Icons.light_mode_rounded),
                             ),
-                            _buildThemeSegment(
-                              mode: ThemeMode.dark,
-                              icon: Icons.dark_mode_rounded,
-                              isSelected: themeProvider.themeMode == ThemeMode.dark,
-                              colorScheme: colorScheme,
-                              onTap: () => themeProvider.setThemeMode(ThemeMode.dark),
+                            ButtonSegment<ThemeMode>(
+                              value: ThemeMode.dark,
+                              label: Text(S.of(context)!.dark),
+                              icon: const Icon(Icons.dark_mode_rounded),
                             ),
-                            _buildThemeSegment(
-                              mode: ThemeMode.system,
-                              icon: Icons.auto_mode_rounded,
-                              isSelected: themeProvider.themeMode == ThemeMode.system,
-                              colorScheme: colorScheme,
-                              onTap: () => themeProvider.setThemeMode(ThemeMode.system),
+                            ButtonSegment<ThemeMode>(
+                              value: ThemeMode.system,
+                              label: Text(S.of(context)!.system),
+                              icon: const Icon(Icons.auto_mode_rounded),
                             ),
                           ],
+                          selected: {themeProvider.themeMode},
+                          onSelectionChanged: (Set<ThemeMode> newSelection) {
+                            themeProvider.setThemeMode(newSelection.first);
+                          },
+                          style: ButtonStyle(
+                            backgroundColor: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.selected)) {
+                                return colorScheme.primaryContainer;
+                              }
+                              return colorScheme.surfaceVariant.withOpacity(0.3);
+                            }),
+                            foregroundColor: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.selected)) {
+                                return colorScheme.onPrimaryContainer;
+                              }
+                              return colorScheme.onSurfaceVariant;
+                            }),
+                            side: WidgetStateProperty.all(BorderSide.none),
+                          ),
                         ),
                       );
                     },
@@ -413,33 +425,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 12),
                   Consumer<LocaleProvider>(
                     builder: (context, localeProvider, _) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildLocaleSegment(
-                              code: null,
-                              icon: Icons.auto_mode_rounded,
-                              isSelected: localeProvider.locale == null,
-                              colorScheme: colorScheme,
-                              onTap: () => localeProvider.setLocale(null),
+                      return SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<String?>(
+                          segments: [
+                            ButtonSegment<String?>(
+                              value: null,
+                              label: Text(S.of(context)!.system),
+                              icon: const Icon(Icons.auto_mode_rounded),
                             ),
-                            _buildLocaleSegment(
-                              code: 'en',
-                              label: 'EN',
-                              isSelected: localeProvider.locale?.languageCode == 'en',
-                              colorScheme: colorScheme,
-                              onTap: () => localeProvider.setLocale(const Locale('en')),
+                            const ButtonSegment<String?>(
+                              value: 'en',
+                              label: Text('English'),
+                              icon: Icon(Icons.language_rounded),
                             ),
-                            _buildLocaleSegment(
-                              code: 'de',
-                              label: 'DE',
-                              isSelected: localeProvider.locale?.languageCode == 'de',
-                              colorScheme: colorScheme,
-                              onTap: () => localeProvider.setLocale(const Locale('de')),
+                            const ButtonSegment<String?>(
+                              value: 'de',
+                              label: Text('Deutsch'),
+                              icon: Icon(Icons.language_rounded),
                             ),
                           ],
+                          selected: {localeProvider.locale?.languageCode},
+                          onSelectionChanged: (Set<String?> newSelection) {
+                            final code = newSelection.first;
+                            localeProvider.setLocale(code != null ? Locale(code) : null);
+                          },
+                          style: ButtonStyle(
+                            backgroundColor: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.selected)) {
+                                return colorScheme.primaryContainer;
+                              }
+                              return colorScheme.surfaceVariant.withOpacity(0.3);
+                            }),
+                            foregroundColor: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.selected)) {
+                                return colorScheme.onPrimaryContainer;
+                              }
+                              return colorScheme.onSurfaceVariant;
+                            }),
+                            side: WidgetStateProperty.all(BorderSide.none),
+                          ),
                         ),
                       );
                     },
@@ -832,69 +857,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Widget _buildThemeSegment({
-    required ThemeMode mode,
-    required IconData icon,
-    required bool isSelected,
-    required ColorScheme colorScheme,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: isSelected
-          ? colorScheme.primaryContainer
-          : colorScheme.surfaceVariant.withOpacity(0.5),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Icon(
-            icon,
-            color: isSelected
-                ? colorScheme.onPrimaryContainer
-                : colorScheme.onSurfaceVariant.withOpacity(0.7),
-            size: 20,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLocaleSegment({
-    required String? code,
-    String? label,
-    IconData? icon,
-    required bool isSelected,
-    required ColorScheme colorScheme,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: isSelected
-          ? colorScheme.primaryContainer
-          : colorScheme.surfaceVariant.withOpacity(0.5),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: icon != null
-              ? Icon(
-                  icon,
-                  color: isSelected
-                      ? colorScheme.onPrimaryContainer
-                      : colorScheme.onSurfaceVariant.withOpacity(0.7),
-                  size: 20,
-                )
-              : Text(
-                  label ?? code ?? '',
-                  style: TextStyle(
-                    color: isSelected
-                        ? colorScheme.onPrimaryContainer
-                        : colorScheme.onSurfaceVariant.withOpacity(0.7),
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                    fontSize: 14,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
 }

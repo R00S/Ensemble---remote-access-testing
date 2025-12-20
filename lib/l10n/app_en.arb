@@ -1,0 +1,972 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Ensemble",
+  "@appTitle": {
+    "description": "The application title"
+  },
+
+  "connecting": "Connecting...",
+  "@connecting": {
+    "description": "Connection status when connecting"
+  },
+
+  "connected": "Connected",
+  "@connected": {
+    "description": "Connection status when connected"
+  },
+
+  "disconnected": "Disconnected",
+  "@disconnected": {
+    "description": "Connection status when disconnected"
+  },
+
+  "serverAddress": "Server Address",
+  "@serverAddress": {
+    "description": "Login screen server address field label"
+  },
+
+  "serverAddressHint": "e.g., music.example.com or 192.168.1.100",
+  "@serverAddressHint": {
+    "description": "Hint text for server address field"
+  },
+
+  "yourName": "Your Name",
+  "@yourName": {
+    "description": "Login screen name field label"
+  },
+
+  "yourFirstName": "Your first name",
+  "@yourFirstName": {
+    "description": "Hint for name field"
+  },
+
+  "portOptional": "Port (Optional)",
+  "@portOptional": {
+    "description": "Port field label"
+  },
+
+  "portHint": "e.g., 8095 or leave blank",
+  "@portHint": {
+    "description": "Hint for port field"
+  },
+
+  "portDescription": "Leave blank for reverse proxy or standard ports. Enter 8095 for direct connection.",
+  "@portDescription": {
+    "description": "Description for port field"
+  },
+
+  "username": "Username",
+  "@username": {
+    "description": "Username field label"
+  },
+
+  "password": "Password",
+  "@password": {
+    "description": "Password field label"
+  },
+
+  "detectAndConnect": "Detect & Connect",
+  "@detectAndConnect": {
+    "description": "Button to detect auth and connect"
+  },
+
+  "connect": "Connect",
+  "@connect": {
+    "description": "Connect button label"
+  },
+
+  "disconnect": "Disconnect",
+  "@disconnect": {
+    "description": "Disconnect button label"
+  },
+
+  "authServerUrlOptional": "Auth Server URL (Optional)",
+  "@authServerUrlOptional": {
+    "description": "Auth server URL field label"
+  },
+
+  "authServerUrlHint": "e.g., auth.example.com (if different from server)",
+  "@authServerUrlHint": {
+    "description": "Hint for auth server URL"
+  },
+
+  "authServerUrlDescription": "Leave empty if authentication is on the same server",
+  "@authServerUrlDescription": {
+    "description": "Description for auth server URL field"
+  },
+
+  "detectedAuthType": "Detected: {authType}",
+  "@detectedAuthType": {
+    "description": "Shows detected authentication type",
+    "placeholders": {
+      "authType": {
+        "type": "String"
+      }
+    }
+  },
+
+  "serverRequiresAuth": "This server requires authentication",
+  "@serverRequiresAuth": {
+    "description": "Message when server requires auth"
+  },
+
+  "tailscaleVpnConnection": "Tailscale VPN Connection",
+  "@tailscaleVpnConnection": {
+    "description": "Tailscale connection type"
+  },
+
+  "unencryptedConnection": "Unencrypted Connection",
+  "@unencryptedConnection": {
+    "description": "Unencrypted connection warning"
+  },
+
+  "usingHttpOverTailscale": "Using HTTP over Tailscale (encrypted tunnel)",
+  "@usingHttpOverTailscale": {
+    "description": "HTTP over Tailscale description"
+  },
+
+  "httpsFailedUsingHttp": "HTTPS failed, using HTTP fallback",
+  "@httpsFailedUsingHttp": {
+    "description": "HTTP fallback message"
+  },
+
+  "httpNotEncrypted": "HTTP connection - data is not encrypted",
+  "@httpNotEncrypted": {
+    "description": "HTTP not encrypted warning"
+  },
+
+  "pleaseEnterServerAddress": "Please enter your Music Assistant server address",
+  "@pleaseEnterServerAddress": {
+    "description": "Validation message for server address"
+  },
+
+  "pleaseEnterName": "Please enter your name",
+  "@pleaseEnterName": {
+    "description": "Validation message for name"
+  },
+
+  "pleaseEnterValidPort": "Please enter a valid port number (1-65535)",
+  "@pleaseEnterValidPort": {
+    "description": "Validation message for port"
+  },
+
+  "pleaseEnterCredentials": "Please enter username and password",
+  "@pleaseEnterCredentials": {
+    "description": "Validation message for credentials"
+  },
+
+  "authFailed": "Authentication failed. Please check your credentials.",
+  "@authFailed": {
+    "description": "Authentication failed error"
+  },
+
+  "maLoginFailed": "Music Assistant login failed. Please check your credentials.",
+  "@maLoginFailed": {
+    "description": "MA login failed error"
+  },
+
+  "connectionFailed": "Could not connect to server. Please check the address and try again.",
+  "@connectionFailed": {
+    "description": "Connection failed error"
+  },
+
+  "detectingAuth": "Detecting authentication...",
+  "@detectingAuth": {
+    "description": "Status when detecting auth"
+  },
+
+  "cannotDetermineAuth": "Cannot determine authentication requirements. Please check server URL.",
+  "@cannotDetermineAuth": {
+    "description": "Error when auth detection fails"
+  },
+
+  "noAuthentication": "No Authentication",
+  "@noAuthentication": {
+    "description": "Auth type: none"
+  },
+
+  "httpBasicAuth": "HTTP Basic Auth",
+  "@httpBasicAuth": {
+    "description": "Auth type: HTTP Basic"
+  },
+
+  "authelia": "Authelia",
+  "@authelia": {
+    "description": "Auth type: Authelia"
+  },
+
+  "musicAssistantLogin": "Music Assistant Login",
+  "@musicAssistantLogin": {
+    "description": "Auth type: MA Login"
+  },
+
+  "pressBackToMinimize": "Press back again to minimize",
+  "@pressBackToMinimize": {
+    "description": "Back button toast message"
+  },
+
+  "recentlyPlayed": "Recently Played",
+  "@recentlyPlayed": {
+    "description": "Home screen section title"
+  },
+
+  "discoverArtists": "Discover Artists",
+  "@discoverArtists": {
+    "description": "Home screen section title"
+  },
+
+  "discoverAlbums": "Discover Albums",
+  "@discoverAlbums": {
+    "description": "Home screen section title"
+  },
+
+  "continueListening": "Continue Listening",
+  "@continueListening": {
+    "description": "Home screen section title"
+  },
+
+  "discoverAudiobooks": "Discover Audiobooks",
+  "@discoverAudiobooks": {
+    "description": "Home screen section title"
+  },
+
+  "discoverSeries": "Discover Series",
+  "@discoverSeries": {
+    "description": "Home screen section title"
+  },
+
+  "favoriteAlbums": "Favorite Albums",
+  "@favoriteAlbums": {
+    "description": "Home screen section title"
+  },
+
+  "favoriteArtists": "Favorite Artists",
+  "@favoriteArtists": {
+    "description": "Home screen section title"
+  },
+
+  "favoriteTracks": "Favorite Tracks",
+  "@favoriteTracks": {
+    "description": "Home screen section title"
+  },
+
+  "searchMusic": "Search music...",
+  "@searchMusic": {
+    "description": "Search placeholder text"
+  },
+
+  "searchForContent": "Search for artists, albums, or tracks",
+  "@searchForContent": {
+    "description": "Search hint text"
+  },
+
+  "retry": "Retry",
+  "@retry": {
+    "description": "Retry button label"
+  },
+
+  "all": "All",
+  "@all": {
+    "description": "Filter option: All"
+  },
+
+  "artists": "Artists",
+  "@artists": {
+    "description": "Artists category"
+  },
+
+  "albums": "Albums",
+  "@albums": {
+    "description": "Albums category"
+  },
+
+  "tracks": "Tracks",
+  "@tracks": {
+    "description": "Tracks category"
+  },
+
+  "playlists": "Playlists",
+  "@playlists": {
+    "description": "Playlists category"
+  },
+
+  "audiobooks": "Audiobooks",
+  "@audiobooks": {
+    "description": "Audiobooks category"
+  },
+
+  "searchFailed": "Search failed. Please check your connection.",
+  "@searchFailed": {
+    "description": "Search error message"
+  },
+
+  "queue": "Queue",
+  "@queue": {
+    "description": "Queue screen title"
+  },
+
+  "playerQueue": "{playerName} Queue",
+  "@playerQueue": {
+    "description": "Queue title with player name",
+    "placeholders": {
+      "playerName": {
+        "type": "String"
+      }
+    }
+  },
+
+  "noPlayerSelected": "No player selected",
+  "@noPlayerSelected": {
+    "description": "Message when no player is selected"
+  },
+
+  "undo": "Undo",
+  "@undo": {
+    "description": "Undo action"
+  },
+
+  "removedItem": "Removed {itemName}",
+  "@removedItem": {
+    "description": "Snackbar message when item removed",
+    "placeholders": {
+      "itemName": {
+        "type": "String"
+      }
+    }
+  },
+
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings screen title"
+  },
+
+  "debugLogs": "Debug Logs",
+  "@debugLogs": {
+    "description": "Debug logs section"
+  },
+
+  "themeMode": "Theme Mode",
+  "@themeMode": {
+    "description": "Theme mode setting"
+  },
+
+  "light": "Light",
+  "@light": {
+    "description": "Light theme"
+  },
+
+  "dark": "Dark",
+  "@dark": {
+    "description": "Dark theme"
+  },
+
+  "system": "System",
+  "@system": {
+    "description": "System theme"
+  },
+
+  "pullToRefresh": "Pull to refresh the library to apply changes",
+  "@pullToRefresh": {
+    "description": "Refresh hint message"
+  },
+
+  "viewDebugLogs": "View Debug Logs",
+  "@viewDebugLogs": {
+    "description": "Button to view debug logs"
+  },
+
+  "viewAllPlayers": "View All Players",
+  "@viewAllPlayers": {
+    "description": "Button to view all players"
+  },
+
+  "copyLogs": "Copy Logs",
+  "@copyLogs": {
+    "description": "Button to copy logs"
+  },
+
+  "clearLogs": "Clear Logs",
+  "@clearLogs": {
+    "description": "Button to clear logs"
+  },
+
+  "copyList": "Copy List",
+  "@copyList": {
+    "description": "Button to copy list"
+  },
+
+  "close": "Close",
+  "@close": {
+    "description": "Close button"
+  },
+
+  "allPlayersCount": "All Players ({count})",
+  "@allPlayersCount": {
+    "description": "Dialog title with player count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+
+  "errorLoadingPlayers": "Error loading players: {error}",
+  "@errorLoadingPlayers": {
+    "description": "Error loading players",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "logsCopied": "Logs copied to clipboard",
+  "@logsCopied": {
+    "description": "Confirmation when logs copied"
+  },
+
+  "logsCleared": "Logs cleared",
+  "@logsCleared": {
+    "description": "Confirmation when logs cleared"
+  },
+
+  "playerListCopied": "Player list copied to clipboard!",
+  "@playerListCopied": {
+    "description": "Confirmation when player list copied"
+  },
+
+  "noLogsYet": "No logs yet",
+  "@noLogsYet": {
+    "description": "Empty logs message"
+  },
+
+  "infoPlus": "Info+",
+  "@infoPlus": {
+    "description": "Log filter: Info+"
+  },
+
+  "warnings": "Warnings",
+  "@warnings": {
+    "description": "Log filter: Warnings"
+  },
+
+  "errors": "Errors",
+  "@errors": {
+    "description": "Log filter: Errors"
+  },
+
+  "showingEntries": "Showing {filtered} of {total} entries",
+  "@showingEntries": {
+    "description": "Entries count display",
+    "placeholders": {
+      "filtered": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+
+  "thisDevice": "This device",
+  "@thisDevice": {
+    "description": "Label for current device"
+  },
+
+  "ghostPlayer": "Ghost player (duplicate)",
+  "@ghostPlayer": {
+    "description": "Warning for ghost player"
+  },
+
+  "unavailableCorrupt": "Unavailable/Corrupt",
+  "@unavailableCorrupt": {
+    "description": "Warning for corrupt player"
+  },
+
+  "playerId": "ID: {id}",
+  "@playerId": {
+    "description": "Player ID display",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+
+  "playerInfo": "Available: {available} | Provider: {provider}",
+  "@playerInfo": {
+    "description": "Player info display",
+    "placeholders": {
+      "available": {
+        "type": "String"
+      },
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+
+  "shareBugReport": "Share bug report",
+  "@shareBugReport": {
+    "description": "Share bug report option"
+  },
+
+  "moreOptions": "More options",
+  "@moreOptions": {
+    "description": "More options menu"
+  },
+
+  "failedToUpdateFavorite": "Failed to update favorite: {error}",
+  "@failedToUpdateFavorite": {
+    "description": "Error updating favorite",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "noPlayersAvailable": "No players available",
+  "@noPlayersAvailable": {
+    "description": "Message when no players available"
+  },
+
+  "albumAddedToQueue": "Album added to queue",
+  "@albumAddedToQueue": {
+    "description": "Confirmation when album added"
+  },
+
+  "tracksAddedToQueue": "Tracks added to queue",
+  "@tracksAddedToQueue": {
+    "description": "Confirmation when tracks added"
+  },
+
+  "play": "Play",
+  "@play": {
+    "description": "Play button label"
+  },
+
+  "noPlayersFound": "No players found",
+  "@noPlayersFound": {
+    "description": "Message when no players found"
+  },
+
+  "startingRadio": "Starting {name} radio",
+  "@startingRadio": {
+    "description": "Status when starting radio",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+
+  "failedToStartRadio": "Failed to start radio: {error}",
+  "@failedToStartRadio": {
+    "description": "Error starting radio",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "startingRadioOnPlayer": "Starting {name} radio on {playerName}",
+  "@startingRadioOnPlayer": {
+    "description": "Status when starting radio on player",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "playerName": {
+        "type": "String"
+      }
+    }
+  },
+
+  "addedRadioToQueue": "Added {name} radio to queue",
+  "@addedRadioToQueue": {
+    "description": "Confirmation when radio added to queue",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+
+  "failedToAddToQueue": "Failed to add to queue: {error}",
+  "@failedToAddToQueue": {
+    "description": "Error adding to queue",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "radio": "Radio",
+  "@radio": {
+    "description": "Radio button label"
+  },
+
+  "inLibrary": "In Library",
+  "@inLibrary": {
+    "description": "In library section title"
+  },
+
+  "noAlbumsFound": "No albums found",
+  "@noAlbumsFound": {
+    "description": "Empty albums message"
+  },
+
+  "playing": "Playing {name}",
+  "@playing": {
+    "description": "Status when playing",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+
+  "playingTrack": "Playing track",
+  "@playingTrack": {
+    "description": "Status when playing track"
+  },
+
+  "markedAsFinished": "{name} marked as finished",
+  "@markedAsFinished": {
+    "description": "Audiobook marked finished",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+
+  "failedToMarkFinished": "Failed to mark as finished: {error}",
+  "@failedToMarkFinished": {
+    "description": "Error marking finished",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "markedAsUnplayed": "{name} marked as unplayed",
+  "@markedAsUnplayed": {
+    "description": "Audiobook marked unplayed",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+
+  "failedToMarkUnplayed": "Failed to mark as unplayed: {error}",
+  "@failedToMarkUnplayed": {
+    "description": "Error marking unplayed",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "failedToPlay": "Failed to play: {error}",
+  "@failedToPlay": {
+    "description": "Error playing",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "markAsFinished": "Mark as Finished",
+  "@markAsFinished": {
+    "description": "Button to mark as finished"
+  },
+
+  "markAsUnplayed": "Mark as Unplayed",
+  "@markAsUnplayed": {
+    "description": "Button to mark as unplayed"
+  },
+
+  "byAuthor": "By {author}",
+  "@byAuthor": {
+    "description": "Author attribution",
+    "placeholders": {
+      "author": {
+        "type": "String"
+      }
+    }
+  },
+
+  "audiobookCount": "{count} audiobook(s)",
+  "@audiobookCount": {
+    "description": "Audiobook count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+
+  "loading": "Loading...",
+  "@loading": {
+    "description": "Loading state"
+  },
+
+  "bookCount": "{count} book(s)",
+  "@bookCount": {
+    "description": "Book count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+
+  "books": "Books",
+  "@books": {
+    "description": "Books section title"
+  },
+
+  "noFavoriteAudiobooks": "No favorite audiobooks",
+  "@noFavoriteAudiobooks": {
+    "description": "Empty favorite audiobooks"
+  },
+
+  "tapHeartAudiobook": "Tap the heart on an audiobook to add it to favorites",
+  "@tapHeartAudiobook": {
+    "description": "Hint to add audiobook favorite"
+  },
+
+  "noAudiobooks": "No audiobooks",
+  "@noAudiobooks": {
+    "description": "Empty audiobooks"
+  },
+
+  "addAudiobooksHint": "Add audiobooks to your library to see them here",
+  "@addAudiobooksHint": {
+    "description": "Hint to add audiobooks"
+  },
+
+  "noFavoriteArtists": "No favorite artists",
+  "@noFavoriteArtists": {
+    "description": "Empty favorite artists"
+  },
+
+  "tapHeartArtist": "Tap the heart on an artist to add them to favorites",
+  "@tapHeartArtist": {
+    "description": "Hint to add artist favorite"
+  },
+
+  "noFavoriteAlbums": "No favorite albums",
+  "@noFavoriteAlbums": {
+    "description": "Empty favorite albums"
+  },
+
+  "tapHeartAlbum": "Tap the heart on an album to add it to favorites",
+  "@tapHeartAlbum": {
+    "description": "Hint to add album favorite"
+  },
+
+  "noFavoritePlaylists": "No favorite playlists",
+  "@noFavoritePlaylists": {
+    "description": "Empty favorite playlists"
+  },
+
+  "tapHeartPlaylist": "Tap the heart on a playlist to add it to favorites",
+  "@tapHeartPlaylist": {
+    "description": "Hint to add playlist favorite"
+  },
+
+  "noFavoriteTracks": "No favorite tracks",
+  "@noFavoriteTracks": {
+    "description": "Empty favorite tracks"
+  },
+
+  "longPressTrackHint": "Long-press a track and tap the heart to add it to favorites",
+  "@longPressTrackHint": {
+    "description": "Hint to add track favorite"
+  },
+
+  "loadSeries": "Load Series",
+  "@loadSeries": {
+    "description": "Button to load series"
+  },
+
+  "notConnected": "Not connected to Music Assistant",
+  "@notConnected": {
+    "description": "Disconnected state title"
+  },
+
+  "notConnectedTitle": "Not Connected",
+  "@notConnectedTitle": {
+    "description": "Disconnected state short title"
+  },
+
+  "connectHint": "Connect to your Music Assistant server to start listening",
+  "@connectHint": {
+    "description": "Hint to connect"
+  },
+
+  "configureServer": "Configure Server",
+  "@configureServer": {
+    "description": "Button to configure server"
+  },
+
+  "noArtistsFound": "No artists found",
+  "@noArtistsFound": {
+    "description": "Empty artists"
+  },
+
+  "noTracksFound": "No tracks found",
+  "@noTracksFound": {
+    "description": "Empty tracks"
+  },
+
+  "noPlaylistsFound": "No playlists found",
+  "@noPlaylistsFound": {
+    "description": "Empty playlists"
+  },
+
+  "queueIsEmpty": "Queue is empty",
+  "@queueIsEmpty": {
+    "description": "Empty queue"
+  },
+
+  "noResultsFound": "No results found",
+  "@noResultsFound": {
+    "description": "Empty search results"
+  },
+
+  "refresh": "Refresh",
+  "@refresh": {
+    "description": "Refresh button"
+  },
+
+  "debugConsole": "Debug Console",
+  "@debugConsole": {
+    "description": "Debug console title"
+  },
+
+  "copy": "Copy",
+  "@copy": {
+    "description": "Copy button"
+  },
+
+  "clear": "Clear",
+  "@clear": {
+    "description": "Clear button"
+  },
+
+  "noLogsToCopy": "No logs to copy",
+  "@noLogsToCopy": {
+    "description": "Message when no logs to copy"
+  },
+
+  "noDebugLogsYet": "No debug logs yet. Try detecting auth.",
+  "@noDebugLogsYet": {
+    "description": "Empty debug logs hint"
+  },
+
+  "showDebug": "Show Debug",
+  "@showDebug": {
+    "description": "Button to show debug"
+  },
+
+  "hideDebug": "Hide Debug",
+  "@hideDebug": {
+    "description": "Button to hide debug"
+  },
+
+  "chapters": "Chapters",
+  "@chapters": {
+    "description": "Chapters panel title"
+  },
+
+  "noChapters": "No chapters",
+  "@noChapters": {
+    "description": "Empty chapters title"
+  },
+
+  "noChapterInfo": "This audiobook has no chapter information",
+  "@noChapterInfo": {
+    "description": "Empty chapters message"
+  },
+
+  "errorSeeking": "Error seeking: {error}",
+  "@errorSeeking": {
+    "description": "Error when seeking",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "error": "Error: {error}",
+  "@error": {
+    "description": "Generic error message",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+
+  "home": "Home",
+  "@home": {
+    "description": "Home navigation label"
+  },
+
+  "library": "Library",
+  "@library": {
+    "description": "Library navigation label"
+  },
+
+  "homeScreen": "Home Screen",
+  "@homeScreen": {
+    "description": "Home screen settings section"
+  },
+
+  "metadataApis": "Metadata APIs",
+  "@metadataApis": {
+    "description": "Metadata APIs settings section"
+  },
+
+  "theme": "Theme",
+  "@theme": {
+    "description": "Theme settings section"
+  },
+
+  "materialYou": "Material You",
+  "@materialYou": {
+    "description": "Material You theme option"
+  },
+
+  "adaptiveTheme": "Adaptive Theme",
+  "@adaptiveTheme": {
+    "description": "Adaptive theme option"
+  },
+
+  "language": "Language",
+  "@language": {
+    "description": "Language setting"
+  },
+
+  "english": "English",
+  "@english": {
+    "description": "English language"
+  },
+
+  "german": "German",
+  "@german": {
+    "description": "German language"
+  }
+}

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_localizations.dart';
 import 'providers/music_assistant_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'screens/home_screen.dart';
@@ -228,6 +230,14 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
                   navigatorKey: navigationProvider.navigatorKey,
                   title: 'Ensemble',
                   debugShowCheckedModeBanner: false,
+                  // Localization
+                  localizationsDelegates: const [
+                    S.delegate,
+                    GlobalMaterialLocalizations.delegate,
+                    GlobalWidgetsLocalizations.delegate,
+                    GlobalCupertinoLocalizations.delegate,
+                  ],
+                  supportedLocales: S.supportedLocales,
                   themeMode: themeProvider.themeMode,
                   theme: AppTheme.lightTheme(colorScheme: lightColorScheme),
                   darkTheme: AppTheme.darkTheme(colorScheme: darkColorScheme),

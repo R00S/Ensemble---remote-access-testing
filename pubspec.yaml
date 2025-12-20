@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.19.0
 
   # UI
   material_design_icons_flutter: ^7.0.7296
@@ -54,6 +57,7 @@ dev_dependencies:
   drift_dev: ^2.22.1
 
 flutter:
+  generate: true
   uses-material-design: true
 
   assets:

@@ -529,24 +529,35 @@ class MusicAssistantProvider with ChangeNotifier {
     }
   }
 
-  /// Check if server version is >= 2.7.0b20 (uses Sendspin instead of builtin_player)
-  bool _serverUsesSendspin() {
+  /// Parse server version into components for version comparisons
+  /// Returns null if version cannot be parsed
+  ({int major, int minor, int patch, int? beta})? _parseServerVersion() {
     final serverInfo = _api?.serverInfo;
-    if (serverInfo == null) return false;
+    if (serverInfo == null) return null;
 
     final versionStr = serverInfo['server_version'] as String?;
-    if (versionStr == null) return false;
+    if (versionStr == null) return null;
 
     // Parse version like "2.8.0b2" or "2.7.0b20" or "2.7.1"
     // Format: MAJOR.MINOR.PATCH[bBETA]
     final versionRegex = RegExp(r'^(\d+)\.(\d+)\.(\d+)(?:b(\d+))?');
     final match = versionRegex.firstMatch(versionStr);
-    if (match == null) return false;
+    if (match == null) return null;
 
-    final major = int.parse(match.group(1)!);
-    final minor = int.parse(match.group(2)!);
-    final patch = int.parse(match.group(3)!);
-    final beta = match.group(4) != null ? int.parse(match.group(4)!) : null;
+    return (
+      major: int.parse(match.group(1)!),
+      minor: int.parse(match.group(2)!),
+      patch: int.parse(match.group(3)!),
+      beta: match.group(4) != null ? int.parse(match.group(4)!) : null,
+    );
+  }
+
+  /// Check if server version is >= 2.7.0b20 (uses Sendspin instead of builtin_player)
+  bool _serverUsesSendspin() {
+    final version = _parseServerVersion();
+    if (version == null) return false;
+
+    final (:major, :minor, :patch, :beta) = version;
 
     // Compare with 2.7.0b20
     if (major > 2) return true;
@@ -560,6 +571,32 @@ class MusicAssistantProvider with ChangeNotifier {
     // patch == 0, so version is 2.7.0 - need beta >= 20
     if (beta == null) return true; // 2.7.0 release is newer than 2.7.0b20
     return beta >= 20;
+  }
+
+  /// Check if server version is >= 2.8.0 (has built-in /sendspin proxy endpoint)
+  /// The /sendspin proxy was added in MA 2.8.0 (PR #2840)
+  /// MA 2.7.x does NOT have this proxy - users must expose port 8927 directly
+  /// or manually configure reverse proxy routing to port 8927
+  bool _serverHasSendspinProxy() {
+    final version = _parseServerVersion();
+    if (version == null) return false;
+
+    final (:major, :minor, :patch, :beta) = version;
+
+    // Compare with 2.8.0
+    if (major > 2) return true;
+    if (major < 2) return false;
+    // major == 2
+    if (minor > 8) return true;
+    if (minor < 8) return false;
+    // minor == 8, any 2.8.x version has the proxy
+    return true;
+  }
+
+  /// Get the server version string for logging
+  String _getServerVersionString() {
+    final serverInfo = _api?.serverInfo;
+    return serverInfo?['server_version'] as String? ?? 'unknown';
   }
 
   Future<void> _registerLocalPlayer() async {
@@ -665,19 +702,24 @@ class MusicAssistantProvider with ChangeNotifier {
   /// Connect to Music Assistant via Sendspin protocol (MA 2.7.0b20+)
   /// This is the replacement for builtin_player when that API is not available.
   ///
-  /// Connection strategy:
-  /// 1. If server is HTTPS, try external wss://{server}/sendspin first
-  /// 2. Get local_ws_url from API and try that
-  /// 3. WebRTC fallback as last resort (requires TURN servers)
+  /// Connection strategy depends on MA version and network:
+  /// - MA 2.8.0+: Has built-in /sendspin proxy, works with any reverse proxy setup
+  /// - MA 2.7.x: NO proxy, must either:
+  ///   - Use local IP with port 8927 exposed, OR
+  ///   - Manually configure reverse proxy to route /sendspin to port 8927
   Future<bool> _connectViaSendspin() async {
     if (_api == null || _serverUrl == null) return false;
 
     try {
+      final serverVersion = _getServerVersionString();
+      final hasProxy = _serverHasSendspinProxy();
+      _logger.log('Sendspin: Server version $serverVersion, has proxy: $hasProxy');
+
       // Initialize Sendspin service
       _sendspinService?.dispose();
       _sendspinService = SendspinService(_serverUrl!);
 
-      // Set auth token for MA 2.7.1+ proxy authentication
+      // Set auth token for proxy authentication (MA 2.8.0+ or manually configured proxy)
       final authToken = await SettingsService.getMaAuthToken();
       if (authToken != null) {
         _sendspinService!.setAuthToken(authToken);
@@ -716,22 +758,37 @@ class MusicAssistantProvider with ChangeNotifier {
       final isHttps = serverUri.scheme == 'https' ||
                       (!_serverUrl!.contains('://') && !isLocalIp);
 
-      // Strategy 1: For local IPs, connect directly to Sendspin port
+      // Strategy 1: For local IPs, connect directly to Sendspin port 8927
       if (isLocalIp) {
         final localSendspinUrl = 'ws://${serverUri.host}:8927/sendspin';
         _logger.log('Sendspin: Local network detected, trying direct connection: $localSendspinUrl');
         final connected = await _sendspinService!.connectWithUrl(localSendspinUrl);
         if (connected) {
           _sendspinConnected = true;
-          _logger.log('✅ Sendspin: Connected via local network');
+          _logger.log('✅ Sendspin: Connected via local network (port 8927)');
           return true;
         }
-        _logger.log('⚠️ Sendspin: Local connection failed (port 8927 may not be accessible)');
+        _logger.log('⚠️ Sendspin: Local connection to port 8927 failed');
+
+        // For local IPs, also try the proxy path in case user has a local reverse proxy
+        _logger.log('Sendspin: Trying local proxy fallback...');
+        final localProxyUrl = 'ws://${serverUri.host}:${serverUri.hasPort ? serverUri.port : 8095}/sendspin';
+        final proxyConnected = await _sendspinService!.connectWithUrl(localProxyUrl);
+        if (proxyConnected) {
+          _sendspinConnected = true;
+          _logger.log('✅ Sendspin: Connected via local proxy');
+          return true;
+        }
       }
 
       // Strategy 2: For external/HTTPS servers, use the proxy at /sendspin
       if (isHttps || !isLocalIp) {
-        _logger.log('Sendspin: Trying external proxy connection');
+        if (hasProxy) {
+          _logger.log('Sendspin: MA 2.8.0+ detected, using built-in /sendspin proxy');
+        } else {
+          _logger.log('Sendspin: MA 2.7.x detected, trying /sendspin (requires manual proxy config)');
+        }
+
         final connected = await _sendspinService!.connect();
         if (connected) {
           _sendspinConnected = true;
@@ -741,18 +798,37 @@ class MusicAssistantProvider with ChangeNotifier {
         _logger.log('⚠️ Sendspin: External proxy connection failed');
       }
 
-      // Both strategies failed
+      // All strategies failed - provide version-specific guidance
       _logger.log('❌ Sendspin: All connection strategies failed');
-      if (isLocalIp) {
-        _logger.log('ℹ️ Ensure port 8927 is accessible on your Music Assistant server');
-      } else {
-        _logger.log('ℹ️ Ensure /sendspin route is configured in your reverse proxy');
-      }
+      _logSendspinTroubleshooting(isLocalIp, hasProxy, serverVersion);
 
       return false;
     } catch (e) {
       _logger.log('❌ Sendspin connection error: $e');
       return false;
+    }
+  }
+
+  /// Log troubleshooting guidance based on setup
+  void _logSendspinTroubleshooting(bool isLocalIp, bool hasProxy, String serverVersion) {
+    if (isLocalIp) {
+      _logger.log('ℹ️ LOCAL IP SETUP: Add port 8927 to your Docker compose:');
+      _logger.log('   ports:');
+      _logger.log('     - "8095:8095"');
+      _logger.log('     - "8927:8927"  # Required for Sendspin');
+    } else if (!hasProxy) {
+      // MA 2.7.x without built-in proxy
+      _logger.log('ℹ️ MA $serverVersion does not have built-in /sendspin proxy');
+      _logger.log('ℹ️ OPTIONS:');
+      _logger.log('   1. Upgrade to Music Assistant 2.8.0+ (recommended)');
+      _logger.log('   2. Or add reverse proxy config for /sendspin → port 8927');
+      _logger.log('   Traefik: PathPrefix(`/sendspin`) → service port 8927');
+      _logger.log('   Nginx: location /sendspin { proxy_pass http://ma:8927; }');
+    } else {
+      // MA 2.8.0+ but still failing
+      _logger.log('ℹ️ MA $serverVersion should have /sendspin proxy');
+      _logger.log('ℹ️ Check that your reverse proxy forwards WebSocket connections');
+      _logger.log('   Ensure Upgrade and Connection headers are passed through');
     }
   }
 

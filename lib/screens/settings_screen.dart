@@ -685,8 +685,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               controller: _audioDbApiKeyController,
               style: TextStyle(color: colorScheme.onSurface),
               decoration: InputDecoration(
-                labelText: 'TheAudioDB API Key',
-                hintText: 'Use "2" for free tier or premium key',
+                labelText: S.of(context)!.theAudioDbApiKey,
+                hintText: S.of(context)!.theAudioDbApiKeyHint,
                 hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
                 filled: true,
                 fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
@@ -721,7 +721,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // Audiobook Libraries section
             if (_discoveredLibraries.isNotEmpty) ...[
               Text(
-                'Audiobook Libraries',
+                S.of(context)!.audiobookLibraries,
                 style: textTheme.titleMedium?.copyWith(
                   color: colorScheme.onBackground,
                   fontWeight: FontWeight.bold,
@@ -729,7 +729,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Choose which Audiobookshelf libraries to include',
+                S.of(context)!.chooseAudiobookLibraries,
                 style: textTheme.bodySmall?.copyWith(
                   color: colorScheme.onBackground.withOpacity(0.6),
                 ),
@@ -746,7 +746,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     final index = entry.key;
                     final library = entry.value;
                     final path = library['path'] ?? '';
-                    final name = library['name'] ?? 'Unknown Library';
+                    final name = library['name'] ?? S.of(context)!.unknownLibrary;
                     final isEnabled = _libraryEnabled[path] ?? true;
 
                     return Column(

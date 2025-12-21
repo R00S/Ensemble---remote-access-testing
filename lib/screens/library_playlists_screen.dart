@@ -139,8 +139,8 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
         ),
         subtitle: Text(
           playlist.trackCount != null
-              ? '${playlist.trackCount} tracks'
-              : playlist.owner ?? 'Playlist',
+              ? '${playlist.trackCount} ${S.of(context)!.tracks}'
+              : playlist.owner ?? S.of(context)!.playlist,
           style: textTheme.bodySmall?.copyWith(
             color: colorScheme.onSurface.withOpacity(0.7),
           ),

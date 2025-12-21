@@ -209,9 +209,9 @@ class _PlaylistDetailsScreenState extends State<PlaylistDetailsScreen> {
                   ),
                   const SizedBox(height: 24),
                   // Tracks header
-                  const Text(
-                    'Tracks',
-                    style: TextStyle(
+                  Text(
+                    S.of(context)!.tracks,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -231,7 +231,7 @@ class _PlaylistDetailsScreenState extends State<PlaylistDetailsScreen> {
                   ? SliverFillRemaining(
                       child: Center(
                         child: Text(
-                          'No tracks in playlist',
+                          S.of(context)!.noTracksInPlaylist,
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 16,

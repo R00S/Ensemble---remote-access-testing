@@ -1460,7 +1460,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'No Series Found',
+                        l10n.noSeriesFound,
                         style: TextStyle(
                           color: colorScheme.onSurface,
                           fontSize: 20,
@@ -1470,8 +1470,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                       const SizedBox(height: 8),
                       Text(
                         _seriesLoaded
-                            ? 'No series available from your audiobook library.\nPull to refresh.'
-                            : 'Pull down to load series\nfrom Music Assistant',
+                            ? l10n.noSeriesAvailable
+                            : l10n.pullToLoadSeries,
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: colorScheme.onSurface.withOpacity(0.6),
@@ -2288,7 +2288,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       subtitle: Text(
         playlist.trackCount != null
             ? '${playlist.trackCount} ${l10n.tracks}'
-            : playlist.owner ?? 'Playlist',
+            : playlist.owner ?? l10n.playlist,
         style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -2377,7 +2377,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           Text(
             playlist.trackCount != null
                 ? '${playlist.trackCount} ${l10n.tracks}'
-                : playlist.owner ?? 'Playlist',
+                : playlist.owner ?? l10n.playlist,
             style: textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurface.withOpacity(0.7),
             ),
@@ -2488,7 +2488,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         final player = maProvider.selectedPlayer;
         if (player == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No player selected')),
+            SnackBar(content: Text(S.of(context)!.noPlayerSelected)),
           );
           return;
         }

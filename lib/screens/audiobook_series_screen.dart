@@ -169,7 +169,7 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
 
       if (maProvider.api == null) {
         setState(() {
-          _error = 'Not connected to Music Assistant';
+          _error = S.of(context)!.notConnected;
           _isLoading = false;
         });
         return;
@@ -434,7 +434,7 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
                         size: 48, color: colorScheme.onSurfaceVariant),
                     const SizedBox(height: 16),
                     Text(
-                      'No books found in this series',
+                      S.of(context)!.noBooksInSeries,
                       style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                   ],
@@ -710,7 +710,7 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
               ),
             ),
           ),
-          if (book.authorsString.isNotEmpty && book.authorsString != 'Unknown Author')
+          if (book.authorsString.isNotEmpty && book.authorsString != S.of(context)!.unknownAuthor)
             Text(
               book.authorsString,
               style: textTheme.bodySmall?.copyWith(
@@ -792,7 +792,7 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
         ),
       ),
       subtitle: Text(
-        book.authorsString.isNotEmpty && book.authorsString != 'Unknown Author'
+        book.authorsString.isNotEmpty && book.authorsString != S.of(context)!.unknownAuthor
             ? book.authorsString
             : book.duration != null
                 ? _formatDuration(book.duration!)

@@ -1005,5 +1005,46 @@
   "connectionError": "Connection Error",
   "twoColumnGrid": "2-column grid",
   "threeColumnGrid": "3-column grid",
-  "fromProviders": "From Providers"
+  "fromProviders": "From Providers",
+
+  "resume": "Resume",
+  "about": "About",
+  "inProgress": "In progress",
+  "narratedBy": "Narrated by {narrators}",
+  "@narratedBy": {
+    "placeholders": {
+      "narrators": {
+        "type": "String"
+      }
+    }
+  },
+  "unknownNarrator": "Unknown Narrator",
+  "unknownAuthor": "Unknown Author",
+  "loadingChapters": "Loading chapters...",
+  "noChapterInfoAvailable": "No chapter information available",
+  "percentComplete": "{percent}% complete",
+  "@percentComplete": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "theAudioDbApiKey": "TheAudioDB API Key",
+  "theAudioDbApiKeyHint": "Use \"2\" for free tier or premium key",
+  "audiobookLibraries": "Audiobook Libraries",
+  "chooseAudiobookLibraries": "Choose which Audiobookshelf libraries to include",
+  "unknownLibrary": "Unknown Library",
+  "noSeriesFound": "No Series Found",
+  "ensembleBugReport": "Ensemble Bug Report",
+  "byOwner": "By {owner}",
+  "@byOwner": {
+    "placeholders": {
+      "owner": {
+        "type": "String"
+      }
+    }
+  },
+  "noSeriesAvailable": "No series available from your audiobook library.\nPull to refresh.",
+  "pullToLoadSeries": "Pull down to load series\nfrom Music Assistant"
 }

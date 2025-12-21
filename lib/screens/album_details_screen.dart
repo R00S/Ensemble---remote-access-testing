@@ -838,7 +838,7 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Tracks',
+                    S.of(context)!.tracks,
                     style: textTheme.titleLarge?.copyWith(
                       color: colorScheme.onBackground,
                       fontWeight: FontWeight.bold,
@@ -859,7 +859,7 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
             SliverFillRemaining(
               child: Center(
                 child: Text(
-                  'No tracks found',
+                  S.of(context)!.noTracksFound,
                   style: TextStyle(
                     color: colorScheme.onBackground.withOpacity(0.54),
                     fontSize: 16,

@@ -59,7 +59,7 @@ class _DebugLogScreenState extends State<DebugLogScreen> {
 
       await Share.share(
         report,
-        subject: 'Ensemble Bug Report',
+        subject: S.of(context)!.ensembleBugReport,
       );
     } finally {
       if (mounted) {

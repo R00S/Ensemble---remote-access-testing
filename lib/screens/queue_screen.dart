@@ -149,9 +149,9 @@ class _QueueScreenState extends State<QueueScreen> {
     final upcomingItems = _queue!.items.sublist(currentIndex);
 
     if (upcomingItems.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.queue_music,
-        message: 'No upcoming tracks',
+        message: S.of(context)!.noUpcomingTracks,
       );
     }
 

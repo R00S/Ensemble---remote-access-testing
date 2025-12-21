@@ -231,5 +231,25 @@
   "connectionError": "Verbindungsfehler",
   "twoColumnGrid": "2-Spalten-Raster",
   "threeColumnGrid": "3-Spalten-Raster",
-  "fromProviders": "Von Anbietern"
+  "fromProviders": "Von Anbietern",
+
+  "resume": "Fortsetzen",
+  "about": "Über",
+  "inProgress": "In Bearbeitung",
+  "narratedBy": "Gesprochen von {narrators}",
+  "unknownNarrator": "Unbekannter Sprecher",
+  "unknownAuthor": "Unbekannter Autor",
+  "loadingChapters": "Lade Kapitel...",
+  "noChapterInfoAvailable": "Keine Kapitelinformationen verfügbar",
+  "percentComplete": "{percent}% abgeschlossen",
+  "theAudioDbApiKey": "TheAudioDB API-Schlüssel",
+  "theAudioDbApiKeyHint": "\"2\" für kostenlosen Zugang oder Premium-Schlüssel",
+  "audiobookLibraries": "Hörbuch-Bibliotheken",
+  "chooseAudiobookLibraries": "Wähle welche Audiobookshelf-Bibliotheken einbezogen werden",
+  "unknownLibrary": "Unbekannte Bibliothek",
+  "noSeriesFound": "Keine Serien gefunden",
+  "ensembleBugReport": "Ensemble Fehlerbericht",
+  "byOwner": "Von {owner}",
+  "noSeriesAvailable": "Keine Serien in deiner Hörbuch-Bibliothek verfügbar.\nZiehe zum Aktualisieren.",
+  "pullToLoadSeries": "Ziehe nach unten um Serien\nvon Music Assistant zu laden"
 }

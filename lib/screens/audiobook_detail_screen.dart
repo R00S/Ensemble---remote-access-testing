@@ -588,10 +588,10 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                     ),
 
                     // Narrator
-                    if (book.narratorsString != 'Unknown Narrator') ...[
+                    if (book.narratorsString != S.of(context)!.unknownNarrator) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Narrated by ${book.narratorsString}',
+                        S.of(context)!.narratedBy(book.narratorsString),
                         style: textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurface.withOpacity(0.6),
                         ),
@@ -625,7 +625,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${(book.progress * 100).toInt()}% complete',
+                            S.of(context)!.percentComplete((book.progress * 100).toInt()),
                             style: textTheme.bodyMedium?.copyWith(
                               color: colorScheme.primary,
                             ),
@@ -663,7 +663,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                                 startPositionMs: hasResumePosition ? book.resumePositionMs : null,
                               ),
                               icon: Icon(hasResumePosition ? Icons.play_arrow : Icons.play_arrow),
-                              label: Text(hasResumePosition ? 'Resume' : S.of(context)!.play),
+                              label: Text(hasResumePosition ? S.of(context)!.resume : S.of(context)!.play),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: colorScheme.primary,
                                 foregroundColor: colorScheme.onPrimary,
@@ -741,7 +741,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                     if (book.description != null && book.description!.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Text(
-                        'About',
+                        S.of(context)!.about,
                         style: textTheme.titleLarge?.copyWith(
                           color: colorScheme.onSurface,
                           fontWeight: FontWeight.bold,
@@ -772,7 +772,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                     // Chapters Header
                     const SizedBox(height: 24),
                     Text(
-                      'Chapters',
+                      S.of(context)!.chapters,
                       style: textTheme.titleLarge?.copyWith(
                         color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
@@ -816,7 +816,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Loading chapters...',
+                    S.of(context)!.loadingChapters,
                     style: textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurface.withOpacity(0.6),
                     ),
@@ -854,7 +854,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
           padding: const EdgeInsets.all(24.0),
           child: Center(
             child: Text(
-              'No chapter information available',
+              S.of(context)!.noChapterInfoAvailable,
               style: textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurface.withOpacity(0.6),
               ),
@@ -915,7 +915,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
           ),
           subtitle: isInProgress
               ? Text(
-                  'In progress',
+                  S.of(context)!.inProgress,
                   style: textTheme.bodySmall?.copyWith(
                     color: colorScheme.primary,
                   ),
@@ -973,7 +973,7 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                             children: [
                               const Icon(Icons.play_arrow, size: 20),
                               const SizedBox(width: 8),
-                              Text(isInProgress ? 'Resume' : S.of(context)!.play),
+                              Text(isInProgress ? S.of(context)!.resume : S.of(context)!.play),
                             ],
                           ),
                         ),

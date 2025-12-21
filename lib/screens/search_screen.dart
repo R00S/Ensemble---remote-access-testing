@@ -429,7 +429,7 @@ class SearchScreenState extends State<SearchScreen> {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        'Artist',
+        S.of(context)!.artist,
         style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
       ),
         onTap: () {
@@ -557,7 +557,7 @@ class SearchScreenState extends State<SearchScreen> {
 
     if (maProvider.selectedPlayer == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No player selected')),
+        SnackBar(content: Text(S.of(context)!.noPlayerSelected)),
       );
       return;
     }

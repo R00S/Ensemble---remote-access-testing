@@ -406,9 +406,9 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
               ),
             ),
           ),
-          if (book.narratorsString != 'Unknown Narrator')
+          if (book.narratorsString != S.of(context)!.unknownNarrator)
             Text(
-              'Narrated by ${book.narratorsString}',
+              S.of(context)!.narratedBy(book.narratorsString),
               style: textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurface.withOpacity(0.6),
               ),
@@ -489,8 +489,8 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
         ),
       ),
       subtitle: Text(
-        book.narratorsString != 'Unknown Narrator'
-            ? 'Narrated by ${book.narratorsString}'
+        book.narratorsString != S.of(context)!.unknownNarrator
+            ? S.of(context)!.narratedBy(book.narratorsString)
             : book.duration != null
                 ? _formatDuration(book.duration!)
                 : '',

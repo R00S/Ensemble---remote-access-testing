@@ -38,6 +38,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Audiobook libraries
   List<Map<String, String>> _discoveredLibraries = [];
   Map<String, bool> _libraryEnabled = {};
+  // Player settings
+  bool _preferLocalPlayer = false;
+  bool _smartSortPlayers = false;
 
   @override
   void initState() {
@@ -82,6 +85,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       libraryEnabled[path] = enabled == null || enabled.contains(path);
     }
 
+    // Load player settings
+    final preferLocal = await SettingsService.getPreferLocalPlayer();
+    final smartSort = await SettingsService.getSmartSortPlayers();
+
     if (mounted) {
       setState(() {
         _showRecentAlbums = showRecent;
@@ -96,6 +103,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _homeRowOrder = rowOrder;
         _discoveredLibraries = discovered;
         _libraryEnabled = libraryEnabled;
+        _preferLocalPlayer = preferLocal;
+        _smartSortPlayers = smartSort;
       });
     }
   }
@@ -411,91 +420,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 16),
 
-            // Language picker
-            Consumer<LocaleProvider>(
-              builder: (context, localeProvider, _) {
-                String getLanguageName(String? code) {
-                  switch (code) {
-                    case 'en':
-                      return 'English';
-                    case 'de':
-                      return 'Deutsch';
-                    case 'es':
-                      return 'Español';
-                    default:
-                      return S.of(context)!.system;
-                  }
-                }
-
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  tileColor: colorScheme.surfaceVariant.withOpacity(0.5),
-                  leading: Icon(Icons.language_rounded, color: colorScheme.onSurfaceVariant),
-                  title: Text(S.of(context)!.language),
-                  subtitle: Text(
-                    getLanguageName(localeProvider.locale?.languageCode),
-                    style: TextStyle(color: colorScheme.primary),
-                  ),
-                  trailing: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (dialogContext) {
-                        return AlertDialog(
-                          title: Text(S.of(context)!.language),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              RadioListTile<String?>(
-                                title: Text(S.of(context)!.system),
-                                subtitle: const Text('Auto'),
-                                value: null,
-                                groupValue: localeProvider.locale?.languageCode,
-                                onChanged: (value) {
-                                  localeProvider.setLocale(null);
-                                  Navigator.pop(dialogContext);
-                                },
-                              ),
-                              RadioListTile<String?>(
-                                title: const Text('English'),
-                                value: 'en',
-                                groupValue: localeProvider.locale?.languageCode,
-                                onChanged: (value) {
-                                  localeProvider.setLocale(const Locale('en'));
-                                  Navigator.pop(dialogContext);
-                                },
-                              ),
-                              RadioListTile<String?>(
-                                title: const Text('Deutsch'),
-                                value: 'de',
-                                groupValue: localeProvider.locale?.languageCode,
-                                onChanged: (value) {
-                                  localeProvider.setLocale(const Locale('de'));
-                                  Navigator.pop(dialogContext);
-                                },
-                              ),
-                              RadioListTile<String?>(
-                                title: const Text('Español'),
-                                value: 'es',
-                                groupValue: localeProvider.locale?.languageCode,
-                                onChanged: (value) {
-                                  localeProvider.setLocale(const Locale('es'));
-                                  Navigator.pop(dialogContext);
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
-
-            const SizedBox(height: 16),
-
             // Accent color picker
             Consumer<ThemeProvider>(
               builder: (context, themeProvider, _) {
@@ -612,6 +536,164 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 );
               },
+            ),
+
+            const SizedBox(height: 32),
+
+            // Language section
+            Text(
+              S.of(context)!.language,
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onBackground,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Consumer<LocaleProvider>(
+              builder: (context, localeProvider, _) {
+                String getLanguageName(String? code) {
+                  switch (code) {
+                    case 'en':
+                      return 'English';
+                    case 'de':
+                      return 'Deutsch';
+                    case 'es':
+                      return 'Español';
+                    default:
+                      return S.of(context)!.system;
+                  }
+                }
+
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  tileColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                  leading: Icon(Icons.language_rounded, color: colorScheme.onSurfaceVariant),
+                  title: Text(S.of(context)!.language),
+                  subtitle: Text(
+                    getLanguageName(localeProvider.locale?.languageCode),
+                    style: TextStyle(color: colorScheme.primary),
+                  ),
+                  trailing: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (dialogContext) {
+                        return AlertDialog(
+                          title: Text(S.of(context)!.language),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              RadioListTile<String?>(
+                                title: Text(S.of(context)!.system),
+                                subtitle: const Text('Auto'),
+                                value: null,
+                                groupValue: localeProvider.locale?.languageCode,
+                                onChanged: (value) {
+                                  localeProvider.setLocale(null);
+                                  Navigator.pop(dialogContext);
+                                },
+                              ),
+                              RadioListTile<String?>(
+                                title: const Text('English'),
+                                value: 'en',
+                                groupValue: localeProvider.locale?.languageCode,
+                                onChanged: (value) {
+                                  localeProvider.setLocale(const Locale('en'));
+                                  Navigator.pop(dialogContext);
+                                },
+                              ),
+                              RadioListTile<String?>(
+                                title: const Text('Deutsch'),
+                                value: 'de',
+                                groupValue: localeProvider.locale?.languageCode,
+                                onChanged: (value) {
+                                  localeProvider.setLocale(const Locale('de'));
+                                  Navigator.pop(dialogContext);
+                                },
+                              ),
+                              RadioListTile<String?>(
+                                title: const Text('Español'),
+                                value: 'es',
+                                groupValue: localeProvider.locale?.languageCode,
+                                onChanged: (value) {
+                                  localeProvider.setLocale(const Locale('es'));
+                                  Navigator.pop(dialogContext);
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+
+            const SizedBox(height: 32),
+
+            // Player section
+            Text(
+              S.of(context)!.players,
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onBackground,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SwitchListTile(
+                title: Text(
+                  S.of(context)!.preferLocalPlayer,
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                subtitle: Text(
+                  S.of(context)!.preferLocalPlayerDescription,
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
+                ),
+                value: _preferLocalPlayer,
+                onChanged: (value) {
+                  setState(() => _preferLocalPlayer = value);
+                  SettingsService.setPreferLocalPlayer(value);
+                },
+                activeColor: colorScheme.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SwitchListTile(
+                title: Text(
+                  S.of(context)!.smartSortPlayers,
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                subtitle: Text(
+                  S.of(context)!.smartSortPlayersDescription,
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
+                ),
+                value: _smartSortPlayers,
+                onChanged: (value) {
+                  setState(() => _smartSortPlayers = value);
+                  SettingsService.setSmartSortPlayers(value);
+                },
+                activeColor: colorScheme.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
             ),
 
             const SizedBox(height: 32),

@@ -1786,7 +1786,34 @@ class MusicAssistantProvider with ChangeNotifier {
         return true;
       }).toList();
 
-      _availablePlayers.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      // Sort players - check if smart sort is enabled
+      final smartSort = await SettingsService.getSmartSortPlayers();
+      if (smartSort) {
+        // Smart sort: local player first, then playing, then on, then off
+        _availablePlayers.sort((a, b) {
+          // Local player always first
+          final aIsLocal = builtinPlayerId != null && a.playerId == builtinPlayerId;
+          final bIsLocal = builtinPlayerId != null && b.playerId == builtinPlayerId;
+          if (aIsLocal && !bIsLocal) return -1;
+          if (bIsLocal && !aIsLocal) return 1;
+
+          // Then by status: playing > on > off
+          int statusPriority(Player p) {
+            if (p.state == 'playing') return 0;
+            if (p.powered && p.state != 'off') return 1;
+            return 2;
+          }
+          final aPriority = statusPriority(a);
+          final bPriority = statusPriority(b);
+          if (aPriority != bPriority) return aPriority.compareTo(bPriority);
+
+          // Within same status, sort alphabetically
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
+      } else {
+        // Default alphabetical sort
+        _availablePlayers.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      }
 
       // Cache players for instant display on app resume
       _cacheService.setCachedPlayers(_availablePlayers);
@@ -1796,6 +1823,7 @@ class MusicAssistantProvider with ChangeNotifier {
       if (_availablePlayers.isNotEmpty) {
         Player? playerToSelect;
 
+        // Keep currently selected player if still available
         if (_selectedPlayer != null) {
           final stillAvailable = _availablePlayers.any(
             (p) => p.playerId == _selectedPlayer!.playerId && p.available,
@@ -1808,9 +1836,46 @@ class MusicAssistantProvider with ChangeNotifier {
         }
 
         if (playerToSelect == null) {
+          final preferLocalPlayer = await SettingsService.getPreferLocalPlayer();
           final lastSelectedPlayerId = await SettingsService.getLastSelectedPlayerId();
 
-          if (lastSelectedPlayerId != null) {
+          // Smart auto-selection priority:
+          // If "Prefer Local Player" is ON: Local player -> Last selected -> First available
+          // If "Prefer Local Player" is OFF: Single playing player -> Local player -> Last selected -> First available
+
+          if (preferLocalPlayer) {
+            // Priority 1 (prefer local): Local player
+            if (builtinPlayerId != null) {
+              try {
+                playerToSelect = _availablePlayers.firstWhere(
+                  (p) => p.playerId == builtinPlayerId && p.available,
+                );
+                _logger.log('📱 Auto-selected local player (preferred): ${playerToSelect?.name}');
+              } catch (e) {}
+            }
+          } else {
+            // Priority 1 (normal): Single playing player (skip if multiple are playing)
+            final playingPlayers = _availablePlayers.where(
+              (p) => p.state == 'playing' && p.available,
+            ).toList();
+            if (playingPlayers.length == 1) {
+              playerToSelect = playingPlayers.first;
+              _logger.log('🎵 Auto-selected playing player: ${playerToSelect?.name}');
+            }
+
+            // Priority 2: Local player
+            if (playerToSelect == null && builtinPlayerId != null) {
+              try {
+                playerToSelect = _availablePlayers.firstWhere(
+                  (p) => p.playerId == builtinPlayerId && p.available,
+                );
+                _logger.log('📱 Auto-selected local player: ${playerToSelect?.name}');
+              } catch (e) {}
+            }
+          }
+
+          // Priority 3: Last manually selected player
+          if (playerToSelect == null && lastSelectedPlayerId != null) {
             try {
               playerToSelect = _availablePlayers.firstWhere(
                 (p) => p.playerId == lastSelectedPlayerId && p.available,
@@ -1819,23 +1884,7 @@ class MusicAssistantProvider with ChangeNotifier {
             } catch (e) {}
           }
 
-          if (playerToSelect == null && builtinPlayerId != null) {
-            try {
-              playerToSelect = _availablePlayers.firstWhere(
-                (p) => p.playerId == builtinPlayerId && p.available,
-              );
-              _logger.log('📱 Auto-selected local player: ${playerToSelect?.name}');
-            } catch (e) {}
-          }
-
-          if (playerToSelect == null) {
-            try {
-              playerToSelect = _availablePlayers.firstWhere(
-                (p) => p.state == 'playing' && p.available,
-              );
-            } catch (e) {}
-          }
-
+          // Priority 4: First available player
           if (playerToSelect == null) {
             playerToSelect = _availablePlayers.firstWhere(
               (p) => p.available,

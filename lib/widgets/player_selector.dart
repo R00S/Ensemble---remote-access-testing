@@ -18,43 +18,75 @@ class PlayerSelector extends StatelessWidget {
     final availablePlayers = maProvider.availablePlayers;
     final colorScheme = Theme.of(context).colorScheme;
 
+    // Count players that are currently playing
+    final playingCount = availablePlayers.where((p) => p.state == 'playing').length;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Material(
-        color: colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: () => _showPlayerSelector(context, maProvider, availablePlayers),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (selectedPlayer != null) ...[
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 120),
-                    child: Text(
-                      selectedPlayer.name,
-                      style: TextStyle(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w600,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Material(
+            color: colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              onTap: () => _showPlayerSelector(context, maProvider, availablePlayers),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (selectedPlayer != null) ...[
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 120),
+                        child: Text(
+                          selectedPlayer.name,
+                          style: TextStyle(
+                            color: colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      const SizedBox(width: 8),
+                    ],
+                    Icon(
+                      MdiIcons.castAudio,
+                      color: colorScheme.onPrimaryContainer,
+                      size: 20,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Icon(
-                  MdiIcons.castAudio,
-                  color: colorScheme.onPrimaryContainer,
-                  size: 20,
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+          // Active player count badge
+          if (playingCount > 0)
+            Positioned(
+              top: -6,
+              right: -6,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                decoration: BoxDecoration(
+                  color: colorScheme.tertiary,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    playingCount.toString(),
+                    style: TextStyle(
+                      color: colorScheme.onTertiary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

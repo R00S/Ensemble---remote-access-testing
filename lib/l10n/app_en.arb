@@ -1148,6 +1148,31 @@
     "description": "Accent color selection label"
   },
 
+  "players": "Players",
+  "@players": {
+    "description": "Players settings section title"
+  },
+
+  "preferLocalPlayer": "Prefer Local Player",
+  "@preferLocalPlayer": {
+    "description": "Setting to always prefer local player"
+  },
+
+  "preferLocalPlayerDescription": "Always select this device first when available",
+  "@preferLocalPlayerDescription": {
+    "description": "Description for prefer local player setting"
+  },
+
+  "smartSortPlayers": "Smart Sort",
+  "@smartSortPlayers": {
+    "description": "Setting to sort players by status"
+  },
+
+  "smartSortPlayersDescription": "Sort by status (playing, on, off) instead of alphabetically",
+  "@smartSortPlayersDescription": {
+    "description": "Description for smart sort players setting"
+  },
+
   "playerStateUnavailable": "Unavailable",
   "@playerStateUnavailable": {
     "description": "Player state when unavailable"

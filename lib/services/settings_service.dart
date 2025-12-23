@@ -22,6 +22,8 @@ class SettingsService {
   static const String _keyLocalPlayerName = 'local_player_name';
   static const String _keyOwnerName = 'owner_name';
   static const String _keyLastSelectedPlayerId = 'last_selected_player_id';
+  static const String _keyPreferLocalPlayer = 'prefer_local_player';
+  static const String _keySmartSortPlayers = 'smart_sort_players';
   static const String _keyShowRecentAlbums = 'show_recent_albums';
   static const String _keyShowDiscoverArtists = 'show_discover_artists';
   static const String _keyShowDiscoverAlbums = 'show_discover_albums';
@@ -362,6 +364,28 @@ class SettingsService {
     } else {
       await prefs.setString(_keyLastSelectedPlayerId, playerId);
     }
+  }
+
+  // Prefer Local Player - always select local player first when available
+  static Future<bool> getPreferLocalPlayer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyPreferLocalPlayer) ?? false;
+  }
+
+  static Future<void> setPreferLocalPlayer(bool prefer) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyPreferLocalPlayer, prefer);
+  }
+
+  // Smart Sort Players - sort by status (playing > on > off) instead of alphabetically
+  static Future<bool> getSmartSortPlayers() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keySmartSortPlayers) ?? false;
+  }
+
+  static Future<void> setSmartSortPlayers(bool smartSort) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySmartSortPlayers, smartSort);
   }
 
   // Helper to create player name with possessive apostrophe

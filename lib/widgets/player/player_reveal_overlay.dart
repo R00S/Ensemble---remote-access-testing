@@ -48,7 +48,6 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
     super.initState();
 
     _revealController = AnimationController(
-      duration: const Duration(milliseconds: 150),
       vsync: this,
     );
 
@@ -68,6 +67,7 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
     _preloadColorsForPlayers();
 
     // Start reveal animation
+    _revealController.duration = const Duration(milliseconds: 200);
     _revealController.forward();
 
     // Auto-refresh player data
@@ -121,6 +121,7 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
 
   /// Animate reveal (called from parent)
   void reveal() {
+    _revealController.duration = const Duration(milliseconds: 200);
     _revealController.forward();
   }
 
@@ -136,6 +137,7 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
       }
     }
 
+    _revealController.duration = const Duration(milliseconds: 150);
     _revealController.addListener(checkBounce);
     _revealController.reverse().then((_) {
       _revealController.removeListener(checkBounce);

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import '../../providers/music_assistant_provider.dart';
 import '../../theme/design_tokens.dart';
 import '../../l10n/app_localizations.dart';
@@ -142,7 +141,7 @@ class PlayerCard extends StatelessWidget {
                 height: 28,
                 child: IconButton(
                   icon: Icon(
-                    isPlaying ? MdiIcons.pause : MdiIcons.play,
+                    isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                     color: textColor,
                     size: 28,
                   ),
@@ -153,7 +152,7 @@ class PlayerCard extends StatelessWidget {
               // Skip next
               IconButton(
                 icon: Icon(
-                  MdiIcons.skipNext,
+                  Icons.skip_next_rounded,
                   color: textColor,
                   size: 28,
                 ),
@@ -162,17 +161,20 @@ class PlayerCard extends StatelessWidget {
                 constraints: const BoxConstraints(),
               ),
             ],
-            // Power button - smallest, always shown when available
+            // Power button - smallest, nudged left to reduce gap
             if (player.available)
-              IconButton(
-                icon: Icon(
-                  MdiIcons.power,
-                  color: player.powered ? textColor : textColor.withOpacity(0.5),
-                  size: 20,
+              Transform.translate(
+                offset: const Offset(-6, 0),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.power_settings_new_rounded,
+                    color: player.powered ? textColor : textColor.withOpacity(0.5),
+                    size: 20,
+                  ),
+                  onPressed: onPower,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
-                onPressed: onPower,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
               ),
 
             const SizedBox(width: 4),

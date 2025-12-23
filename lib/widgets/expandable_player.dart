@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import '../constants/timings.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/player.dart';
@@ -1660,7 +1659,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                       // GPU PERF: Use color alpha instead of Opacity
                       if (t > 0.5 && expandedElementsOpacity > 0.1)
                         _buildSecondaryButton(
-                          icon: MdiIcons.shuffle,
+                          icon: Icons.shuffle_rounded,
                           color: (_queue?.shuffle == true ? primaryColor : textColor.withOpacity(0.5))
                               .withOpacity(expandedElementsOpacity),
                           onPressed: _isLoadingQueue ? null : _toggleShuffle,
@@ -1669,7 +1668,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
                       // Previous
                       _buildControlButton(
-                        icon: MdiIcons.skipPrevious,
+                        icon: Icons.skip_previous_rounded,
                         color: textColor,
                         size: skipButtonSize,
                         onPressed: () => maProvider.previousTrackSelectedPlayer(),
@@ -1693,7 +1692,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
                       // Next
                       _buildControlButton(
-                        icon: MdiIcons.skipNext,
+                        icon: Icons.skip_next_rounded,
                         color: textColor,
                         size: skipButtonSize,
                         onPressed: () => maProvider.nextTrackSelectedPlayer(),
@@ -1705,7 +1704,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                       if (t > 0.5) SizedBox(width: _lerpDouble(0, 20, t)),
                       if (t > 0.5 && expandedElementsOpacity > 0.1)
                         _buildSecondaryButton(
-                          icon: _queue?.repeatMode == 'one' ? MdiIcons.repeatOnce : MdiIcons.repeat,
+                          icon: _queue?.repeatMode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded,
                           color: (_queue?.repeatMode != null && _queue!.repeatMode != 'off'
                                   ? primaryColor
                                   : textColor.withOpacity(0.5))
@@ -2130,7 +2129,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         // Previous Chapter (expanded only, if chapters available)
         if (t > 0.5 && expandedElementsOpacity > 0.1 && hasChapters)
           _buildSecondaryButton(
-            icon: MdiIcons.skipPrevious,
+            icon: Icons.skip_previous_rounded,
             color: textColor.withOpacity(expandedElementsOpacity),
             onPressed: () => maProvider.seekToPreviousChapter(selectedPlayer.playerId),
           ),
@@ -2138,7 +2137,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
         // Rewind 30 seconds
         _buildControlButton(
-          icon: MdiIcons.rewind30,
+          icon: Icons.replay_30_rounded,
           color: textColor,
           size: skipButtonSize,
           onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, -30),
@@ -2162,7 +2161,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
         // Forward 30 seconds
         _buildControlButton(
-          icon: MdiIcons.fastForward30,
+          icon: Icons.forward_30_rounded,
           color: textColor,
           size: skipButtonSize,
           onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, 30),
@@ -2173,7 +2172,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         if (t > 0.5 && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
         if (t > 0.5 && expandedElementsOpacity > 0.1 && hasChapters)
           _buildSecondaryButton(
-            icon: MdiIcons.skipNext,
+            icon: Icons.skip_next_rounded,
             color: textColor.withOpacity(expandedElementsOpacity),
             onPressed: () => maProvider.seekToNextChapter(selectedPlayer.playerId),
           ),
@@ -2248,7 +2247,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           shape: BoxShape.circle,
         ),
         child: IconButton(
-          icon: Icon(isPlaying ? MdiIcons.pause : MdiIcons.play),
+          icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
           color: iconColor,
           iconSize: size,
           onPressed: onPressed,

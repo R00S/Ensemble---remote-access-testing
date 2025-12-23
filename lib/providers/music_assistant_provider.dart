@@ -1822,9 +1822,24 @@ class MusicAssistantProvider with ChangeNotifier {
 
       if (_availablePlayers.isNotEmpty) {
         Player? playerToSelect;
+        final preferLocalPlayer = await SettingsService.getPreferLocalPlayer();
+        final lastSelectedPlayerId = await SettingsService.getLastSelectedPlayerId();
 
-        // Keep currently selected player if still available
-        if (_selectedPlayer != null) {
+        // If "Prefer Local Player" is ON, always try to select local player first
+        // This takes priority even over the currently selected player
+        if (preferLocalPlayer && builtinPlayerId != null) {
+          try {
+            playerToSelect = _availablePlayers.firstWhere(
+              (p) => p.playerId == builtinPlayerId && p.available,
+            );
+            _logger.log('📱 Auto-selected local player (preferred): ${playerToSelect?.name}');
+          } catch (e) {
+            // Local player not available yet, will fall through to other options
+          }
+        }
+
+        // Keep currently selected player if still available (and not overridden by prefer local)
+        if (playerToSelect == null && _selectedPlayer != null) {
           final stillAvailable = _availablePlayers.any(
             (p) => p.playerId == _selectedPlayer!.playerId && p.available,
           );
@@ -1836,24 +1851,10 @@ class MusicAssistantProvider with ChangeNotifier {
         }
 
         if (playerToSelect == null) {
-          final preferLocalPlayer = await SettingsService.getPreferLocalPlayer();
-          final lastSelectedPlayerId = await SettingsService.getLastSelectedPlayerId();
-
           // Smart auto-selection priority:
-          // If "Prefer Local Player" is ON: Local player -> Last selected -> First available
           // If "Prefer Local Player" is OFF: Single playing player -> Local player -> Last selected -> First available
 
-          if (preferLocalPlayer) {
-            // Priority 1 (prefer local): Local player
-            if (builtinPlayerId != null) {
-              try {
-                playerToSelect = _availablePlayers.firstWhere(
-                  (p) => p.playerId == builtinPlayerId && p.available,
-                );
-                _logger.log('📱 Auto-selected local player (preferred): ${playerToSelect?.name}');
-              } catch (e) {}
-            }
-          } else {
+          if (!preferLocalPlayer) {
             // Priority 1 (normal): Single playing player (skip if multiple are playing)
             final playingPlayers = _availablePlayers.where(
               (p) => p.state == 'playing' && p.available,

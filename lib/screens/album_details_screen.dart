@@ -53,15 +53,16 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
     _isFavorite = widget.album.favorite ?? false;
     _loadTracks();
     _loadAlbumDescription();
-    _loadFreshAlbumData();
 
-    // CRITICAL FIX: Defer color extraction until after the transition completes
-    // This prevents expensive palette extraction during hero animation
-    // Wait for the first frame to be painted, then extract colors
+    // CRITICAL FIX: Defer both fresh data loading AND color extraction until
+    // after the hero animation completes. This prevents:
+    // 1. setState with new image URL during animation → grey icon flash
+    // 2. Expensive palette extraction blocking animation frames
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Add small delay to ensure transition is complete
+      // 350ms matches FadeSlidePageRoute duration (300ms) + buffer
       Future.delayed(const Duration(milliseconds: 350), () {
         if (mounted) {
+          _loadFreshAlbumData();
           _extractColors();
         }
       });

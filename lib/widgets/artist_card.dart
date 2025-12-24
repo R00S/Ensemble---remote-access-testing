@@ -100,50 +100,50 @@ class _ArtistCardState extends State<ArtistCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Artist image - circular, constrained to be a proper circle
-            Expanded(
-              child: Center(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Use the smaller dimension to ensure a circle
-                    final size = constraints.maxWidth < constraints.maxHeight
-                        ? constraints.maxWidth
-                        : constraints.maxHeight;
-                    return Hero(
-                      tag: HeroTags.artistImage + (widget.artist.uri ?? widget.artist.itemId) + suffix,
-                      child: ClipOval(
-                        child: Container(
-                          width: size,
-                          height: size,
-                          color: colorScheme.surfaceVariant,
-                          child: imageUrl != null
-                              ? CachedNetworkImage(
-                                  imageUrl: imageUrl,
-                                  fit: BoxFit.cover,
-                                  memCacheWidth: 256,
-                                  memCacheHeight: 256,
-                                  fadeInDuration: Duration.zero,
-                                  fadeOutDuration: Duration.zero,
-                                  placeholder: (context, url) => const SizedBox(),
-                                  errorWidget: (context, url, error) {
-                                    // Try fallback on error (only for MA URLs, not fallback URLs)
-                                    if (!_maImageFailed && url == maImageUrl) {
-                                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                                        _onImageError();
-                                      });
-                                    }
-                                    return Icon(
-                                      Icons.person_rounded,
-                                      size: size * 0.55,
-                                      color: colorScheme.onSurfaceVariant,
-                                    );
-                                  },
-                                )
-                              : Icon(Icons.person_rounded, size: size * 0.55, color: colorScheme.onSurfaceVariant),
-                        ),
-                      ),
-                    );
-                  },
+            // Artist image - circular
+            // PERF: Use AspectRatio instead of LayoutBuilder to provide fixed geometry
+            // before Hero animation starts. This prevents grey icon flash caused by
+            // dynamic sizing inside the Hero widget.
+            AspectRatio(
+              aspectRatio: 1.0,
+              child: Hero(
+                tag: HeroTags.artistImage + (widget.artist.uri ?? widget.artist.itemId) + suffix,
+                child: ClipOval(
+                  child: Container(
+                    color: colorScheme.surfaceVariant,
+                    child: imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            fit: BoxFit.cover,
+                            memCacheWidth: 256,
+                            memCacheHeight: 256,
+                            fadeInDuration: Duration.zero,
+                            fadeOutDuration: Duration.zero,
+                            placeholder: (context, url) => const SizedBox(),
+                            errorWidget: (context, url, error) {
+                              // Try fallback on error (only for MA URLs, not fallback URLs)
+                              if (!_maImageFailed && url == maImageUrl) {
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  _onImageError();
+                                });
+                              }
+                              return Center(
+                                child: Icon(
+                                  Icons.person_rounded,
+                                  size: 64,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              );
+                            },
+                          )
+                        : Center(
+                            child: Icon(
+                              Icons.person_rounded,
+                              size: 64,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                  ),
                 ),
               ),
             ),

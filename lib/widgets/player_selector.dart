@@ -29,7 +29,11 @@ class PlayerSelector extends StatelessWidget {
         textColor: colorScheme.onTertiary,
         label: Text(
           playingCount.toString(),
-          style: const TextStyle(fontWeight: FontWeight.w900),
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 11,
+            color: colorScheme.onTertiary,
+          ),
         ),
         child: Material(
           color: colorScheme.primaryContainer,

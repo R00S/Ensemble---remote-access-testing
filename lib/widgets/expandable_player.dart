@@ -1919,7 +1919,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     placeholder: (_, __) => _buildMiniPlaceholderArt(colorScheme),
                     errorWidget: (_, __, ___) => _buildMiniPlaceholderArt(colorScheme),
                   )
-                : _buildDeviceIcon(peekPlayer?.name ?? '', artSize, colorScheme),
+                : _buildDeviceIcon(peekPlayer?.name ?? '', artSize, colorScheme, textColor),
           ),
         ),
 
@@ -1964,7 +1964,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   }
 
   /// Build device icon for non-playing peek player
-  Widget _buildDeviceIcon(String playerName, double size, ColorScheme colorScheme) {
+  Widget _buildDeviceIcon(String playerName, double size, ColorScheme colorScheme, Color textColor) {
     final nameLower = playerName.toLowerCase();
     IconData icon;
     if (nameLower.contains('phone') || nameLower.contains('ensemble')) {
@@ -1984,7 +1984,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       child: Center(
         child: Icon(
           icon,
-          color: colorScheme.onSurfaceVariant,
+          color: textColor.withOpacity(0.4), // Match DeviceSelectorBar icon opacity
           size: 28, // Match DeviceSelectorBar icon size
         ),
       ),

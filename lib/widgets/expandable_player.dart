@@ -15,6 +15,7 @@ import 'animated_icon_button.dart';
 import 'global_player_overlay.dart';
 import 'volume_control.dart';
 import 'player/player_widgets.dart';
+import 'player/mini_player_content.dart';
 
 /// A unified player widget that seamlessly expands from mini to full-screen.
 ///
@@ -1101,23 +1102,18 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final expandedArtTop = topPadding + headerHeight + 16;
     final artTop = _lerpDouble(collapsedArtTop, expandedArtTop, t);
 
-    // Typography - clear hierarchy
-    // Title: bold, prominent (24px)
-    // Artist: medium weight, secondary (18px expanded, was 16px)
-    // Album: light, tertiary (15px expanded, was 13px)
-    final titleFontSize = _lerpDouble(16.0, 24.0, t);
-    final artistFontSize = _lerpDouble(14.0, 18.0, t); // 14px collapsed, 18px expanded
+    // Typography - uses shared MiniPlayerLayout constants for collapsed state
+    final titleFontSize = _lerpDouble(MiniPlayerLayout.primaryFontSize, 24.0, t);
+    final artistFontSize = _lerpDouble(MiniPlayerLayout.secondaryFontSize, 18.0, t);
 
-    final collapsedTitleLeft = _collapsedArtSize + 10; // Match non-playing mini player
     final expandedTitleLeft = contentPadding;
-    final titleLeft = _lerpDouble(collapsedTitleLeft, expandedTitleLeft, t);
+    final titleLeft = _lerpDouble(MiniPlayerLayout.textLeft, expandedTitleLeft, t);
 
-    final collapsedTitleTop = 13.0; // Match non-playing mini player positioning
+    final collapsedTitleTop = MiniPlayerLayout.primaryTop;
 
     // Controls: 36 (prev) + 34 (play) + 36 (next) + 8 (right margin) = 114px from widget right
     // For 8px gap: text ends at widgetWidth - 114 - 8 = widgetWidth - 122
-    // Note: collapsedWidth = screenSize.width - 24 (12px margin each side)
-    final collapsedTitleWidth = collapsedWidth - collapsedTitleLeft - 122;
+    final collapsedTitleWidth = collapsedWidth - MiniPlayerLayout.textLeft - 122;
     final expandedTitleWidth = screenSize.width - (contentPadding * 2);
     final titleWidth = _lerpDouble(collapsedTitleWidth, expandedTitleWidth, t);
 
@@ -1174,7 +1170,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final titleTop = _lerpDouble(collapsedTitleTop, expandedTitleTop, t);
 
     // Artist positioned dynamically based on actual title height
-    final collapsedArtistTop = collapsedTitleTop + 20; // Match non-playing mini player (gap of 20)
+    final collapsedArtistTop = MiniPlayerLayout.secondaryTop;
     final expandedArtistTop = expandedTitleTop + expandedTitleHeight + titleToArtistGap;
     final artistTop = _lerpDouble(collapsedArtistTop, expandedArtistTop, t);
 
@@ -1357,20 +1353,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 if (t < 0.1 && _peekPlayer != null && (_slideOffset.abs() > 0.01 || _inTransition))
                   _buildPeekContent(
                     context: context,
-                    maProvider: maProvider,
                     peekPlayer: _peekPlayer,
                     peekImageUrl: _peekImageUrl,
                     slideOffset: _slideOffset,
                     containerWidth: collapsedWidth,
-                    artSize: _collapsedArtSize,
-                    titleLeft: collapsedTitleLeft,
-                    titleTop: collapsedTitleTop,
-                    titleWidth: collapsedTitleWidth,
-                    artistTop: collapsedArtistTop,
-                    titleFontSize: 16.0,
-                    artistFontSize: 14.0,
+                    backgroundColor: collapsedBg,
                     textColor: textColor,
-                    colorScheme: colorScheme,
                   ),
 
                 // Album art - with slide animation when collapsed
@@ -1442,7 +1430,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                         style: TextStyle(
                           color: textColor,
                           fontSize: titleFontSize,
-                          fontWeight: t > 0.5 ? FontWeight.w600 : FontWeight.w500,
+                          fontWeight: t > 0.5 ? FontWeight.w600 : MiniPlayerLayout.primaryFontWeight,
                           letterSpacing: t > 0.5 ? -0.5 : 0,
                           height: t > 0.5 ? 1.2 : null, // Only use line height when expanded
                         ),
@@ -1470,7 +1458,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                             ? (maProvider.currentAudiobook?.authorsString ?? S.of(context)!.unknownAuthor)
                             : currentTrack.artistsString,
                         style: TextStyle(
-                          color: textColor.withOpacity(t > 0.5 ? 0.7 : 0.6),
+                          color: textColor.withOpacity(t > 0.5 ? 0.7 : MiniPlayerLayout.secondaryTextOpacity),
                           fontSize: artistFontSize,
                           fontWeight: t > 0.5 ? FontWeight.w400 : FontWeight.normal,
                         ),
@@ -1851,157 +1839,49 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   }
 
   /// Build the peek player content that slides in from the edge during drag
+  /// Uses shared MiniPlayerContent for consistency
   Widget _buildPeekContent({
     required BuildContext context,
-    required MusicAssistantProvider maProvider,
     required dynamic peekPlayer,
     required String? peekImageUrl,
     required double slideOffset,
     required double containerWidth,
-    required double artSize,
-    required double titleLeft,
-    required double titleTop,
-    required double titleWidth,
-    required double artistTop,
-    required double titleFontSize,
-    required double artistFontSize,
+    required Color backgroundColor,
     required Color textColor,
-    required ColorScheme colorScheme,
   }) {
     // Calculate sliding position
-    // During transition (_inTransition = true), peek should be at center (offset 0)
-    // When sliding left (negative offset), peek comes from right
-    // When sliding right (positive offset), peek comes from left
-
     double peekBaseOffset;
 
     if (_inTransition && slideOffset.abs() < 0.01) {
-      // During transition with slideOffset at 0, show peek at center
       peekBaseOffset = 0.0;
     } else {
       final isFromRight = slideOffset < 0;
       final peekProgress = slideOffset.abs();
-
-      // Position calculation:
-      // From right: starts at containerWidth (off right edge), moves to 0 as progress increases
-      // From left: starts at -containerWidth (off left edge), moves to 0 as progress increases
       peekBaseOffset = isFromRight
-          ? containerWidth * (1 - peekProgress)  // Slides in from right
-          : -containerWidth * (1 - peekProgress); // Slides in from left
+          ? containerWidth * (1 - peekProgress)
+          : -containerWidth * (1 - peekProgress);
     }
 
-    // Check if peek player has a track - if not, show device info instead
+    // Check if peek player has a track
     final hasTrack = _peekTrack != null && peekImageUrl != null;
     final peekTrackName = hasTrack ? _peekTrack!.name : (peekPlayer?.name ?? S.of(context)!.unknown);
     final peekArtistName = hasTrack ? (_peekTrack!.artistsString ?? '') : S.of(context)!.swipeToSwitchDevice;
 
-    return Stack(
-      children: [
-        // Peek album art / device icon
-        Positioned(
-          left: peekBaseOffset,
-          top: 0,
-          child: Container(
-            width: artSize,
-            height: artSize,
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-            ),
-            child: hasTrack
-                ? CachedNetworkImage(
-                    imageUrl: peekImageUrl!,
-                    fit: BoxFit.cover,
-                    memCacheWidth: 256,
-                    memCacheHeight: 256,
-                    fadeInDuration: Duration.zero,
-                    fadeOutDuration: Duration.zero,
-                    placeholderFadeInDuration: Duration.zero,
-                    placeholder: (_, __) => _buildMiniPlaceholderArt(colorScheme),
-                    errorWidget: (_, __, ___) => _buildMiniPlaceholderArt(colorScheme),
-                  )
-                : _buildDeviceIcon(peekPlayer?.name ?? '', artSize, colorScheme, textColor),
-          ),
-        ),
-
-        // Peek track title / device name
-        Positioned(
-          left: titleLeft + peekBaseOffset,
-          top: titleTop,
-          child: SizedBox(
-            width: titleWidth,
-            child: Text(
-              peekTrackName,
-              style: TextStyle(
-                color: textColor,
-                fontSize: titleFontSize,
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-
-        // Peek artist name / device hint
-        Positioned(
-          left: titleLeft + peekBaseOffset,
-          top: artistTop,
-          child: SizedBox(
-            width: titleWidth,
-            child: Text(
-              peekArtistName,
-              style: TextStyle(
-                color: textColor.withOpacity(0.6),
-                fontSize: artistFontSize,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Build device icon for non-playing peek player
-  Widget _buildDeviceIcon(String playerName, double size, ColorScheme colorScheme, Color textColor) {
-    final nameLower = playerName.toLowerCase();
-    IconData icon;
-    if (nameLower.contains('phone') || nameLower.contains('ensemble')) {
-      icon = Icons.phone_android_rounded;
-    } else if (nameLower.contains('group') || nameLower.contains('all')) {
-      icon = Icons.speaker_group_rounded;
-    } else if (nameLower.contains('tv') || nameLower.contains('television')) {
-      icon = Icons.tv_rounded;
-    } else if (nameLower.contains('cast') || nameLower.contains('chromecast')) {
-      icon = Icons.cast_rounded;
-    } else {
-      icon = Icons.speaker_rounded;
-    }
-
-    return Container(
-      color: colorScheme.surfaceContainerHighest,
-      child: Center(
-        child: Icon(
-          icon,
-          color: textColor.withOpacity(0.4), // Match DeviceSelectorBar icon opacity
-          size: 28, // Match DeviceSelectorBar icon size
-        ),
+    return Transform.translate(
+      offset: Offset(peekBaseOffset, 0),
+      child: MiniPlayerContent(
+        primaryText: peekTrackName,
+        secondaryText: peekArtistName,
+        imageUrl: hasTrack ? peekImageUrl : null,
+        playerName: peekPlayer?.name ?? '',
+        backgroundColor: backgroundColor,
+        textColor: textColor,
+        width: containerWidth,
+        slideOffset: 0, // Transform handles positioning
       ),
     );
   }
 
-  /// Simplified placeholder for mini player peek
-  Widget _buildMiniPlaceholderArt(ColorScheme colorScheme) {
-    return Container(
-      color: colorScheme.surfaceContainerHighest,
-      child: Icon(
-        Icons.music_note_rounded,
-        color: colorScheme.onSurfaceVariant,
-        size: 24,
-      ),
-    );
-  }
 
   /// Build peek player progress bar that slides in during swipe
   Widget _buildPeekProgressBar({

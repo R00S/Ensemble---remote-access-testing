@@ -279,16 +279,46 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
 
   Future<void> _loadTracks() async {
     final provider = context.read<MusicAssistantProvider>();
-    final tracks = await provider.getAlbumTracksWithCache(
-      widget.album.provider,
-      widget.album.itemId,
-    );
+    final cacheKey = '${widget.album.provider}_${widget.album.itemId}';
 
-    if (mounted) {
-      setState(() {
-        _tracks = tracks;
-        _isLoading = false;
-      });
+    // 1. Show cached data immediately (if available)
+    final cachedTracks = provider.getCachedAlbumTracks(cacheKey);
+    if (cachedTracks != null && cachedTracks.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _tracks = cachedTracks;
+          _isLoading = false;
+        });
+      }
+    }
+
+    // 2. Fetch fresh data in background (silent refresh)
+    try {
+      final freshTracks = await provider.getAlbumTracksWithCache(
+        widget.album.provider,
+        widget.album.itemId,
+        forceRefresh: cachedTracks != null, // Force refresh if we had cache
+      );
+
+      // 3. Update if we got different data
+      if (mounted && freshTracks.isNotEmpty) {
+        final tracksChanged = _tracks.length != freshTracks.length ||
+            (_tracks.isNotEmpty && freshTracks.isNotEmpty &&
+             _tracks.first.itemId != freshTracks.first.itemId);
+        if (tracksChanged || _tracks.isEmpty) {
+          setState(() {
+            _tracks = freshTracks;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      _logger.log('⚠️ Background refresh failed: $e');
+    }
+
+    // Ensure loading is false even if everything failed
+    if (mounted && _isLoading) {
+      setState(() => _isLoading = false);
     }
   }
 

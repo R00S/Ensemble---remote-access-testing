@@ -35,21 +35,48 @@ class _PlaylistDetailsScreenState extends State<PlaylistDetailsScreen> {
   }
 
   Future<void> _loadTracks() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     final maProvider = context.read<MusicAssistantProvider>();
-    final tracks = await maProvider.getPlaylistTracksWithCache(
-      widget.provider,
-      widget.itemId,
-    );
+    final cacheKey = '${widget.provider}_${widget.itemId}';
 
-    if (mounted) {
-      setState(() {
-        _tracks = tracks;
-        _isLoading = false;
-      });
+    // 1. Show cached data immediately (if available)
+    final cachedTracks = maProvider.getCachedPlaylistTracks(cacheKey);
+    if (cachedTracks != null && cachedTracks.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _tracks = cachedTracks;
+          _isLoading = false;
+        });
+      }
+    } else {
+      setState(() => _isLoading = true);
+    }
+
+    // 2. Fetch fresh data in background (silent refresh)
+    try {
+      final freshTracks = await maProvider.getPlaylistTracksWithCache(
+        widget.provider,
+        widget.itemId,
+        forceRefresh: cachedTracks != null,
+      );
+
+      // 3. Update if we got different data
+      if (mounted && freshTracks.isNotEmpty) {
+        final tracksChanged = _tracks.length != freshTracks.length ||
+            (_tracks.isNotEmpty && freshTracks.isNotEmpty &&
+             _tracks.first.itemId != freshTracks.first.itemId);
+        if (tracksChanged || _tracks.isEmpty) {
+          setState(() {
+            _tracks = freshTracks;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Silent failure - keep showing cached data
+    }
+
+    if (mounted && _isLoading) {
+      setState(() => _isLoading = false);
     }
   }
 

@@ -427,20 +427,51 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
   Future<void> _loadArtistAlbums() async {
     final provider = context.read<MusicAssistantProvider>();
 
-    // Use cached artist albums method
-    final allAlbums = await provider.getArtistAlbumsWithCache(widget.artist.name);
+    // 1. Show cached data immediately (if available)
+    final cachedAlbums = provider.getCachedArtistAlbums(widget.artist.name);
+    if (cachedAlbums != null && cachedAlbums.isNotEmpty) {
+      final libraryAlbums = cachedAlbums.where((a) => a.inLibrary).toList();
+      final providerOnlyAlbums = cachedAlbums.where((a) => !a.inLibrary).toList();
 
-    if (mounted) {
-      // Separate library albums from provider-only albums
-      final libraryAlbums = allAlbums.where((a) => a.inLibrary).toList();
-      final providerOnlyAlbums = allAlbums.where((a) => !a.inLibrary).toList();
+      if (mounted) {
+        setState(() {
+          _albums = libraryAlbums;
+          _providerAlbums = providerOnlyAlbums;
+          _sortAlbums();
+          _isLoading = false;
+        });
+      }
+    }
 
-      setState(() {
-        _albums = libraryAlbums;
-        _providerAlbums = providerOnlyAlbums;
-        _sortAlbums(); // Apply saved sort order
-        _isLoading = false;
-      });
+    // 2. Fetch fresh data in background (silent refresh)
+    try {
+      final allAlbums = await provider.getArtistAlbumsWithCache(
+        widget.artist.name,
+        forceRefresh: cachedAlbums != null,
+      );
+
+      if (mounted && allAlbums.isNotEmpty) {
+        // Check if data actually changed
+        final albumsChanged = _albums.length != allAlbums.where((a) => a.inLibrary).length;
+
+        if (albumsChanged || _albums.isEmpty) {
+          final libraryAlbums = allAlbums.where((a) => a.inLibrary).toList();
+          final providerOnlyAlbums = allAlbums.where((a) => !a.inLibrary).toList();
+
+          setState(() {
+            _albums = libraryAlbums;
+            _providerAlbums = providerOnlyAlbums;
+            _sortAlbums();
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Silent failure - keep showing cached data
+    }
+
+    if (mounted && _isLoading) {
+      setState(() => _isLoading = false);
     }
   }
 

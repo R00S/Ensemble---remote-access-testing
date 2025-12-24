@@ -1800,6 +1800,21 @@ class MusicAssistantProvider with ChangeNotifier {
     _cacheService.clearAllDetailCaches();
   }
 
+  /// Get cached album tracks (for instant display before background refresh)
+  List<Track>? getCachedAlbumTracks(String cacheKey) {
+    return _cacheService.getCachedAlbumTracks(cacheKey);
+  }
+
+  /// Get cached playlist tracks (for instant display before background refresh)
+  List<Track>? getCachedPlaylistTracks(String cacheKey) {
+    return _cacheService.getCachedPlaylistTracks(cacheKey);
+  }
+
+  /// Get cached artist albums (for instant display before background refresh)
+  List<Album>? getCachedArtistAlbums(String artistName) {
+    return _cacheService.getCachedArtistAlbums(artistName.toLowerCase());
+  }
+
   // ============================================================================
   // PLAYER SELECTION
   // ============================================================================

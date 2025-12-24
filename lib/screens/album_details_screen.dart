@@ -16,11 +16,14 @@ import 'artist_details_screen.dart';
 class AlbumDetailsScreen extends StatefulWidget {
   final Album album;
   final String? heroTagSuffix;
+  /// Initial image URL from the source (e.g., AlbumCard) for seamless hero animation
+  final String? initialImageUrl;
 
   const AlbumDetailsScreen({
     super.key,
     required this.album,
     this.heroTagSuffix,
+    this.initialImageUrl,
   });
 
   @override
@@ -658,9 +661,11 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
     // CRITICAL FIX: Use select() instead of watch() to reduce rebuilds
     // Only rebuild when specific properties change, not on every provider update
     // Use _displayAlbum which has fresh data with images if available
-    final imageUrl = context.select<MusicAssistantProvider, String?>(
+    final providerImageUrl = context.select<MusicAssistantProvider, String?>(
       (provider) => provider.getImageUrl(_displayAlbum, size: 512),
     );
+    // Use initialImageUrl as fallback for seamless hero animation
+    final imageUrl = providerImageUrl ?? widget.initialImageUrl;
     final adaptiveTheme = context.select<ThemeProvider, bool>(
       (provider) => provider.adaptiveTheme,
     );

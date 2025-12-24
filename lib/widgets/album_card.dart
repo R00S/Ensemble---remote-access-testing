@@ -97,6 +97,7 @@ class _AlbumCardState extends State<AlbumCard> {
               child: AlbumDetailsScreen(
                 album: widget.album,
                 heroTagSuffix: widget.heroTagSuffix,
+                initialImageUrl: imageUrl,
               ),
             ),
           );

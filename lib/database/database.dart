@@ -93,12 +93,72 @@ class SyncMetadata extends Table {
   Set<Column> get primaryKey => {syncType};
 }
 
-@DriftDatabase(tables: [Profiles, RecentlyPlayed, LibraryCache, SyncMetadata])
+/// Persisted playback state - survives app restarts and disconnects
+class PlaybackState extends Table {
+  /// Always 'current' - single row table
+  TextColumn get id => text().withDefault(const Constant('current'))();
+
+  /// Selected player ID
+  TextColumn get playerId => text().nullable()();
+
+  /// Selected player name (for display if player unavailable)
+  TextColumn get playerName => text().nullable()();
+
+  /// Current track as JSON
+  TextColumn get currentTrackJson => text().nullable()();
+
+  /// Current position in seconds
+  RealColumn get positionSeconds => real().withDefault(const Constant(0.0))();
+
+  /// Whether playback was active
+  BoolColumn get isPlaying => boolean().withDefault(const Constant(false))();
+
+  /// When this state was saved
+  DateTimeColumn get savedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Cached player list - for instant display on app resume
+class CachedPlayers extends Table {
+  /// Player ID from Music Assistant
+  TextColumn get playerId => text()();
+
+  /// Player data as JSON
+  TextColumn get playerJson => text()();
+
+  /// Current track for this player as JSON (for mini player display)
+  TextColumn get currentTrackJson => text().nullable()();
+
+  /// When this was last updated
+  DateTimeColumn get lastUpdated => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {playerId};
+}
+
+/// Cached queue items for selected player
+class CachedQueue extends Table {
+  /// Auto-incrementing ID for ordering
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Player ID this queue belongs to
+  TextColumn get playerId => text()();
+
+  /// Queue item as JSON
+  TextColumn get itemJson => text()();
+
+  /// Position in queue
+  IntColumn get position => integer()();
+}
+
+@DriftDatabase(tables: [Profiles, RecentlyPlayed, LibraryCache, SyncMetadata, PlaybackState, CachedPlayers, CachedQueue])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration {
@@ -107,7 +167,12 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // Future migrations will go here
+        // Migration from v1 to v2: Add playback state, cached players, cached queue tables
+        if (from < 2) {
+          await m.createTable(playbackState);
+          await m.createTable(cachedPlayers);
+          await m.createTable(cachedQueue);
+        }
       },
     );
   }
@@ -326,5 +391,137 @@ class AppDatabase extends _$AppDatabase {
     final lastSync = await getLastSyncTime(syncType);
     if (lastSync == null) return true;
     return DateTime.now().difference(lastSync) > maxAge;
+  }
+
+  // ============================================
+  // Playback State Operations
+  // ============================================
+
+  /// Save current playback state
+  Future<void> savePlaybackState({
+    String? playerId,
+    String? playerName,
+    String? currentTrackJson,
+    double positionSeconds = 0.0,
+    bool isPlaying = false,
+  }) async {
+    await into(playbackState).insertOnConflictUpdate(PlaybackStateCompanion.insert(
+      id: const Value('current'),
+      playerId: Value(playerId),
+      playerName: Value(playerName),
+      currentTrackJson: Value(currentTrackJson),
+      positionSeconds: Value(positionSeconds),
+      isPlaying: Value(isPlaying),
+      savedAt: DateTime.now(),
+    ));
+  }
+
+  /// Get saved playback state
+  Future<PlaybackStateData?> getPlaybackState() async {
+    return (select(playbackState)..where((p) => p.id.equals('current')))
+        .getSingleOrNull();
+  }
+
+  /// Clear playback state
+  Future<void> clearPlaybackState() async {
+    await delete(playbackState).go();
+  }
+
+  // ============================================
+  // Cached Players Operations
+  // ============================================
+
+  /// Cache a player with its current track
+  Future<void> cachePlayer({
+    required String playerId,
+    required String playerJson,
+    String? currentTrackJson,
+  }) async {
+    await into(cachedPlayers).insertOnConflictUpdate(CachedPlayersCompanion.insert(
+      playerId: playerId,
+      playerJson: playerJson,
+      currentTrackJson: Value(currentTrackJson),
+      lastUpdated: DateTime.now(),
+    ));
+  }
+
+  /// Cache multiple players at once
+  Future<void> cachePlayers(List<Map<String, dynamic>> players) async {
+    await transaction(() async {
+      for (final player in players) {
+        await into(cachedPlayers).insertOnConflictUpdate(CachedPlayersCompanion.insert(
+          playerId: player['playerId'] as String,
+          playerJson: player['playerJson'] as String,
+          currentTrackJson: Value(player['currentTrackJson'] as String?),
+          lastUpdated: DateTime.now(),
+        ));
+      }
+    });
+  }
+
+  /// Get all cached players
+  Future<List<CachedPlayersData>> getCachedPlayers() async {
+    return (select(cachedPlayers)
+      ..orderBy([(p) => OrderingTerm.desc(p.lastUpdated)]))
+      .get();
+  }
+
+  /// Get a specific cached player
+  Future<CachedPlayersData?> getCachedPlayer(String playerId) async {
+    return (select(cachedPlayers)..where((p) => p.playerId.equals(playerId)))
+        .getSingleOrNull();
+  }
+
+  /// Update cached track for a player
+  Future<void> updateCachedPlayerTrack(String playerId, String? trackJson) async {
+    await (update(cachedPlayers)..where((p) => p.playerId.equals(playerId)))
+        .write(CachedPlayersCompanion(
+          currentTrackJson: Value(trackJson),
+          lastUpdated: Value(DateTime.now()),
+        ));
+  }
+
+  /// Clear all cached players
+  Future<void> clearCachedPlayers() async {
+    await delete(cachedPlayers).go();
+  }
+
+  // ============================================
+  // Cached Queue Operations
+  // ============================================
+
+  /// Save queue for a player
+  Future<void> saveQueue(String playerId, List<String> itemJsonList) async {
+    await transaction(() async {
+      // Clear existing queue for this player
+      await (delete(cachedQueue)..where((q) => q.playerId.equals(playerId))).go();
+
+      // Insert new queue items
+      for (var i = 0; i < itemJsonList.length; i++) {
+        await into(cachedQueue).insert(CachedQueueCompanion.insert(
+          playerId: playerId,
+          itemJson: itemJsonList[i],
+          position: i,
+        ));
+      }
+    });
+  }
+
+  /// Get cached queue for a player
+  Future<List<CachedQueueData>> getCachedQueue(String playerId) async {
+    return (select(cachedQueue)
+      ..where((q) => q.playerId.equals(playerId))
+      ..orderBy([(q) => OrderingTerm.asc(q.position)]))
+      .get();
+  }
+
+  /// Clear queue for a player
+  Future<void> clearCachedQueue(String playerId) async {
+    await (delete(cachedQueue)..where((q) => q.playerId.equals(playerId))).go();
+  }
+
+  /// Clear all cached queues
+  Future<void> clearAllCachedQueues() async {
+    await delete(cachedQueue).go();
   }
 }

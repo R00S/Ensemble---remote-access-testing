@@ -108,10 +108,10 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
 
   Future<void> _toggleFavorite() async {
     final maProvider = context.read<MusicAssistantProvider>();
-    if (maProvider.api == null) return;
 
     try {
       final newState = !_isFavorite;
+      bool success;
 
       if (newState) {
         // For adding: use the actual provider and itemId from provider_mappings
@@ -132,17 +132,18 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
         }
 
         _logger.log('Adding to favorites: provider=$actualProvider, itemId=$actualItemId');
-        await maProvider.api!.addToFavorites('album', actualItemId, actualProvider);
+        success = await maProvider.addToFavorites(
+          mediaType: 'album',
+          itemId: actualItemId,
+          provider: actualProvider,
+        );
       } else {
         // For removing: need the library_item_id (numeric)
-        // When provider is "library", itemId is the library ID as a string
-        // Otherwise, we need to find it from provider_mappings
         int? libraryItemId;
 
         if (widget.album.provider == 'library') {
           libraryItemId = int.tryParse(widget.album.itemId);
         } else if (widget.album.providerMappings != null) {
-          // Find the library mapping
           final libraryMapping = widget.album.providerMappings!.firstWhere(
             (m) => m.providerInstance == 'library',
             orElse: () => widget.album.providerMappings!.first,
@@ -158,25 +159,34 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
         }
 
         _logger.log('Removing from favorites: libraryItemId=$libraryItemId');
-        await maProvider.api!.removeFromFavorites('album', libraryItemId);
+        success = await maProvider.removeFromFavorites(
+          mediaType: 'album',
+          libraryItemId: libraryItemId,
+        );
       }
 
-      setState(() {
-        _isFavorite = newState;
-      });
+      if (success) {
+        // Optimistically update UI regardless of online/offline state
+        setState(() {
+          _isFavorite = newState;
+        });
 
-      // Invalidate home cache so the home screen shows updated favorite status
-      maProvider.invalidateHomeCache();
+        // Invalidate home cache so the home screen shows updated favorite status
+        maProvider.invalidateHomeCache();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites,
+        if (mounted) {
+          final isOffline = !maProvider.isConnected;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isOffline
+                    ? S.of(context)!.actionQueuedForSync
+                    : (_isFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites),
+              ),
+              duration: const Duration(seconds: 1),
             ),
-            duration: const Duration(seconds: 1),
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       _logger.log('Error toggling favorite: $e');
@@ -196,11 +206,11 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
 
     final track = _tracks[trackIndex];
     final maProvider = context.read<MusicAssistantProvider>();
-    if (maProvider.api == null) return;
-
     final currentFavorite = track.favorite ?? false;
 
     try {
+      bool success;
+
       if (currentFavorite) {
         // Remove from favorites - need library_item_id
         int? libraryItemId;
@@ -217,7 +227,12 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
         }
 
         if (libraryItemId != null) {
-          await maProvider.api!.removeFromFavorites('track', libraryItemId);
+          success = await maProvider.removeFromFavorites(
+            mediaType: 'track',
+            libraryItemId: libraryItemId,
+          );
+        } else {
+          success = false;
         }
       } else {
         // Add to favorites
@@ -236,33 +251,42 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
           actualItemId = mapping.itemId;
         }
 
-        await maProvider.api!.addToFavorites('track', actualItemId, actualProvider);
+        success = await maProvider.addToFavorites(
+          mediaType: 'track',
+          itemId: actualItemId,
+          provider: actualProvider,
+        );
       }
 
-      // Update local state - create new track with toggled favorite
-      setState(() {
-        _tracks[trackIndex] = Track(
-          itemId: track.itemId,
-          provider: track.provider,
-          name: track.name,
-          uri: track.uri,
-          favorite: !currentFavorite,
-          artists: track.artists,
-          album: track.album,
-          duration: track.duration,
-          providerMappings: track.providerMappings,
-        );
-      });
+      if (success) {
+        // Optimistically update local state
+        setState(() {
+          _tracks[trackIndex] = Track(
+            itemId: track.itemId,
+            provider: track.provider,
+            name: track.name,
+            uri: track.uri,
+            favorite: !currentFavorite,
+            artists: track.artists,
+            album: track.album,
+            duration: track.duration,
+            providerMappings: track.providerMappings,
+          );
+        });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              !currentFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites,
+        if (mounted) {
+          final isOffline = !maProvider.isConnected;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isOffline
+                    ? S.of(context)!.actionQueuedForSync
+                    : (!currentFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites),
+              ),
+              duration: const Duration(seconds: 1),
             ),
-            duration: const Duration(seconds: 1),
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       _logger.log('Error toggling track favorite: $e');

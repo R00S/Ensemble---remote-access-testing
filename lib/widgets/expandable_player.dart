@@ -443,14 +443,15 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     }
   }
 
-  /// Toggle favorite status for current track
+  /// Toggle favorite status for current track (with offline queuing support)
   Future<void> _toggleCurrentTrackFavorite(dynamic currentTrack) async {
     if (currentTrack == null) return;
 
     final maProvider = context.read<MusicAssistantProvider>();
-    if (maProvider.api == null) return;
 
     try {
+      bool success;
+
       if (_isCurrentTrackFavorite) {
         // Remove from favorites - need library_item_id (numeric)
         int? libraryItemId;
@@ -472,7 +473,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         }
 
         if (libraryItemId != null) {
-          await maProvider.api!.removeFromFavorites('track', libraryItemId);
+          success = await maProvider.removeFromFavorites(
+            mediaType: 'track',
+            libraryItemId: libraryItemId,
+          );
         } else {
           throw Exception('Could not determine library ID for this track');
         }
@@ -505,16 +509,37 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           }
         }
 
-        await maProvider.api!.addToFavorites('track', actualItemId, actualProvider);
+        success = await maProvider.addToFavorites(
+          mediaType: 'track',
+          itemId: actualItemId,
+          provider: actualProvider,
+        );
       }
 
-      // Toggle local state
-      setState(() {
-        _isCurrentTrackFavorite = !_isCurrentTrackFavorite;
-      });
+      if (success) {
+        // Toggle local state
+        setState(() {
+          _isCurrentTrackFavorite = !_isCurrentTrackFavorite;
+        });
 
-      // Invalidate home cache so favorites are updated
-      maProvider.invalidateHomeCache();
+        // Invalidate home cache so favorites are updated
+        maProvider.invalidateHomeCache();
+
+        // Show feedback (different message if offline)
+        if (mounted) {
+          final isOffline = !maProvider.isConnected;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isOffline
+                    ? S.of(context)!.actionQueuedForSync
+                    : (_isCurrentTrackFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites),
+              ),
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      }
     } catch (e) {
       // Show error feedback
       if (mounted) {

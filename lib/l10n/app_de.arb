@@ -278,5 +278,7 @@
   "playerStateUnavailable": "Nicht verfügbar",
   "playerStateOff": "Aus",
   "playerStateIdle": "Inaktiv",
-  "playerSelected": "Ausgewählt"
+  "playerSelected": "Ausgewählt",
+  "actionQueuedForSync": "Wird synchronisiert wenn online",
+  "pendingOfflineActions": "{count} ausstehende Synchronisierung"
 }

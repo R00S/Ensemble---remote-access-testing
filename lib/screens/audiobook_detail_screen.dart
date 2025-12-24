@@ -119,10 +119,10 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
 
   Future<void> _toggleFavorite() async {
     final maProvider = context.read<MusicAssistantProvider>();
-    if (maProvider.api == null) return;
 
     try {
       final newState = !_isFavorite;
+      bool success;
 
       if (newState) {
         String actualProvider = widget.audiobook.provider;
@@ -141,7 +141,11 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
         }
 
         _logger.log('Adding audiobook to favorites: provider=$actualProvider, itemId=$actualItemId');
-        await maProvider.api!.addToFavorites('audiobook', actualItemId, actualProvider);
+        success = await maProvider.addToFavorites(
+          mediaType: 'audiobook',
+          itemId: actualItemId,
+          provider: actualProvider,
+        );
       } else {
         int? libraryItemId;
 
@@ -162,22 +166,30 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
         }
 
         _logger.log('Removing audiobook from favorites: libraryItemId=$libraryItemId');
-        await maProvider.api!.removeFromFavorites('audiobook', libraryItemId);
+        success = await maProvider.removeFromFavorites(
+          mediaType: 'audiobook',
+          libraryItemId: libraryItemId,
+        );
       }
 
-      setState(() {
-        _isFavorite = newState;
-      });
+      if (success) {
+        setState(() {
+          _isFavorite = newState;
+        });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites,
+        if (mounted) {
+          final isOffline = !maProvider.isConnected;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isOffline
+                    ? S.of(context)!.actionQueuedForSync
+                    : (_isFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites),
+              ),
+              duration: const Duration(seconds: 1),
             ),
-            duration: const Duration(seconds: 1),
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       _logger.log('Error toggling audiobook favorite: $e');

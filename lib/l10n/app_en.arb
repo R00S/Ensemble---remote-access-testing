@@ -1191,5 +1191,20 @@
   "playerSelected": "Selected",
   "@playerSelected": {
     "description": "Label for selected player"
+  },
+
+  "actionQueuedForSync": "Will sync when online",
+  "@actionQueuedForSync": {
+    "description": "Message when action is queued for sync while offline"
+  },
+
+  "pendingOfflineActions": "{count} pending sync",
+  "@pendingOfflineActions": {
+    "description": "Shows number of pending offline actions",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

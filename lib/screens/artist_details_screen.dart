@@ -155,10 +155,10 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
 
   Future<void> _toggleFavorite() async {
     final maProvider = context.read<MusicAssistantProvider>();
-    if (maProvider.api == null) return;
 
     try {
       final newState = !_isFavorite;
+      bool success;
 
       if (newState) {
         String actualProvider = widget.artist.provider;
@@ -177,7 +177,11 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
         }
 
         _logger.log('Adding artist to favorites: provider=$actualProvider, itemId=$actualItemId');
-        await maProvider.api!.addToFavorites('artist', actualItemId, actualProvider);
+        success = await maProvider.addToFavorites(
+          mediaType: 'artist',
+          itemId: actualItemId,
+          provider: actualProvider,
+        );
       } else {
         int? libraryItemId;
 
@@ -199,24 +203,32 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
         }
 
         _logger.log('Removing artist from favorites: libraryItemId=$libraryItemId');
-        await maProvider.api!.removeFromFavorites('artist', libraryItemId);
+        success = await maProvider.removeFromFavorites(
+          mediaType: 'artist',
+          libraryItemId: libraryItemId,
+        );
       }
 
-      setState(() {
-        _isFavorite = newState;
-      });
+      if (success) {
+        setState(() {
+          _isFavorite = newState;
+        });
 
-      maProvider.invalidateHomeCache();
+        maProvider.invalidateHomeCache();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites,
+        if (mounted) {
+          final isOffline = !maProvider.isConnected;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isOffline
+                    ? S.of(context)!.actionQueuedForSync
+                    : (_isFavorite ? S.of(context)!.addedToFavorites : S.of(context)!.removedFromFavorites),
+              ),
+              duration: const Duration(seconds: 1),
             ),
-            duration: const Duration(seconds: 1),
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       _logger.log('Error toggling artist favorite: $e');

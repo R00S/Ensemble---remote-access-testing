@@ -21,6 +21,7 @@ import '../services/metadata_service.dart';
 import '../services/position_tracker.dart';
 import '../services/sendspin_service.dart';
 import '../services/pcm_audio_player.dart';
+import '../services/offline_action_queue.dart';
 import '../constants/timings.dart';
 import '../services/database_service.dart';
 import '../main.dart' show audioHandler;
@@ -179,6 +180,12 @@ class MusicAssistantProvider with ChangeNotifier {
     return getImageUrl(track, size: size);
   }
 
+  /// Number of pending offline actions
+  int get pendingOfflineActionsCount => OfflineActionQueue.instance.pendingCount;
+
+  /// Whether there are pending offline actions
+  bool get hasPendingOfflineActions => OfflineActionQueue.instance.hasPendingActions;
+
   // ============================================================================
   // INITIALIZATION
   // ============================================================================
@@ -193,6 +200,9 @@ class MusicAssistantProvider with ChangeNotifier {
 
     // Load cached players from database for instant display (before connecting)
     await _loadPlayersFromDatabase();
+
+    // Initialize offline action queue
+    await OfflineActionQueue.instance.initialize();
 
     if (_serverUrl != null && _serverUrl!.isNotEmpty) {
       await _restoreAuthCredentials();
@@ -451,11 +461,139 @@ class MusicAssistantProvider with ChangeNotifier {
 
       loadLibrary();
 
+      // Process any queued offline actions now that we're connected
+      await _processOfflineQueue();
+
       _logger.log('✅ Post-connection initialization complete');
     } catch (e) {
       _logger.log('❌ Error during post-connection initialization: $e');
       _error = 'Failed to initialize after connection';
       notifyListeners();
+    }
+  }
+
+  /// Process queued offline actions (favorites, playlist modifications, etc.)
+  Future<void> _processOfflineQueue() async {
+    if (_api == null || !isConnected) return;
+
+    final queue = OfflineActionQueue.instance;
+    if (!queue.hasPendingActions) return;
+
+    _logger.log('📋 Processing ${queue.pendingCount} offline actions...');
+
+    await queue.processQueue((action) async {
+      try {
+        switch (action.type) {
+          case OfflineActionTypes.toggleFavorite:
+            return await _executeToggleFavorite(action.params);
+          case OfflineActionTypes.addToPlaylist:
+            return await _executeAddToPlaylist(action.params);
+          case OfflineActionTypes.removeFromPlaylist:
+            return await _executeRemoveFromPlaylist(action.params);
+          default:
+            _logger.log('⚠️ Unknown offline action type: ${action.type}');
+            return false;
+        }
+      } catch (e) {
+        _logger.log('❌ Error executing offline action ${action.type}: $e');
+        return false;
+      }
+    });
+  }
+
+  /// Execute a queued toggle favorite action
+  Future<bool> _executeToggleFavorite(Map<String, dynamic> params) async {
+    if (_api == null) return false;
+
+    final mediaType = params['mediaType'] as String;
+    final add = params['add'] as bool;
+
+    if (add) {
+      final itemId = params['itemId'] as String;
+      final provider = params['provider'] as String;
+      await _api!.addToFavorites(mediaType, itemId, provider);
+    } else {
+      final libraryItemId = params['libraryItemId'] as int;
+      await _api!.removeFromFavorites(mediaType, libraryItemId);
+    }
+    return true;
+  }
+
+  /// Execute a queued add to playlist action
+  Future<bool> _executeAddToPlaylist(Map<String, dynamic> params) async {
+    // TODO: Implement when playlist modification is added
+    return false;
+  }
+
+  /// Execute a queued remove from playlist action
+  Future<bool> _executeRemoveFromPlaylist(Map<String, dynamic> params) async {
+    // TODO: Implement when playlist modification is added
+    return false;
+  }
+
+  // ============================================================================
+  // FAVORITE MANAGEMENT (WITH OFFLINE SUPPORT)
+  // ============================================================================
+
+  /// Add item to favorites with offline queuing support
+  /// Returns true if action was executed or queued successfully
+  Future<bool> addToFavorites({
+    required String mediaType,
+    required String itemId,
+    required String provider,
+  }) async {
+    if (isConnected && _api != null) {
+      // Online - execute immediately
+      try {
+        await _api!.addToFavorites(mediaType, itemId, provider);
+        return true;
+      } catch (e) {
+        _logger.log('❌ Failed to add to favorites: $e');
+        return false;
+      }
+    } else {
+      // Offline - queue the action
+      await OfflineActionQueue.instance.queueAction(
+        OfflineActionTypes.toggleFavorite,
+        {
+          'mediaType': mediaType,
+          'add': true,
+          'itemId': itemId,
+          'provider': provider,
+        },
+      );
+      _logger.log('📋 Queued add to favorites (offline): $mediaType');
+      return true;
+    }
+  }
+
+  /// Remove item from favorites with offline queuing support
+  /// Returns true if action was executed or queued successfully
+  Future<bool> removeFromFavorites({
+    required String mediaType,
+    required int libraryItemId,
+  }) async {
+    if (isConnected && _api != null) {
+      // Online - execute immediately
+      try {
+        await _api!.removeFromFavorites(mediaType, libraryItemId);
+        return true;
+      } catch (e) {
+        _logger.log('❌ Failed to remove from favorites: $e');
+        return false;
+      }
+    } else {
+      // Offline - queue the action
+      await OfflineActionQueue.instance.queueAction(
+        OfflineActionTypes.toggleFavorite,
+        {
+          'mediaType': mediaType,
+          'add': false,
+          'libraryItemId': libraryItemId,
+        },
+      );
+      _logger.log('📋 Queued remove from favorites (offline): $mediaType');
+      return true;
     }
   }
 

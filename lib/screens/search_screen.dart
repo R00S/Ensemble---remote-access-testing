@@ -200,7 +200,12 @@ class SearchScreenState extends State<SearchScreen> {
   Widget _buildSearchContent() {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (_isSearching) {
+    // Show cached results even while searching - only show spinner if no cached results
+    final hasResults = _searchResults['artists']?.isNotEmpty == true ||
+                       _searchResults['albums']?.isNotEmpty == true ||
+                       _searchResults['tracks']?.isNotEmpty == true;
+
+    if (_isSearching && !hasResults) {
       return Center(
         child: CircularProgressIndicator(color: colorScheme.primary),
       );

@@ -42,7 +42,9 @@ class LibraryTracksScreen extends StatelessWidget {
       BuildContext context, MusicAssistantProvider provider) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (provider.isLoading) {
+    // Show cached data immediately if available, even while loading
+    // Only show spinner if we have no data at all AND we're loading
+    if (provider.tracks.isEmpty && provider.isLoading) {
       return Center(
         child: CircularProgressIndicator(color: colorScheme.primary),
       );

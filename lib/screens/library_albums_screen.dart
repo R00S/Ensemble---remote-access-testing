@@ -47,7 +47,9 @@ class LibraryAlbumsScreen extends StatelessWidget {
   Widget _buildAlbumsList(BuildContext context, List<Album> albums, bool isLoading) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (isLoading) {
+    // Show cached data immediately if available, even while loading
+    // Only show spinner if we have no data at all AND we're loading
+    if (albums.isEmpty && isLoading) {
       return Center(
         child: CircularProgressIndicator(color: colorScheme.primary),
       );

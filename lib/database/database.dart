@@ -460,14 +460,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Get all cached players
-  Future<List<CachedPlayersData>> getCachedPlayers() async {
+  Future<List<CachedPlayer>> getCachedPlayers() async {
     return (select(cachedPlayers)
       ..orderBy([(p) => OrderingTerm.desc(p.lastUpdated)]))
       .get();
   }
 
   /// Get a specific cached player
-  Future<CachedPlayersData?> getCachedPlayer(String playerId) async {
+  Future<CachedPlayer?> getCachedPlayer(String playerId) async {
     return (select(cachedPlayers)..where((p) => p.playerId.equals(playerId)))
         .getSingleOrNull();
   }

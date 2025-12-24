@@ -75,7 +75,9 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
   Widget _buildPlaylistsList(BuildContext context, MusicAssistantProvider provider) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (_isLoading) {
+    // Show cached data immediately if available, even while loading
+    // Only show spinner if we have no data at all AND we're loading
+    if (_playlists.isEmpty && _isLoading) {
       return Center(
         child: CircularProgressIndicator(color: colorScheme.primary),
       );

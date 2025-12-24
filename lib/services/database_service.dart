@@ -200,7 +200,7 @@ class DatabaseService {
   }
 
   /// Get all cached players
-  Future<List<CachedPlayersData>> getCachedPlayers() => db.getCachedPlayers();
+  Future<List<CachedPlayer>> getCachedPlayers() => db.getCachedPlayers();
 
   /// Update cached track for a player
   Future<void> updateCachedPlayerTrack(String playerId, String? trackJson) {

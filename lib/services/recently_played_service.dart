@@ -25,15 +25,13 @@ class RecentlyPlayedService {
     if (!_db.isInitialized) return;
 
     try {
+      // Store the full album JSON so we have all data including images
       await _db.addRecentlyPlayed(
         mediaId: album.itemId,
         mediaType: 'album',
         name: album.name,
         artistName: album.artistsString,
-        metadata: {
-          'provider': album.provider,
-          'uri': album.uri,
-        },
+        metadata: album.toJson(), // Store full album data for image URLs
       );
       _logger.log('📝 Recorded album play: ${album.name}');
     } catch (e) {
@@ -144,23 +142,34 @@ class RecentlyPlayedService {
         if (seenIds.contains(item.mediaId)) continue;
         seenIds.add(item.mediaId);
 
-        Map<String, dynamic>? metadata;
         if (item.metadata != null) {
           try {
-            metadata = jsonDecode(item.metadata!) as Map<String, dynamic>;
-          } catch (_) {}
+            // Try to reconstruct full Album from stored JSON
+            final albumJson = jsonDecode(item.metadata!) as Map<String, dynamic>;
+            albums.add(Album.fromJson(albumJson));
+          } catch (e) {
+            // Fallback to minimal album if JSON parsing fails
+            _logger.log('⚠️ Could not parse album JSON, using minimal: $e');
+            albums.add(Album(
+              itemId: item.mediaId,
+              provider: 'library',
+              name: item.name,
+              artists: item.artistName != null
+                  ? [Artist(itemId: '', provider: '', name: item.artistName!)]
+                  : null,
+            ));
+          }
+        } else {
+          // No metadata stored - create minimal album
+          albums.add(Album(
+            itemId: item.mediaId,
+            provider: 'library',
+            name: item.name,
+            artists: item.artistName != null
+                ? [Artist(itemId: '', provider: '', name: item.artistName!)]
+                : null,
+          ));
         }
-
-        albums.add(Album(
-          itemId: item.mediaId,
-          provider: metadata?['provider'] ?? 'library',
-          name: item.name,
-          uri: metadata?['uri'],
-          // Create minimal artist info from stored name
-          artists: item.artistName != null
-              ? [Artist(itemId: '', provider: '', name: item.artistName!)]
-              : null,
-        ));
 
         if (albums.length >= limit) break;
       }

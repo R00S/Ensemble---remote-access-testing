@@ -186,7 +186,9 @@ class _TrackCard extends StatelessWidget {
                           fit: BoxFit.cover,
                           memCacheWidth: 256,
                           memCacheHeight: 256,
-                          fadeInDuration: const Duration(milliseconds: 150),
+                          // PERF: Duration.zero for smooth scrolling
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
                           placeholder: (context, url) => const SizedBox(),
                           errorWidget: (context, url, error) => Icon(
                             Icons.music_note_rounded,

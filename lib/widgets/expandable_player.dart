@@ -151,7 +151,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     );
 
     _controller.addStatusListener((status) {
-      if (status == AnimationStatus.forward) {
+      // PERF: Load queue after animation completes, not during
+      // This prevents network I/O from competing with animation frames
+      if (status == AnimationStatus.completed) {
         _loadQueue();
       } else if (status == AnimationStatus.dismissed) {
         // Close queue panel when player collapses
@@ -1361,41 +1363,41 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Shows played portion with brighter color, unplayed with darker
                 // Starts after album art so progress is visible
                 // Slides with content during swipe, hidden during transition if peek available
+                // GPU PERF: Use conditional rendering + color alpha instead of Opacity
+                // to avoid double saveLayer (Opacity + ClipRRect)
                 if (t < 0.5 && currentTrack?.duration != null && !(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
-                    left: _collapsedArtSize + miniPlayerSlideOffset,
-                    top: 0,
-                    width: width - _collapsedArtSize,
-                    bottom: 0,
-                    child: ValueListenableBuilder<int>(
-                      valueListenable: _progressNotifier,
-                      builder: (context, elapsedSeconds, _) {
-                        final totalSeconds = currentTrack!.duration!.inSeconds;
-                        if (totalSeconds <= 0) return const SizedBox.shrink();
-                        final progress = (elapsedSeconds / totalSeconds).clamp(0.0, 1.0);
-                        // Fade out as we expand
-                        final progressOpacity = (1.0 - (t / 0.5)).clamp(0.0, 1.0);
-                        final progressAreaWidth = width - _collapsedArtSize;
-                        return Opacity(
-                          opacity: progressOpacity,
-                          child: ClipRRect(
+                      left: _collapsedArtSize + miniPlayerSlideOffset,
+                      top: 0,
+                      width: width - _collapsedArtSize,
+                      bottom: 0,
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: _progressNotifier,
+                        builder: (context, elapsedSeconds, _) {
+                          final totalSeconds = currentTrack!.duration!.inSeconds;
+                          if (totalSeconds <= 0) return const SizedBox.shrink();
+                          final progress = (elapsedSeconds / totalSeconds).clamp(0.0, 1.0);
+                          // Fade out as we expand - use color alpha instead of Opacity widget
+                          final progressOpacity = (1.0 - (t / 0.5)).clamp(0.0, 1.0);
+                          final progressAreaWidth = width - _collapsedArtSize;
+                          return ClipRRect(
                             borderRadius: BorderRadius.only(
                               topRight: Radius.circular(borderRadius),
                               bottomRight: Radius.circular(borderRadius),
                             ),
+                            clipBehavior: Clip.hardEdge,
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Container(
                                 width: progressAreaWidth * progress,
                                 height: height,
-                                color: collapsedBg,
+                                color: collapsedBg.withOpacity(progressOpacity),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
 
                 // Peek player content (shows when dragging OR during transition)
                 // Show when: actively dragging (slideOffset != 0) OR in transition state

@@ -453,6 +453,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             },
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeInOut,
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(

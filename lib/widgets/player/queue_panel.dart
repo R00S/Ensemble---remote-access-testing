@@ -118,6 +118,11 @@ class QueuePanel extends StatelessWidget {
                       ? CachedNetworkImage(
                           imageUrl: imageUrl,
                           fit: BoxFit.cover,
+                          // PERF: 4x cache size for 44x44 display, zero fade for scrolling
+                          memCacheWidth: 176,
+                          memCacheHeight: 176,
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
                           placeholder: (context, url) => Container(
                             color: textColor.withOpacity(0.1),
                             child: Icon(Icons.music_note, color: textColor.withOpacity(0.3), size: 20),

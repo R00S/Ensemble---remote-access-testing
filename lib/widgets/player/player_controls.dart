@@ -55,14 +55,13 @@ class PlayerControls extends StatelessWidget {
       mainAxisAlignment: isExpanded ? MainAxisAlignment.center : MainAxisAlignment.end,
       children: [
         // Shuffle (expanded only)
-        if (isExpanded)
-          Opacity(
-            opacity: expandedElementsOpacity,
-            child: _buildSecondaryButton(
-              icon: Icons.shuffle_rounded,
-              color: shuffle == true ? primaryColor : textColor.withOpacity(0.5),
-              onPressed: isLoadingQueue ? null : onToggleShuffle,
-            ),
+        // GPU PERF: Use color alpha instead of Opacity to avoid saveLayer
+        if (isExpanded && expandedElementsOpacity > 0.1)
+          _buildSecondaryButton(
+            icon: Icons.shuffle_rounded,
+            color: (shuffle == true ? primaryColor : textColor.withOpacity(0.5))
+                .withOpacity(expandedElementsOpacity),
+            onPressed: isLoadingQueue ? null : onToggleShuffle,
           ),
         if (isExpanded) SizedBox(width: _lerpDouble(0, 20, t)),
 
@@ -90,17 +89,16 @@ class PlayerControls extends StatelessWidget {
         ),
 
         // Repeat (expanded only)
+        // GPU PERF: Use color alpha instead of Opacity to avoid saveLayer
         if (isExpanded) SizedBox(width: _lerpDouble(0, 20, t)),
-        if (isExpanded)
-          Opacity(
-            opacity: expandedElementsOpacity,
-            child: _buildSecondaryButton(
-              icon: repeatMode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-              color: repeatMode != null && repeatMode != 'off'
-                  ? primaryColor
-                  : textColor.withOpacity(0.5),
-              onPressed: isLoadingQueue ? null : onCycleRepeat,
-            ),
+        if (isExpanded && expandedElementsOpacity > 0.1)
+          _buildSecondaryButton(
+            icon: repeatMode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+            color: (repeatMode != null && repeatMode != 'off'
+                    ? primaryColor
+                    : textColor.withOpacity(0.5))
+                .withOpacity(expandedElementsOpacity),
+            onPressed: isLoadingQueue ? null : onCycleRepeat,
           ),
       ],
     );

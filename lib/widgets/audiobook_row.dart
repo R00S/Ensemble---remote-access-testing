@@ -196,6 +196,11 @@ class _AudiobookCard extends StatelessWidget {
                           ? CachedNetworkImage(
                               imageUrl: imageUrl,
                               fit: BoxFit.cover,
+                              // PERF: Duration.zero for hero-wrapped images
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              memCacheWidth: 256,
+                              memCacheHeight: 256,
                               placeholder: (_, __) => Center(
                                 child: Icon(
                                   MdiIcons.bookOutline,

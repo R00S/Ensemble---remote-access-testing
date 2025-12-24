@@ -150,7 +150,10 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
 
   // State for player reveal overlay
   bool _isRevealVisible = false;
-  double _bounceOffset = 0.0;
+
+  // Use ValueNotifier instead of setState for bounce offset
+  // This prevents full widget tree rebuilds during animation
+  final _bounceOffsetNotifier = ValueNotifier<double>(0.0);
 
   // Key for the reveal overlay
   final _revealKey = GlobalKey<PlayerRevealOverlayState>();
@@ -178,13 +181,12 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
       curve: Curves.easeOut,
     );
 
+    // Use ValueNotifier instead of setState to avoid full widget rebuilds
+    // This isolates the rebuild to only the widgets that depend on bounce offset
     _bounceController.addListener(() {
-      setState(() {
-        // Quick dip: goes down 10px at peak (0.5), then back to 0
-        final t = _bounceAnimation.value;
-        // Sine curve: 0 -> 1 -> 0 as t goes 0 -> 0.5 -> 1
-        _bounceOffset = 10.0 * (t < 0.5 ? t * 2 : (1.0 - t) * 2);
-      });
+      final t = _bounceAnimation.value;
+      // Sine curve: 0 -> 1 -> 0 as t goes 0 -> 0.5 -> 1
+      _bounceOffsetNotifier.value = 10.0 * (t < 0.5 ? t * 2 : (1.0 - t) * 2);
     });
   }
 
@@ -192,6 +194,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   void dispose() {
     _slideController.dispose();
     _bounceController.dispose();
+    _bounceOffsetNotifier.dispose();
     super.dispose();
   }
 
@@ -218,9 +221,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
 
   void _hidePlayerReveal() {
     if (!_isRevealVisible) return;
+    _bounceOffsetNotifier.value = 0;
     setState(() {
       _isRevealVisible = false;
-      _bounceOffset = 0;
     });
   }
 
@@ -380,16 +383,21 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
             if (!state.isConnected || !state.hasPlayer) {
               return const SizedBox.shrink();
             }
-            return AnimatedBuilder(
-              animation: _slideAnimation,
-              child: ExpandablePlayer(key: globalPlayerKey, slideOffset: 0),
-              builder: (context, staticChild) {
-                // Only slideOffset changes during animation, player widget stays same
-                return ExpandablePlayer(
-                  key: globalPlayerKey,
-                  slideOffset: _slideAnimation.value,
-                  bounceOffset: _bounceOffset,
-                  onRevealPlayers: _showPlayerReveal,
+            // Combine slide and bounce animations with ValueListenableBuilder
+            // This prevents full widget tree rebuilds - only ExpandablePlayer updates
+            return ValueListenableBuilder<double>(
+              valueListenable: _bounceOffsetNotifier,
+              builder: (context, bounceOffset, _) {
+                return AnimatedBuilder(
+                  animation: _slideAnimation,
+                  builder: (context, _) {
+                    return ExpandablePlayer(
+                      key: globalPlayerKey,
+                      slideOffset: _slideAnimation.value,
+                      bounceOffset: bounceOffset,
+                      onRevealPlayers: _showPlayerReveal,
+                    );
+                  },
                 );
               },
             );

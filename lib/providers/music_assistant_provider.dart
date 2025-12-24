@@ -2880,7 +2880,60 @@ class MusicAssistantProvider with ChangeNotifier {
   }
 
   Future<PlayerQueue?> getQueue(String playerId) async {
-    return await _api?.getQueue(playerId);
+    final queue = await _api?.getQueue(playerId);
+
+    // Persist queue to database for instant display on app resume
+    if (queue != null) {
+      _persistQueueToDatabase(playerId, queue);
+    }
+
+    return queue;
+  }
+
+  /// Get cached queue for instant display (before API refresh)
+  Future<PlayerQueue?> getCachedQueue(String playerId) async {
+    try {
+      if (!DatabaseService.instance.isInitialized) return null;
+
+      final cachedItems = await DatabaseService.instance.getCachedQueue(playerId);
+      if (cachedItems.isEmpty) return null;
+
+      final items = <QueueItem>[];
+      for (final cached in cachedItems) {
+        try {
+          final itemData = jsonDecode(cached.itemJson) as Map<String, dynamic>;
+          items.add(QueueItem.fromJson(itemData));
+        } catch (e) {
+          _logger.log('⚠️ Error parsing cached queue item: $e');
+        }
+      }
+
+      if (items.isEmpty) return null;
+
+      return PlayerQueue(
+        playerId: playerId,
+        items: items,
+        currentIndex: 0, // Will be updated from fresh data
+      );
+    } catch (e) {
+      _logger.log('⚠️ Error loading cached queue: $e');
+      return null;
+    }
+  }
+
+  /// Persist queue to database for app restart persistence
+  void _persistQueueToDatabase(String playerId, PlayerQueue queue) {
+    () async {
+      try {
+        if (!DatabaseService.instance.isInitialized) return;
+
+        final itemJsonList = queue.items.map((item) => jsonEncode(item.toJson())).toList();
+        await DatabaseService.instance.saveQueue(playerId, itemJsonList);
+        _logger.log('💾 Persisted ${queue.items.length} queue items to database');
+      } catch (e) {
+        _logger.log('⚠️ Error persisting queue to database: $e');
+      }
+    }();
   }
 
   Future<void> playTrack(String playerId, Track track, {bool clearQueue = true}) async {

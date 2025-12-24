@@ -321,23 +321,48 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   Future<void> _loadQueue() async {
     if (_isLoadingQueue) return;
 
-    setState(() => _isLoadingQueue = true);
-
     final maProvider = context.read<MusicAssistantProvider>();
     final player = maProvider.selectedPlayer;
 
-    if (player != null && maProvider.api != null) {
-      final queue = await maProvider.api!.getQueue(player.playerId);
-      if (mounted) {
-        setState(() {
-          _queue = queue;
-          _isLoadingQueue = false;
-        });
-      }
+    if (player == null) {
+      if (mounted) setState(() => _isLoadingQueue = false);
+      return;
+    }
+
+    // 1. Show cached queue immediately (if available)
+    final cachedQueue = await maProvider.getCachedQueue(player.playerId);
+    if (cachedQueue != null && cachedQueue.items.isNotEmpty && mounted) {
+      setState(() {
+        _queue = cachedQueue;
+        _isLoadingQueue = false;
+      });
     } else {
-      if (mounted) {
-        setState(() => _isLoadingQueue = false);
+      setState(() => _isLoadingQueue = true);
+    }
+
+    // 2. Fetch fresh queue in background
+    if (maProvider.api != null) {
+      try {
+        final freshQueue = await maProvider.getQueue(player.playerId);
+        if (mounted && freshQueue != null) {
+          // Only update if queue changed
+          final queueChanged = _queue == null ||
+              _queue!.items.length != freshQueue.items.length ||
+              _queue!.currentIndex != freshQueue.currentIndex;
+          if (queueChanged) {
+            setState(() {
+              _queue = freshQueue;
+              _isLoadingQueue = false;
+            });
+          }
+        }
+      } catch (e) {
+        // Silent failure - keep showing cached queue
       }
+    }
+
+    if (mounted && _isLoadingQueue) {
+      setState(() => _isLoadingQueue = false);
     }
   }
 

@@ -1005,6 +1005,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                     fit: BoxFit.cover,
                     width: 48,
                     height: 48,
+                    fadeInDuration: Duration.zero,
+                    fadeOutDuration: Duration.zero,
                     placeholder: (_, __) => Text(
                       authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
                       style: TextStyle(
@@ -1047,7 +1049,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           color: colorScheme.onSurface.withOpacity(0.6),
         ),
       ),
-      onTap: () => _navigateToAuthor(authorName, books, heroTagSuffix: 'library$heroSuffix'),
+      onTap: () => _navigateToAuthor(authorName, books, heroTagSuffix: 'library$heroSuffix', initialAuthorImageUrl: authorImageUrl),
     );
   }
 
@@ -1059,7 +1061,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
     // Match music artist card layout
     return GestureDetector(
-      onTap: () => _navigateToAuthor(authorName, books, heroTagSuffix: 'library$heroSuffix'),
+      onTap: () => _navigateToAuthor(authorName, books, heroTagSuffix: 'library$heroSuffix', initialAuthorImageUrl: authorImageUrl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -1088,6 +1090,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                                 fit: BoxFit.cover,
                                 width: size,
                                 height: size,
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
                                 placeholder: (_, __) => Center(
                                   child: Text(
                                     authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
@@ -1142,7 +1146,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
-  void _navigateToAuthor(String authorName, List<Audiobook> books, {String? heroTagSuffix}) {
+  void _navigateToAuthor(String authorName, List<Audiobook> books, {String? heroTagSuffix, String? initialAuthorImageUrl}) {
     Navigator.push(
       context,
       FadeSlidePageRoute(
@@ -1150,6 +1154,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           authorName: authorName,
           audiobooks: books,
           heroTagSuffix: heroTagSuffix,
+          initialAuthorImageUrl: initialAuthorImageUrl,
         ),
       ),
     );
@@ -1326,7 +1331,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final heroSuffix = _showFavoritesOnly ? '_fav' : '';
 
     return GestureDetector(
-      onTap: () => _navigateToAudiobook(book, heroTagSuffix: 'library$heroSuffix'),
+      onTap: () => _navigateToAudiobook(book, heroTagSuffix: 'library$heroSuffix', initialImageUrl: imageUrl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1347,6 +1352,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                           ? CachedNetworkImage(
                               imageUrl: imageUrl,
                               fit: BoxFit.cover,
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
                               placeholder: (_, __) => const SizedBox(),
                               errorWidget: (_, __, ___) => Center(
                                 child: Icon(

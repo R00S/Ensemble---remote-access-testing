@@ -545,6 +545,8 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                               ? CachedNetworkImage(
                                   imageUrl: imageUrl,
                                   fit: BoxFit.cover,
+                                  fadeInDuration: Duration.zero,
+                                  fadeOutDuration: Duration.zero,
                                   placeholder: (_, __) => Center(
                                     child: Icon(
                                       MdiIcons.bookOutline,

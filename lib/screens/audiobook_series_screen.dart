@@ -517,6 +517,8 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
                       ? CachedNetworkImage(
                           imageUrl: coverUrl,
                           fit: BoxFit.cover,
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
                           placeholder: (_, __) => Container(
                             color: colorScheme.surfaceContainerHighest,
                           ),
@@ -653,6 +655,8 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
                               fit: BoxFit.cover,
                               width: double.infinity,
                               height: double.infinity,
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
                               placeholder: (_, __) => Center(
                                 child: Icon(
                                   MdiIcons.bookOutline,
@@ -746,6 +750,8 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
                     ? CachedNetworkImage(
                         imageUrl: imageUrl,
                         fit: BoxFit.cover,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
                         placeholder: (_, __) => Icon(
                           MdiIcons.bookOutline,
                           color: colorScheme.onSurfaceVariant,

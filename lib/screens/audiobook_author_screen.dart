@@ -19,12 +19,14 @@ class AudiobookAuthorScreen extends StatefulWidget {
   final String authorName;
   final List<Audiobook> audiobooks;
   final String? heroTagSuffix;
+  final String? initialAuthorImageUrl;
 
   const AudiobookAuthorScreen({
     super.key,
     required this.authorName,
     required this.audiobooks,
     this.heroTagSuffix,
+    this.initialAuthorImageUrl,
   });
 
   @override
@@ -48,6 +50,8 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
   void initState() {
     super.initState();
     _audiobooks = List.from(widget.audiobooks);
+    // Use initial image URL immediately for smooth hero animation
+    _authorImageUrl = widget.initialAuthorImageUrl;
     _loadViewPreferences();
     _sortAudiobooks();
     _loadAuthorImage();
@@ -181,6 +185,8 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
                                   fit: BoxFit.cover,
                                   width: 200,
                                   height: 200,
+                                  fadeInDuration: Duration.zero,
+                                  fadeOutDuration: Duration.zero,
                                   placeholder: (_, __) => Icon(
                                     MdiIcons.accountOutline,
                                     size: 100,
@@ -349,6 +355,8 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
                               fit: BoxFit.cover,
                               width: double.infinity,
                               height: double.infinity,
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
                               placeholder: (_, __) => Center(
                                 child: Icon(
                                   MdiIcons.bookOutline,
@@ -443,6 +451,8 @@ class _AudiobookAuthorScreenState extends State<AudiobookAuthorScreen> {
                     ? CachedNetworkImage(
                         imageUrl: imageUrl,
                         fit: BoxFit.cover,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
                         placeholder: (_, __) => Icon(
                           MdiIcons.bookOutline,
                           color: colorScheme.onSurfaceVariant,

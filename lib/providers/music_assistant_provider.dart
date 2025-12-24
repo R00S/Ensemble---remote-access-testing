@@ -3181,8 +3181,54 @@ class MusicAssistantProvider with ChangeNotifier {
       // The stream_start event will trigger local playback
       await _api?.resumePlayer(playerId);
     } catch (e) {
+      // Check if this is a "No playable item" error - means server queue is empty
+      final errorStr = e.toString();
+      if (errorStr.contains('No playable item')) {
+        _logger.log('⚠️ Server queue empty - attempting to restore from cached queue...');
+
+        // Try to restore queue from cached data
+        final restored = await _restoreQueueFromCache(playerId);
+        if (restored) {
+          _logger.log('✅ Queue restored from cache - playback started');
+          return; // Successfully restored and playing
+        }
+        _logger.log('❌ Could not restore queue from cache');
+      }
+
       ErrorHandler.logError('Resume player', e);
       rethrow;
+    }
+  }
+
+  /// Attempt to restore the queue from cached data and start playback
+  Future<bool> _restoreQueueFromCache(String playerId) async {
+    try {
+      final cachedQueue = await getCachedQueue(playerId);
+      if (cachedQueue == null || cachedQueue.items.isEmpty) {
+        _logger.log('⚠️ No cached queue to restore');
+        return false;
+      }
+
+      // Extract tracks from queue items
+      final tracks = cachedQueue.items
+          .map((item) => item.track)
+          .where((track) => track.uri != null && track.uri!.isNotEmpty)
+          .toList();
+
+      if (tracks.isEmpty) {
+        _logger.log('⚠️ Cached queue has no valid tracks');
+        return false;
+      }
+
+      _logger.log('🔄 Restoring ${tracks.length} tracks from cached queue');
+
+      // Re-queue all tracks and start playback
+      await playTracks(playerId, tracks, startIndex: 0);
+
+      return true;
+    } catch (e) {
+      _logger.log('❌ Error restoring queue from cache: $e');
+      return false;
     }
   }
 

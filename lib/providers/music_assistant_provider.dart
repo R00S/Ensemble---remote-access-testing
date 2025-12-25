@@ -2047,6 +2047,47 @@ class MusicAssistantProvider with ChangeNotifier {
         return true;
       }).toList();
 
+      // Prefer Sendspin versions of Cast players over regular Cast players
+      // When both exist, keep only the Sendspin version with the suffix removed
+      final sendspinSuffix = ' (Sendspin)';
+      final sendspinPlayers = _availablePlayers
+          .where((p) => p.name.endsWith(sendspinSuffix))
+          .toList();
+
+      if (sendspinPlayers.isNotEmpty) {
+        // Build a set of base names that have Sendspin versions available
+        final sendspinBaseNames = sendspinPlayers
+            .map((p) => p.name.substring(0, p.name.length - sendspinSuffix.length))
+            .toSet();
+
+        _logger.log('🔊 Found ${sendspinPlayers.length} Sendspin players: ${sendspinBaseNames.join(", ")}');
+
+        // Filter out regular Cast players that have Sendspin equivalents
+        _availablePlayers = _availablePlayers.where((player) {
+          // Keep all Sendspin players
+          if (player.name.endsWith(sendspinSuffix)) return true;
+
+          // Filter out regular players if a Sendspin version exists
+          if (sendspinBaseNames.contains(player.name)) {
+            _logger.log('🚫 Preferring Sendspin version over: ${player.name}');
+            filteredCount++;
+            return false;
+          }
+
+          return true;
+        }).toList();
+
+        // Rename Sendspin players to remove the suffix
+        _availablePlayers = _availablePlayers.map((player) {
+          if (player.name.endsWith(sendspinSuffix)) {
+            final cleanName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+            _logger.log('✨ Renaming "${player.name}" to "$cleanName"');
+            return player.copyWith(name: cleanName);
+          }
+          return player;
+        }).toList();
+      }
+
       // Sort players - check if smart sort is enabled
       final smartSort = await SettingsService.getSmartSortPlayers();
       if (smartSort) {

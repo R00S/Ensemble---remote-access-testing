@@ -171,11 +171,30 @@ class MusicAssistantProvider with ChangeNotifier {
   }
 
   /// Get cached track for a player (used for smooth swipe transitions)
-  Track? getCachedTrackForPlayer(String playerId) => _cacheService.getCachedTrackForPlayer(playerId);
+  /// For grouped child players, returns the leader's track
+  Track? getCachedTrackForPlayer(String playerId) {
+    // If player is a group child, get the leader's track instead
+    final player = _availablePlayers.firstWhere(
+      (p) => p.playerId == playerId,
+      orElse: () => Player(
+        playerId: playerId,
+        name: '',
+        available: false,
+        powered: false,
+        state: 'idle',
+      ),
+    );
+
+    final effectivePlayerId = (player.isGroupChild && player.syncedTo != null)
+        ? player.syncedTo!
+        : playerId;
+
+    return _cacheService.getCachedTrackForPlayer(effectivePlayerId);
+  }
 
   /// Get artwork URL for a player from cache
   String? getCachedArtworkUrl(String playerId, {int size = 512}) {
-    final track = _cacheService.getCachedTrackForPlayer(playerId);
+    final track = getCachedTrackForPlayer(playerId);
     if (track == null) return null;
     return getImageUrl(track, size: size);
   }
@@ -2183,7 +2202,8 @@ class MusicAssistantProvider with ChangeNotifier {
     // the async _updatePlayerState() completes.
     // IMPORTANT: Always set from cache, even if null - this prevents showing
     // stale track info when switching to a non-playing player.
-    _currentTrack = _cacheService.getCachedTrackForPlayer(player.playerId);
+    // For grouped child players, this returns the leader's track
+    _currentTrack = getCachedTrackForPlayer(player.playerId);
 
     // Initialize position tracker for this player
     _positionTracker.onPlayerSelected(player.playerId);
@@ -2558,8 +2578,9 @@ class MusicAssistantProvider with ChangeNotifier {
 
     // After preloading, update _currentTrack from cache if it has better data
     // This fixes the issue where mini player shows wrong info but device list is correct
+    // For grouped child players, this gets the leader's track
     if (_selectedPlayer != null && _currentTrack != null) {
-      final cachedTrack = _cacheService.getCachedTrackForPlayer(_selectedPlayer!.playerId);
+      final cachedTrack = getCachedTrackForPlayer(_selectedPlayer!.playerId);
       if (cachedTrack != null && cachedTrack.uri == _currentTrack!.uri) {
         final cachedHasImage = cachedTrack.metadata?['images'] != null;
         final currentHasImage = _currentTrack!.metadata?['images'] != null;
@@ -2657,7 +2678,8 @@ class MusicAssistantProvider with ChangeNotifier {
         if (trackChanged) {
           // Check if cached track has better metadata (images, proper artist info)
           // This prevents losing album art and artist data when resuming the app
-          final cachedTrack = _cacheService.getCachedTrackForPlayer(_selectedPlayer!.playerId);
+          // For grouped child players, this gets the leader's cached track
+          final cachedTrack = getCachedTrackForPlayer(_selectedPlayer!.playerId);
           final cachedHasImage = cachedTrack?.metadata?['images'] != null;
           final queueHasImage = queueTrack.metadata?['images'] != null;
           // Also check for malformed artist names (e.g., "Artist - Title" format in name)
@@ -3045,7 +3067,26 @@ class MusicAssistantProvider with ChangeNotifier {
   }
 
   Future<PlayerQueue?> getQueue(String playerId) async {
-    final queue = await _api?.getQueue(playerId);
+    // If this player is a group child, fetch the leader's queue instead
+    // This ensures grouped players show the same queue as their leader
+    String effectivePlayerId = playerId;
+    final player = _availablePlayers.firstWhere(
+      (p) => p.playerId == playerId,
+      orElse: () => Player(
+        playerId: playerId,
+        name: '',
+        available: false,
+        powered: false,
+        state: 'idle',
+      ),
+    );
+
+    if (player.isGroupChild && player.syncedTo != null) {
+      _logger.log('🔗 Player $playerId is grouped, fetching leader queue: ${player.syncedTo}');
+      effectivePlayerId = player.syncedTo!;
+    }
+
+    final queue = await _api?.getQueue(effectivePlayerId);
 
     // Persist queue to database for instant display on app resume
     if (queue != null) {

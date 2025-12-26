@@ -259,7 +259,7 @@
   "metadataApisDescription": "Künstlerbilder werden automatisch von Deezer abgerufen. Füge unten API-Schlüssel für Künstlerbiografien und Albenbeschreibungen hinzu.",
   "lastFmApiKey": "Last.fm API-Schlüssel",
   "lastFmApiKeyHint": "Kostenlosen Schlüssel auf last.fm/api holen",
-  "swipeToSwitchDevice": "Wische ← ↓ → um Gerät zu wechseln",
+  "swipeToSwitchDevice": "Wische links, runter oder rechts um Gerät zu wechseln",
   "chapterNumber": "Kapitel {number}",
   "pcmAudio": "PCM-Audio",
   "playOn": "Abspielen auf...",

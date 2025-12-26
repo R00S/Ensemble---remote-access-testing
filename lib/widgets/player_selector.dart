@@ -231,25 +231,23 @@ class _PlayerSelectorSheetState extends State<_PlayerSelectorSheet> {
                                     maProvider.selectPlayer(player);
                                     Navigator.pop(context);
                                   },
-                                  onLongPress: player.available
-                                      ? () {
-                                          // Haptic feedback for sync action
-                                          HapticFeedback.mediumImpact();
+                                  onLongPress: () {
+                                    // Haptic feedback for sync action
+                                    HapticFeedback.mediumImpact();
 
-                                          // Show snackbar for visual feedback
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Syncing ${player.name}...'),
-                                              duration: const Duration(seconds: 2),
-                                            ),
-                                          );
+                                    // Show snackbar for visual feedback
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Syncing ${player.name}...'),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
 
-                                          // Long-press to sync/unsync player
-                                          debugPrint('🔗 Long-press on ${player.name} (${player.playerId})');
-                                          debugPrint('🔗 Player isGrouped: ${player.isGrouped}, groupMembers: ${player.groupMembers}');
-                                          maProvider.togglePlayerSync(player.playerId);
-                                        }
-                                      : null,
+                                    // Long-press to sync/unsync player
+                                    debugPrint('🔗 Long-press on ${player.name} (${player.playerId})');
+                                    debugPrint('🔗 Player isGrouped: ${player.isGrouped}, groupMembers: ${player.groupMembers}');
+                                    maProvider.togglePlayerSync(player.playerId);
+                                  },
                                   borderRadius: BorderRadius.circular(16),
                                   child: Container(
                                     height: 72,

@@ -242,20 +242,31 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // Hold to sync hint - shown when hints are enabled
+                        // Slides in with the player cards instead of fading
                         if (_showHints && players.isNotEmpty)
-                          Opacity(
-                            opacity: t, // Fade in with reveal animation
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Text(
-                                S.of(context)!.holdToSync,
-                                style: TextStyle(
-                                  color: colorScheme.onSurface.withOpacity(0.6),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+                          Builder(
+                            builder: (context) {
+                              // Calculate slide offset to match the topmost card
+                              const baseOffset = 80.0;
+                              final hintDistanceToTravel = baseOffset + (players.length * (cardHeight + cardSpacing));
+                              final hintSlideOffset = hintDistanceToTravel * (1.0 - t);
+
+                              return Transform.translate(
+                                offset: Offset(0, hintSlideOffset),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Text(
+                                    S.of(context)!.holdToSync,
+                                    style: TextStyle(
+                                      color: colorScheme.onSurface.withOpacity(0.6),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      decoration: TextDecoration.none,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                            },
                           ),
                         // Build player cards - all slide from behind mini player
                         ...List.generate(players.length, (index) {
@@ -303,7 +314,7 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                                   maProvider.selectPlayer(player);
                                   dismiss();
                                 },
-                                onLongPress: player.available ? () {
+                                onLongPress: () {
                                   HapticFeedback.mediumImpact();
                                   debugPrint('🔗 Long-press on ${player.name} (${player.playerId})');
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -313,7 +324,7 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                                     ),
                                   );
                                   maProvider.togglePlayerSync(player.playerId);
-                                } : null,
+                                },
                                 onPlayPause: () {
                                   if (isPlaying) {
                                     maProvider.pausePlayer(player.playerId);

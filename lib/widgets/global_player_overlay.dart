@@ -159,7 +159,6 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
 
   // Hint system state
   bool _showHints = true;
-  bool _hasUsedPlayerReveal = false;
   bool _hintTriggered = false; // Prevent multiple triggers per session
   final _hintOpacityNotifier = ValueNotifier<double>(0.0);
 
@@ -203,7 +202,6 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
 
   Future<void> _loadHintSettings() async {
     _showHints = await SettingsService.getShowHints();
-    _hasUsedPlayerReveal = await SettingsService.getHasUsedPlayerReveal();
   }
 
   @override
@@ -231,13 +229,8 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     HapticFeedback.mediumImpact();
     _bounceController.reset();
 
-    // Mark player reveal as used (user discovered the feature)
-    if (!_hasUsedPlayerReveal) {
-      _hasUsedPlayerReveal = true;
-      SettingsService.setHasUsedPlayerReveal(true);
-      // Hide the hint immediately
-      _hintOpacityNotifier.value = 0.0;
-    }
+    // Hide the hint immediately if it's showing
+    _hintOpacityNotifier.value = 0.0;
 
     setState(() {
       _isRevealVisible = true;
@@ -268,9 +261,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   }
 
   /// Trigger the pull-to-select hint with bounce animation
-  /// Called when player first becomes available and user hasn't used the feature yet
+  /// Called when player first becomes available - shows on every app launch
   void _triggerPullHint() {
-    if (_hintTriggered || _hasUsedPlayerReveal || !_showHints) return;
+    if (_hintTriggered || !_showHints) return;
     _hintTriggered = true;
 
     // Show hint text
@@ -281,7 +274,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     _bounceController.forward().then((_) {
       // Fade out hint after bounce completes
       Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted && !_hasUsedPlayerReveal) {
+        if (mounted) {
           _hintOpacityNotifier.value = 0.0;
         }
       });
@@ -444,9 +437,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
               return const SizedBox.shrink();
             }
 
-            // Trigger pull hint when player first becomes available
+            // Trigger pull hint when player first becomes available (every app launch)
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && !_hintTriggered && !_hasUsedPlayerReveal && _showHints) {
+              if (mounted && !_hintTriggered && _showHints) {
                 // Small delay to let UI settle
                 Future.delayed(const Duration(milliseconds: 500), () {
                   if (mounted) _triggerPullHint();
@@ -501,6 +494,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                         color: colorScheme.onSurfaceVariant,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ),

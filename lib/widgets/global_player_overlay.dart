@@ -178,9 +178,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
       reverseCurve: Curves.easeInCubic,
     );
 
-    // Bounce animation - quick dip down then back up (longer for hint visibility)
+    // Bounce animation - double bounce for hint visibility
     _bounceController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 900),
       vsync: this,
     );
     _bounceAnimation = CurvedAnimation(
@@ -192,8 +192,16 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     // This isolates the rebuild to only the widgets that depend on bounce offset
     _bounceController.addListener(() {
       final t = _bounceAnimation.value;
-      // Sine curve: 0 -> 1 -> 0 as t goes 0 -> 0.5 -> 1
-      _bounceOffsetNotifier.value = 10.0 * (t < 0.5 ? t * 2 : (1.0 - t) * 2);
+      // Double bounce: first bounce full (10px), second bounce smaller (6px)
+      if (t < 0.25) {
+        _bounceOffsetNotifier.value = 10.0 * (t * 4);           // 0 -> 10
+      } else if (t < 0.5) {
+        _bounceOffsetNotifier.value = 10.0 * ((0.5 - t) * 4);   // 10 -> 0
+      } else if (t < 0.75) {
+        _bounceOffsetNotifier.value = 6.0 * ((t - 0.5) * 4);    // 0 -> 6
+      } else {
+        _bounceOffsetNotifier.value = 6.0 * ((1.0 - t) * 4);    // 6 -> 0
+      }
     });
 
     // Load hint settings
@@ -469,7 +477,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
           },
         ),
 
-        // Pull hint text - bounces with the mini player
+        // Pull hint - positioned half-overlapping mini player top, bounces with it
         ValueListenableBuilder<double>(
           valueListenable: _hintOpacityNotifier,
           builder: (context, opacity, _) {
@@ -480,21 +488,32 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                 return Positioned(
                   left: 0,
                   right: 0,
-                  // Bounce with mini player: base position + bounce offset
-                  bottom: BottomSpacing.navBarHeight + MediaQuery.of(context).padding.bottom - 8 - bounceOffset,
+                  // Position half-overlapping mini player top edge
+                  bottom: BottomSpacing.navBarHeight + BottomSpacing.miniPlayerHeight + MediaQuery.of(context).padding.bottom + 10 - bounceOffset,
                   child: AnimatedOpacity(
                     opacity: opacity,
                     duration: const Duration(milliseconds: 300),
                     child: Center(
                       child: Material(
                         type: MaterialType.transparency,
-                        child: Text(
-                          S.of(context)!.pullToSelectPlayers,
-                          style: TextStyle(
-                            color: colorScheme.onSurfaceVariant,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.lightbulb_outline,
+                              size: 16,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              S.of(context)!.pullToSelectPlayers,
+                              style: TextStyle(
+                                color: colorScheme.onSurfaceVariant,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

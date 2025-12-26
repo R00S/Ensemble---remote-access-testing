@@ -434,7 +434,7 @@
   "metadataApisDescription": "Las imágenes de artistas se obtienen automáticamente de Deezer. Añade claves API a continuación para biografías de artistas y descripciones de álbumes.",
   "lastFmApiKey": "Clave API de Last.fm",
   "lastFmApiKeyHint": "Obtén una clave gratuita en last.fm/api",
-  "swipeToSwitchDevice": "Desliza para cambiar de dispositivo",
+  "swipeToSwitchDevice": "Desliza ← ↓ → para cambiar dispositivo",
   "chapterNumber": "Capítulo {number}",
   "@chapterNumber": {
     "placeholders": {
@@ -477,5 +477,10 @@
   "playerStateIdle": "Inactivo",
   "playerSelected": "Seleccionado",
   "actionQueuedForSync": "Se sincronizará cuando esté en línea",
-  "pendingOfflineActions": "{count} sincronización pendiente"
+  "pendingOfflineActions": "{count} sincronización pendiente",
+  "hintsAndTips": "Consejos y Sugerencias",
+  "showHints": "Mostrar Sugerencias",
+  "showHintsDescription": "Mostrar consejos útiles para descubrir funciones",
+  "pullToSelectPlayers": "Desliza para seleccionar dispositivos",
+  "holdToSync": "Mantén presionado para sincronizar"
 }

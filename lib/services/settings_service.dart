@@ -74,6 +74,10 @@ class SettingsService {
   static const String _keyEnabledAbsLibraries = 'enabled_abs_libraries'; // JSON list of library paths
   static const String _keyDiscoveredAbsLibraries = 'discovered_abs_libraries'; // JSON list of {path, name}
 
+  // Hint System Settings
+  static const String _keyShowHints = 'show_hints'; // Master toggle for hints
+  static const String _keyHasUsedPlayerReveal = 'has_used_player_reveal'; // Track if user has pulled to reveal players
+
   static Future<String?> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyServerUrl);
@@ -761,5 +765,31 @@ class SettingsService {
     }
 
     await setEnabledAbsLibraries(enabled);
+  }
+
+  // Hint System Settings
+
+  /// Get whether hints are enabled (default: true)
+  static Future<bool> getShowHints() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowHints) ?? true;
+  }
+
+  /// Set whether hints are enabled
+  static Future<void> setShowHints(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowHints, show);
+  }
+
+  /// Check if user has ever used the player reveal gesture
+  static Future<bool> getHasUsedPlayerReveal() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyHasUsedPlayerReveal) ?? false;
+  }
+
+  /// Mark that user has used the player reveal gesture
+  static Future<void> setHasUsedPlayerReveal(bool hasUsed) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyHasUsedPlayerReveal, hasUsed);
   }
 }

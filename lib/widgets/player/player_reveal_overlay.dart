@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/app_localizations.dart';
 import '../../providers/music_assistant_provider.dart';
+import '../../services/settings_service.dart';
 import '../../theme/design_tokens.dart';
 import '../../theme/theme_provider.dart';
 import '../../theme/palette_helper.dart';
@@ -43,9 +45,17 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
   // Cache extracted colors per player for per-device accent colors
   final Map<String, ColorScheme?> _playerColors = {};
 
+  // Hint system
+  bool _showHints = true;
+
   @override
   void initState() {
     super.initState();
+
+    // Load hint settings
+    SettingsService.getShowHints().then((value) {
+      if (mounted) setState(() => _showHints = value);
+    });
 
     _revealController = AnimationController(
       vsync: this,
@@ -231,6 +241,22 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Hold to sync hint - shown when hints are enabled
+                        if (_showHints && players.isNotEmpty)
+                          Opacity(
+                            opacity: t, // Fade in with reveal animation
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                S.of(context)!.holdToSync,
+                                style: TextStyle(
+                                  color: colorScheme.onSurface.withOpacity(0.6),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
                         // Build player cards - all slide from behind mini player
                         ...List.generate(players.length, (index) {
                           final player = players[index];

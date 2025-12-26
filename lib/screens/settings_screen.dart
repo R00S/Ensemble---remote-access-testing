@@ -41,6 +41,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Player settings
   bool _preferLocalPlayer = false;
   bool _smartSortPlayers = false;
+  // Hint settings
+  bool _showHints = true;
 
   @override
   void initState() {
@@ -89,6 +91,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final preferLocal = await SettingsService.getPreferLocalPlayer();
     final smartSort = await SettingsService.getSmartSortPlayers();
 
+    // Load hint settings
+    final showHints = await SettingsService.getShowHints();
+
     if (mounted) {
       setState(() {
         _showRecentAlbums = showRecent;
@@ -105,6 +110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _libraryEnabled = libraryEnabled;
         _preferLocalPlayer = preferLocal;
         _smartSortPlayers = smartSort;
+        _showHints = showHints;
       });
     }
   }
@@ -691,6 +697,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) {
                   setState(() => _smartSortPlayers = value);
                   SettingsService.setSmartSortPlayers(value);
+                },
+                activeColor: colorScheme.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // Hints & Tips section
+            Text(
+              S.of(context)!.hintsAndTips,
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onBackground,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              S.of(context)!.showHintsDescription,
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onBackground.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SwitchListTile(
+                title: Text(
+                  S.of(context)!.showHints,
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                value: _showHints,
+                onChanged: (value) {
+                  setState(() => _showHints = value);
+                  SettingsService.setShowHints(value);
                 },
                 activeColor: colorScheme.primary,
                 contentPadding: EdgeInsets.zero,

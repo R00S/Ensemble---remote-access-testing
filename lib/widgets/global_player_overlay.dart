@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/music_assistant_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../services/settings_service.dart';
 import '../theme/theme_provider.dart';
 import 'expandable_player.dart';
 import 'player/player_reveal_overlay.dart';
@@ -156,6 +157,12 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   // This prevents full widget tree rebuilds during animation
   final _bounceOffsetNotifier = ValueNotifier<double>(0.0);
 
+  // Hint system state
+  bool _showHints = true;
+  bool _hasUsedPlayerReveal = false;
+  bool _hintTriggered = false; // Prevent multiple triggers per session
+  final _hintOpacityNotifier = ValueNotifier<double>(0.0);
+
   // Key for the reveal overlay
   final _revealKey = GlobalKey<PlayerRevealOverlayState>();
 
@@ -172,9 +179,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
       reverseCurve: Curves.easeInCubic,
     );
 
-    // Bounce animation - quick dip down then back up
+    // Bounce animation - quick dip down then back up (longer for hint visibility)
     _bounceController = AnimationController(
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     );
     _bounceAnimation = CurvedAnimation(
@@ -189,6 +196,14 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
       // Sine curve: 0 -> 1 -> 0 as t goes 0 -> 0.5 -> 1
       _bounceOffsetNotifier.value = 10.0 * (t < 0.5 ? t * 2 : (1.0 - t) * 2);
     });
+
+    // Load hint settings
+    _loadHintSettings();
+  }
+
+  Future<void> _loadHintSettings() async {
+    _showHints = await SettingsService.getShowHints();
+    _hasUsedPlayerReveal = await SettingsService.getHasUsedPlayerReveal();
   }
 
   @override
@@ -196,6 +211,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     _slideController.dispose();
     _bounceController.dispose();
     _bounceOffsetNotifier.dispose();
+    _hintOpacityNotifier.dispose();
     super.dispose();
   }
 
@@ -214,6 +230,15 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     }
     HapticFeedback.mediumImpact();
     _bounceController.reset();
+
+    // Mark player reveal as used (user discovered the feature)
+    if (!_hasUsedPlayerReveal) {
+      _hasUsedPlayerReveal = true;
+      SettingsService.setHasUsedPlayerReveal(true);
+      // Hide the hint immediately
+      _hintOpacityNotifier.value = 0.0;
+    }
+
     setState(() {
       _isRevealVisible = true;
     });
@@ -240,6 +265,27 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   void _triggerBounce() {
     _bounceController.reset();
     _bounceController.forward();
+  }
+
+  /// Trigger the pull-to-select hint with bounce animation
+  /// Called when player first becomes available and user hasn't used the feature yet
+  void _triggerPullHint() {
+    if (_hintTriggered || _hasUsedPlayerReveal || !_showHints) return;
+    _hintTriggered = true;
+
+    // Show hint text
+    _hintOpacityNotifier.value = 1.0;
+
+    // Trigger bounce animation
+    _bounceController.reset();
+    _bounceController.forward().then((_) {
+      // Fade out hint after bounce completes
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted && !_hasUsedPlayerReveal) {
+          _hintOpacityNotifier.value = 0.0;
+        }
+      });
+    });
   }
 
   @override
@@ -397,6 +443,17 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
             if (!state.isConnected || !state.hasPlayer) {
               return const SizedBox.shrink();
             }
+
+            // Trigger pull hint when player first becomes available
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && !_hintTriggered && !_hasUsedPlayerReveal && _showHints) {
+                // Small delay to let UI settle
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  if (mounted) _triggerPullHint();
+                });
+              }
+            });
+
             // Combine slide and bounce animations with ValueListenableBuilder
             // This prevents full widget tree rebuilds - only ExpandablePlayer updates
             return ValueListenableBuilder<double>(
@@ -415,6 +472,40 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                   },
                 );
               },
+            );
+          },
+        ),
+
+        // Pull hint text - appears below mini player during bounce
+        ValueListenableBuilder<double>(
+          valueListenable: _hintOpacityNotifier,
+          builder: (context, opacity, _) {
+            if (opacity == 0) return const SizedBox.shrink();
+            return Positioned(
+              left: 0,
+              right: 0,
+              bottom: BottomSpacing.navBarHeight + MediaQuery.of(context).padding.bottom - 8,
+              child: AnimatedOpacity(
+                opacity: opacity,
+                duration: const Duration(milliseconds: 300),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceVariant.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      S.of(context)!.pullToSelectPlayers,
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             );
           },
         ),

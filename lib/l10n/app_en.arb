@@ -1078,7 +1078,7 @@
     "description": "Hint for Last.fm API key field"
   },
 
-  "swipeToSwitchDevice": "Swipe to switch device",
+  "swipeToSwitchDevice": "Swipe ← ↓ → to change player",
   "@swipeToSwitchDevice": {
     "description": "Hint for device switching gesture"
   },
@@ -1211,5 +1211,30 @@
         "type": "int"
       }
     }
+  },
+
+  "hintsAndTips": "Hints & Tips",
+  "@hintsAndTips": {
+    "description": "Settings section title for hints"
+  },
+
+  "showHints": "Show Hints",
+  "@showHints": {
+    "description": "Toggle label for showing hints"
+  },
+
+  "showHintsDescription": "Display helpful tips for discovering features",
+  "@showHintsDescription": {
+    "description": "Description for show hints toggle"
+  },
+
+  "pullToSelectPlayers": "Pull to select players",
+  "@pullToSelectPlayers": {
+    "description": "Hint shown when mini player bounces"
+  },
+
+  "holdToSync": "Hold player to sync",
+  "@holdToSync": {
+    "description": "Hint for long-press to sync players"
   }
 }

@@ -259,7 +259,7 @@
   "metadataApisDescription": "Künstlerbilder werden automatisch von Deezer abgerufen. Füge unten API-Schlüssel für Künstlerbiografien und Albenbeschreibungen hinzu.",
   "lastFmApiKey": "Last.fm API-Schlüssel",
   "lastFmApiKeyHint": "Kostenlosen Schlüssel auf last.fm/api holen",
-  "swipeToSwitchDevice": "Wischen um Gerät zu wechseln",
+  "swipeToSwitchDevice": "Wische ← ↓ → um Gerät zu wechseln",
   "chapterNumber": "Kapitel {number}",
   "pcmAudio": "PCM-Audio",
   "playOn": "Abspielen auf...",
@@ -281,5 +281,10 @@
   "playerStateIdle": "Inaktiv",
   "playerSelected": "Ausgewählt",
   "actionQueuedForSync": "Wird synchronisiert wenn online",
-  "pendingOfflineActions": "{count} ausstehende Synchronisierung"
+  "pendingOfflineActions": "{count} ausstehende Synchronisierung",
+  "hintsAndTips": "Tipps & Hinweise",
+  "showHints": "Hinweise anzeigen",
+  "showHintsDescription": "Hilfreiche Tipps zum Entdecken von Funktionen anzeigen",
+  "pullToSelectPlayers": "Ziehen um Geräte auszuwählen",
+  "holdToSync": "Gerät halten zum Synchronisieren"
 }

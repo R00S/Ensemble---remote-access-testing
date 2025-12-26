@@ -487,11 +487,11 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
               return const SizedBox.shrink();
             }
 
-            // Trigger pull hint when player AND track are both available (stable state)
-            // This ensures hint only shows after the mini player has settled
+            // Trigger pull hint when player is available
+            // The 1500ms delay gives time for any track to load (stable state)
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && !_hintTriggered && _showHints && state.hasTrack) {
-                // Longer delay before hint - let user settle in first
+              if (mounted && !_hintTriggered && _showHints) {
+                // Delay lets mini player settle before showing hint
                 Future.delayed(const Duration(milliseconds: 1500), () {
                   if (mounted) _triggerPullHint();
                 });

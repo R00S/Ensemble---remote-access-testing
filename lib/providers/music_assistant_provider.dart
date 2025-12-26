@@ -3477,6 +3477,7 @@ class MusicAssistantProvider with ChangeNotifier {
   }
 
   /// Toggle sync state: if player is synced, unsync it; otherwise sync to selected
+  /// For Cast/Sendspin players that are powered off, powers on first then syncs
   Future<void> togglePlayerSync(String playerId) async {
     _logger.log('🔗 togglePlayerSync called for: $playerId');
 
@@ -3488,13 +3489,52 @@ class MusicAssistantProvider with ChangeNotifier {
 
       _logger.log('🔗 Player found: ${player.name}, isGrouped: ${player.isGrouped}');
       _logger.log('🔗 groupMembers: ${player.groupMembers}, syncedTo: ${player.syncedTo}');
+      _logger.log('🔗 powered: ${player.powered}, available: ${player.available}');
 
       if (player.isGrouped) {
         _logger.log('🔓 Player is grouped, unsyncing...');
         await unsyncPlayer(playerId);
       } else {
-        _logger.log('🔗 Player not grouped, syncing to selected...');
-        await syncPlayerToSelected(playerId);
+        // Check if this is a Cast player with a Sendspin counterpart that's powered off
+        final hasSendspinCounterpart = _castToSendspinIdMap.containsKey(playerId);
+
+        if (hasSendspinCounterpart && !player.powered) {
+          _logger.log('🔌 Cast/Sendspin player is off, powering on first...');
+
+          // Power on the Cast player
+          await _api?.setPower(playerId, true);
+
+          // Wait for the player to power on and Sendspin to become ready
+          _logger.log('🔗 Waiting for player to power on...');
+
+          // Poll for up to 10 seconds for the player to be powered and available
+          const maxAttempts = 20;
+          const pollInterval = Duration(milliseconds: 500);
+
+          for (var attempt = 0; attempt < maxAttempts; attempt++) {
+            await Future.delayed(pollInterval);
+            await refreshPlayers();
+
+            // Check if the Cast player is now powered on
+            final updatedPlayer = _availablePlayers.where(
+              (p) => p.playerId == playerId
+            ).firstOrNull;
+
+            if (updatedPlayer != null && updatedPlayer.powered && updatedPlayer.available) {
+              _logger.log('✅ Player powered on, syncing...');
+              await syncPlayerToSelected(playerId);
+              return;
+            }
+
+            _logger.log('⏳ Attempt ${attempt + 1}/$maxAttempts - waiting for power on...');
+          }
+
+          _logger.log('⚠️ Timeout waiting for power on, attempting sync anyway...');
+          await syncPlayerToSelected(playerId);
+        } else {
+          _logger.log('🔗 Player not grouped, syncing to selected...');
+          await syncPlayerToSelected(playerId);
+        }
       }
     } catch (e) {
       _logger.log('❌ togglePlayerSync error: $e');

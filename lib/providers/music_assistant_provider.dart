@@ -2047,37 +2047,57 @@ class MusicAssistantProvider with ChangeNotifier {
         return true;
       }).toList();
 
-      // Prefer Sendspin versions of Cast players over regular Cast players
-      // When both exist, keep only the Sendspin version with the suffix removed
+      // Smart Sendspin/Cast player switching:
+      // - When grouped: show Sendspin version (renamed), hide original Cast
+      // - When ungrouped: show original Cast, hide Sendspin version
+      // This gives power control and proper queue behavior when not syncing
       final sendspinSuffix = ' (Sendspin)';
       final sendspinPlayers = _availablePlayers
           .where((p) => p.name.endsWith(sendspinSuffix))
           .toList();
 
       if (sendspinPlayers.isNotEmpty) {
-        // Build a set of base names that have Sendspin versions available
-        final sendspinBaseNames = sendspinPlayers
-            .map((p) => p.name.substring(0, p.name.length - sendspinSuffix.length))
-            .toSet();
+        // Build maps for Sendspin players and their grouped status
+        final sendspinByBaseName = <String, Player>{};
+        final groupedSendspinBaseNames = <String>{};
 
-        _logger.log('🔊 Found ${sendspinPlayers.length} Sendspin players: ${sendspinBaseNames.join(", ")}');
-
-        // Filter out regular Cast players that have Sendspin equivalents
-        _availablePlayers = _availablePlayers.where((player) {
-          // Keep all Sendspin players
-          if (player.name.endsWith(sendspinSuffix)) return true;
-
-          // Filter out regular players if a Sendspin version exists
-          if (sendspinBaseNames.contains(player.name)) {
-            _logger.log('🚫 Preferring Sendspin version over: ${player.name}');
-            filteredCount++;
-            return false;
+        for (final player in sendspinPlayers) {
+          final baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+          sendspinByBaseName[baseName] = player;
+          if (player.isGrouped) {
+            groupedSendspinBaseNames.add(baseName);
+            _logger.log('🔊 Sendspin player "$baseName" is grouped - will prefer Sendspin version');
+          } else {
+            _logger.log('🔊 Sendspin player "$baseName" is ungrouped - will prefer original Cast');
           }
+        }
 
-          return true;
+        // Filter players based on grouped status
+        _availablePlayers = _availablePlayers.where((player) {
+          final isSendspin = player.name.endsWith(sendspinSuffix);
+
+          if (isSendspin) {
+            final baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+            // Keep Sendspin only if grouped
+            if (player.isGrouped) {
+              return true;
+            } else {
+              _logger.log('🚫 Hiding ungrouped Sendspin player: ${player.name}');
+              filteredCount++;
+              return false;
+            }
+          } else {
+            // For regular players, hide if Sendspin version exists AND is grouped
+            if (groupedSendspinBaseNames.contains(player.name)) {
+              _logger.log('🚫 Preferring grouped Sendspin version over: ${player.name}');
+              filteredCount++;
+              return false;
+            }
+            return true;
+          }
         }).toList();
 
-        // Rename Sendspin players to remove the suffix
+        // Rename remaining Sendspin players to remove the suffix
         _availablePlayers = _availablePlayers.map((player) {
           if (player.name.endsWith(sendspinSuffix)) {
             final cleanName = player.name.substring(0, player.name.length - sendspinSuffix.length);

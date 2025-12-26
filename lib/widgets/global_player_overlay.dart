@@ -478,7 +478,8 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
           Positioned(
             left: 24,
             right: 24,
-            bottom: BottomSpacing.navBarHeight + BottomSpacing.miniPlayerHeight + MediaQuery.of(context).padding.bottom + 24,
+            // Move up by 1.5 album covers (~224px) from base position
+            bottom: BottomSpacing.navBarHeight + BottomSpacing.miniPlayerHeight + MediaQuery.of(context).padding.bottom + 24 + 224,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -502,8 +503,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                 // Hint text
                 Text(
                   S.of(context)!.welcomeMessage,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withOpacity(0.9),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
                   ),
                   textAlign: TextAlign.center,
                 ),

@@ -131,6 +131,11 @@ class GlobalPlayerOverlay extends StatefulWidget {
     _overlayStateKey.currentState?._dismissPlayerReveal();
   }
 
+  /// Trigger single bounce on mini player (called when device selector collapses)
+  static void triggerBounce() {
+    _overlayStateKey.currentState?._triggerBounce();
+  }
+
   /// Check if the player reveal is currently visible
   static bool get isPlayerRevealVisible =>
       _overlayStateKey.currentState?._isRevealVisible ?? false;
@@ -141,18 +146,22 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   late AnimationController _slideController;
   late Animation<double> _slideAnimation;
 
+  // Single bounce controller for device selector expand/collapse
+  late AnimationController _singleBounceController;
+
+  // Double bounce controller for hint
+  late AnimationController _doubleBounceController;
+
   // State for player reveal overlay
   bool _isRevealVisible = false;
+
+  // Bounce offset for mini player (used by both single and double bounce)
+  final _bounceOffsetNotifier = ValueNotifier<double>(0.0);
 
   // Hint system state
   bool _showHints = true;
   bool _hintTriggered = false; // Prevent multiple triggers per session
   final _hintOpacityNotifier = ValueNotifier<double>(0.0);
-
-  // Hint-only bounce animation (separate from device selector)
-  late AnimationController _hintBounceController;
-  late Animation<double> _hintBounceAnimation;
-  final _hintBounceOffsetNotifier = ValueNotifier<double>(0.0);
 
   // Key for the reveal overlay
   final _revealKey = GlobalKey<PlayerRevealOverlayState>();
@@ -170,28 +179,37 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
       reverseCurve: Curves.easeInCubic,
     );
 
-    // Hint-only bounce animation - double bounce for hint visibility
-    _hintBounceController = AnimationController(
+    // Single bounce for device selector expand/collapse
+    _singleBounceController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _singleBounceController.addListener(() {
+      final t = Curves.easeOut.transform(_singleBounceController.value);
+      // Single bounce: up to 10px then back to 0
+      if (t < 0.5) {
+        _bounceOffsetNotifier.value = 10.0 * (t * 2);           // 0 -> 10
+      } else {
+        _bounceOffsetNotifier.value = 10.0 * ((1.0 - t) * 2);   // 10 -> 0
+      }
+    });
+
+    // Double bounce for hint
+    _doubleBounceController = AnimationController(
       duration: const Duration(milliseconds: 900),
       vsync: this,
     );
-    _hintBounceAnimation = CurvedAnimation(
-      parent: _hintBounceController,
-      curve: Curves.easeOut,
-    );
-
-    // Use ValueNotifier for hint bounce to avoid full widget rebuilds
-    _hintBounceController.addListener(() {
-      final t = _hintBounceAnimation.value;
+    _doubleBounceController.addListener(() {
+      final t = Curves.easeOut.transform(_doubleBounceController.value);
       // Double bounce: first bounce full (10px), second bounce smaller (6px)
       if (t < 0.25) {
-        _hintBounceOffsetNotifier.value = 10.0 * (t * 4);           // 0 -> 10
+        _bounceOffsetNotifier.value = 10.0 * (t * 4);           // 0 -> 10
       } else if (t < 0.5) {
-        _hintBounceOffsetNotifier.value = 10.0 * ((0.5 - t) * 4);   // 10 -> 0
+        _bounceOffsetNotifier.value = 10.0 * ((0.5 - t) * 4);   // 10 -> 0
       } else if (t < 0.75) {
-        _hintBounceOffsetNotifier.value = 6.0 * ((t - 0.5) * 4);    // 0 -> 6
+        _bounceOffsetNotifier.value = 6.0 * ((t - 0.5) * 4);    // 0 -> 6
       } else {
-        _hintBounceOffsetNotifier.value = 6.0 * ((1.0 - t) * 4);    // 6 -> 0
+        _bounceOffsetNotifier.value = 6.0 * ((1.0 - t) * 4);    // 6 -> 0
       }
     });
 
@@ -206,8 +224,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   @override
   void dispose() {
     _slideController.dispose();
-    _hintBounceController.dispose();
-    _hintBounceOffsetNotifier.dispose();
+    _singleBounceController.dispose();
+    _doubleBounceController.dispose();
+    _bounceOffsetNotifier.dispose();
     _hintOpacityNotifier.dispose();
     super.dispose();
   }
@@ -230,6 +249,10 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     // Hide the hint immediately if it's showing
     _hintOpacityNotifier.value = 0.0;
 
+    // Trigger single bounce on expand
+    _singleBounceController.reset();
+    _singleBounceController.forward();
+
     setState(() {
       _isRevealVisible = true;
     });
@@ -237,6 +260,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
 
   void _hidePlayerReveal() {
     if (!_isRevealVisible) return;
+    _bounceOffsetNotifier.value = 0;
     setState(() {
       _isRevealVisible = false;
     });
@@ -246,11 +270,16 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   void _dismissPlayerReveal() {
     if (!_isRevealVisible) return;
     // Call the overlay's dismiss method which has the slide animation
-    // Note: dismiss() triggers the bounce animation internally
     _revealKey.currentState?.dismiss();
   }
 
-  /// Trigger the pull-to-select hint with bounce animation
+  /// Trigger single bounce on mini player (called when device selector collapses)
+  void _triggerBounce() {
+    _singleBounceController.reset();
+    _singleBounceController.forward();
+  }
+
+  /// Trigger the pull-to-select hint with double bounce animation
   /// Called when player first becomes available - shows on every app launch
   void _triggerPullHint() {
     if (_hintTriggered || !_showHints) return;
@@ -259,9 +288,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     // Show hint text
     _hintOpacityNotifier.value = 1.0;
 
-    // Trigger hint-only bounce animation
-    _hintBounceController.reset();
-    _hintBounceController.forward().then((_) {
+    // Trigger double bounce animation on mini player
+    _doubleBounceController.reset();
+    _doubleBounceController.forward().then((_) {
       // Fade out hint after lingering
       Future.delayed(const Duration(milliseconds: 2500), () {
         if (mounted) {
@@ -437,69 +466,71 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
               }
             });
 
-            // Slide animation for hiding player
-            return AnimatedBuilder(
-              animation: _slideAnimation,
-              builder: (context, _) {
-                return ExpandablePlayer(
-                  key: globalPlayerKey,
-                  slideOffset: _slideAnimation.value,
-                  bounceOffset: 0.0, // No bounce on player - only hint bounces
-                  onRevealPlayers: _showPlayerReveal,
-                  isDeviceRevealVisible: _isRevealVisible,
+            // Combine slide and bounce animations with ValueListenableBuilder
+            // This prevents full widget tree rebuilds - only ExpandablePlayer updates
+            return ValueListenableBuilder<double>(
+              valueListenable: _bounceOffsetNotifier,
+              builder: (context, bounceOffset, _) {
+                return AnimatedBuilder(
+                  animation: _slideAnimation,
+                  builder: (context, _) {
+                    return ExpandablePlayer(
+                      key: globalPlayerKey,
+                      slideOffset: _slideAnimation.value,
+                      bounceOffset: bounceOffset,
+                      onRevealPlayers: _showPlayerReveal,
+                      isDeviceRevealVisible: _isRevealVisible,
+                    );
+                  },
                 );
               },
             );
           },
         ),
 
-        // Pull hint - toast pill at bottom of screen with its own bounce animation
+        // Pull hint - toast pill overlapping bottom nav bar (no bounce)
         ValueListenableBuilder<double>(
           valueListenable: _hintOpacityNotifier,
           builder: (context, opacity, _) {
             if (opacity == 0) return const SizedBox.shrink();
-            return ValueListenableBuilder<double>(
-              valueListenable: _hintBounceOffsetNotifier,
-              builder: (context, bounceOffset, _) {
-                return Positioned(
-                  left: 16,
-                  right: 16,
-                  // Position as a toast pill above the nav bar
-                  bottom: BottomSpacing.navBarHeight + MediaQuery.of(context).padding.bottom + 16 + bounceOffset,
-                  child: AnimatedOpacity(
-                    opacity: opacity,
-                    duration: const Duration(milliseconds: 300),
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: colorScheme.inverseSurface,
-                          borderRadius: BorderRadius.circular(24),
+            return Positioned(
+              left: 16,
+              right: 16,
+              // Position overlapping the bottom nav bar
+              bottom: MediaQuery.of(context).padding.bottom + 20,
+              child: AnimatedOpacity(
+                opacity: opacity,
+                duration: const Duration(milliseconds: 300),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.inverseSurface,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline,
+                          size: 16,
+                          color: colorScheme.onInverseSurface,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.lightbulb_outline,
-                              size: 16,
-                              color: colorScheme.onInverseSurface,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              S.of(context)!.pullToSelectPlayers,
-                              style: TextStyle(
-                                color: colorScheme.onInverseSurface,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(width: 8),
+                        Text(
+                          S.of(context)!.pullToSelectPlayers,
+                          style: TextStyle(
+                            color: colorScheme.onInverseSurface,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            decoration: TextDecoration.none,
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                );
-              },
+                ),
+              ),
             );
           },
         ),

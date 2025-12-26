@@ -482,6 +482,14 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Ensemble logo - same as settings screen
+                Image.asset(
+                  'assets/images/ensemble_icon_transparent.png',
+                  width: MediaQuery.of(context).size.width * 0.5,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 24),
+                // Welcome title
                 Text(
                   S.of(context)!.welcomeToEnsemble,
                   style: theme.textTheme.headlineSmall?.copyWith(
@@ -490,7 +498,8 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+                // Hint text
                 Text(
                   S.of(context)!.welcomeMessage,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -498,7 +507,8 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
+                // Skip button
                 TextButton(
                   onPressed: _endHintMode,
                   child: Text(

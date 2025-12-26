@@ -201,15 +201,15 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     );
     _doubleBounceController.addListener(() {
       final t = Curves.easeOut.transform(_doubleBounceController.value);
-      // Double bounce: first bounce full (20px), second bounce smaller (12px)
+      // Double bounce: both bounces equal (20px)
       if (t < 0.25) {
         _bounceOffsetNotifier.value = 20.0 * (t * 4);           // 0 -> 20
       } else if (t < 0.5) {
         _bounceOffsetNotifier.value = 20.0 * ((0.5 - t) * 4);   // 20 -> 0
       } else if (t < 0.75) {
-        _bounceOffsetNotifier.value = 12.0 * ((t - 0.5) * 4);   // 0 -> 12
+        _bounceOffsetNotifier.value = 20.0 * ((t - 0.5) * 4);   // 0 -> 20
       } else {
-        _bounceOffsetNotifier.value = 12.0 * ((1.0 - t) * 4);   // 12 -> 0
+        _bounceOffsetNotifier.value = 20.0 * ((1.0 - t) * 4);   // 20 -> 0
       }
     });
 

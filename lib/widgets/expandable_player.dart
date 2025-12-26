@@ -1493,53 +1493,65 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Hidden during transition to prevent flash
                 // FALLBACK: Show if transition active but no peek content available
                 // GPU PERF: Use conditional instead of Opacity to avoid saveLayer
-                if (!(_inTransition && t < 0.1 && _peekPlayer != null))
+                // Hint text - vertically centered in mini player
+                if (widget.isHintVisible && t < 0.5 && !(_inTransition && t < 0.1 && _peekPlayer != null))
+                  Positioned(
+                    left: titleLeft + miniPlayerSlideOffset,
+                    // Center vertically: (64 - ~20) / 2 = 22
+                    top: (MiniPlayerLayout.height - 20) / 2,
+                    child: SizedBox(
+                      width: titleWidth,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.lightbulb_outline,
+                            size: 16,
+                            color: textColor,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              S.of(context)!.pullToSelectPlayers,
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: titleFontSize,
+                                fontWeight: MiniPlayerLayout.primaryFontWeight,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Track title - with slide animation when collapsed
+                // Hidden when hint is visible
+                if (!(widget.isHintVisible && t < 0.5) && !(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
                     left: titleLeft + miniPlayerSlideOffset,
                     top: titleTop,
                     child: SizedBox(
                       width: titleWidth,
-                      child: (widget.isHintVisible && t < 0.5)
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.lightbulb_outline,
-                                  size: 16,
-                                  color: textColor,
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    S.of(context)!.pullToSelectPlayers,
-                                    style: TextStyle(
-                                      color: textColor,
-                                      fontSize: titleFontSize,
-                                      fontWeight: MiniPlayerLayout.primaryFontWeight,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Text(
-                              // Show player name when device reveal visible and collapsed
-                              (widget.isDeviceRevealVisible && t < 0.5)
-                                  ? selectedPlayer.name
-                                  : currentTrack.name,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: titleFontSize,
-                                fontWeight: t > 0.5 ? FontWeight.w600 : MiniPlayerLayout.primaryFontWeight,
-                                letterSpacing: t > 0.5 ? -0.5 : 0,
-                                height: t > 0.5 ? 1.2 : null, // Only use line height when expanded
-                              ),
-                              textAlign: t > 0.5 ? TextAlign.center : TextAlign.left,
-                              maxLines: t > 0.5 ? 2 : 1,
-                              softWrap: t > 0.5, // false in collapsed to ensure ellipsis truncation
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      child: Text(
+                        // Show player name when device reveal visible and collapsed
+                        (widget.isDeviceRevealVisible && t < 0.5)
+                            ? selectedPlayer.name
+                            : currentTrack.name,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: titleFontSize,
+                          fontWeight: t > 0.5 ? FontWeight.w600 : MiniPlayerLayout.primaryFontWeight,
+                          letterSpacing: t > 0.5 ? -0.5 : 0,
+                          height: t > 0.5 ? 1.2 : null, // Only use line height when expanded
+                        ),
+                        textAlign: t > 0.5 ? TextAlign.center : TextAlign.left,
+                        maxLines: t > 0.5 ? 2 : 1,
+                        softWrap: t > 0.5, // false in collapsed to ensure ellipsis truncation
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
 

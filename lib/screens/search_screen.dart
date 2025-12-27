@@ -6,6 +6,7 @@ import '../constants/timings.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
 import '../services/debug_logger.dart';
+import '../services/database_service.dart';
 import '../widgets/global_player_overlay.dart';
 import '../widgets/common/empty_state.dart';
 import '../widgets/common/disconnected_state.dart';
@@ -87,12 +88,24 @@ class SearchScreenState extends State<SearchScreen> {
   bool _hasSearched = false;
   String _activeFilter = 'all'; // 'all', 'artists', 'albums', 'tracks', 'playlists', 'audiobooks'
   String? _searchError;
+  List<String> _recentSearches = [];
 
   @override
   void initState() {
     super.initState();
     // Don't auto-focus - let user tap to focus
     // This prevents keyboard popup bug when SearchScreen is in widget tree but not visible
+    _loadRecentSearches();
+  }
+
+  Future<void> _loadRecentSearches() async {
+    if (!DatabaseService.instance.isInitialized) return;
+    final searches = await DatabaseService.instance.getRecentSearches();
+    if (mounted) {
+      setState(() {
+        _recentSearches = searches;
+      });
+    }
   }
 
   void requestFocus() {
@@ -147,6 +160,14 @@ class SearchScreenState extends State<SearchScreen> {
           _isSearching = false;
           _hasSearched = true;
         });
+
+        // Save to search history if we got results
+        final hasResults = results.values.any((list) => list.isNotEmpty);
+        if (hasResults && DatabaseService.instance.isInitialized) {
+          DatabaseService.instance.saveSearchQuery(query);
+          _loadRecentSearches(); // Refresh the list
+        }
+
         // Keep keyboard open if user is still typing
         if (keepFocus && _focusNode.hasFocus) {
           _focusNode.requestFocus();
@@ -248,6 +269,36 @@ class SearchScreenState extends State<SearchScreen> {
                 fontSize: 16,
               ),
             ),
+            // Show recent searches if available
+            if (_recentSearches.isNotEmpty) ...[
+              const SizedBox(height: 32),
+              Text(
+                S.of(context)!.recentSearches,
+                style: TextStyle(
+                  color: colorScheme.onBackground.withOpacity(0.7),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: _recentSearches.map((query) => ActionChip(
+                    label: Text(query),
+                    onPressed: () {
+                      _searchController.text = query;
+                      _performSearch(query);
+                    },
+                    backgroundColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                    side: BorderSide.none,
+                  )).toList(),
+                ),
+              ),
+            ],
           ],
         ),
       );

@@ -168,12 +168,24 @@ class HomeRowCache extends Table {
   Set<Column> get primaryKey => {rowType};
 }
 
-@DriftDatabase(tables: [Profiles, RecentlyPlayed, LibraryCache, SyncMetadata, PlaybackState, CachedPlayers, CachedQueue, HomeRowCache])
+/// Search history for quick access to recent searches
+class SearchHistory extends Table {
+  /// Auto-incrementing ID
+  IntColumn get id => integer().autoIncrement()();
+
+  /// The search query
+  TextColumn get query => text()();
+
+  /// When the search was performed
+  DateTimeColumn get searchedAt => dateTime()();
+}
+
+@DriftDatabase(tables: [Profiles, RecentlyPlayed, LibraryCache, SyncMetadata, PlaybackState, CachedPlayers, CachedQueue, HomeRowCache, SearchHistory])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -191,6 +203,10 @@ class AppDatabase extends _$AppDatabase {
         // Migration from v2 to v3: Add home row cache table
         if (from < 3) {
           await m.createTable(homeRowCache);
+        }
+        // Migration from v3 to v4: Add search history table
+        if (from < 4) {
+          await m.createTable(searchHistory);
         }
       },
     );
@@ -568,5 +584,52 @@ class AppDatabase extends _$AppDatabase {
   /// Clear all home row cache
   Future<void> clearHomeRowCache() async {
     await delete(homeRowCache).go();
+  }
+
+  // ============================================
+  // Search History Operations
+  // ============================================
+
+  /// Save a search query to history (deduplicates and limits to 10)
+  Future<void> saveSearchQuery(String query) async {
+    final trimmedQuery = query.trim();
+    if (trimmedQuery.isEmpty) return;
+
+    await transaction(() async {
+      // Delete existing entry with same query (case-insensitive)
+      await (delete(searchHistory)
+            ..where((s) => s.query.lower().equals(trimmedQuery.toLowerCase())))
+          .go();
+
+      // Insert the new search
+      await into(searchHistory).insert(SearchHistoryCompanion.insert(
+        query: trimmedQuery,
+        searchedAt: DateTime.now(),
+      ));
+
+      // Keep only the 10 most recent searches
+      final allSearches = await (select(searchHistory)
+            ..orderBy([(s) => OrderingTerm.desc(s.searchedAt)]))
+          .get();
+
+      if (allSearches.length > 10) {
+        final toDelete = allSearches.skip(10).map((s) => s.id).toList();
+        await (delete(searchHistory)..where((s) => s.id.isIn(toDelete))).go();
+      }
+    });
+  }
+
+  /// Get recent search queries (up to 10, most recent first)
+  Future<List<String>> getRecentSearches() async {
+    final searches = await (select(searchHistory)
+          ..orderBy([(s) => OrderingTerm.desc(s.searchedAt)])
+          ..limit(10))
+        .get();
+    return searches.map((s) => s.query).toList();
+  }
+
+  /// Clear all search history
+  Future<void> clearSearchHistory() async {
+    await delete(searchHistory).go();
   }
 }

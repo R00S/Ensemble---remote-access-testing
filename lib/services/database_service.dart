@@ -239,4 +239,17 @@ class DatabaseService {
 
   /// Clear all home row cache
   Future<void> clearHomeRowCache() => db.clearHomeRowCache();
+
+  // ============================================
+  // Search History Convenience Methods
+  // ============================================
+
+  /// Save a search query to history
+  Future<void> saveSearchQuery(String query) => db.saveSearchQuery(query);
+
+  /// Get recent search queries (up to 10)
+  Future<List<String>> getRecentSearches() => db.getRecentSearches();
+
+  /// Clear all search history
+  Future<void> clearSearchHistory() => db.clearSearchHistory();
 }

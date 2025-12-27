@@ -261,6 +261,21 @@
     "description": "Search hint text"
   },
 
+  "recentSearches": "Recent Searches",
+  "@recentSearches": {
+    "description": "Label for recent search history section"
+  },
+
+  "clearSearchHistory": "Clear Search History",
+  "@clearSearchHistory": {
+    "description": "Button to clear search history"
+  },
+
+  "searchHistoryCleared": "Search history cleared",
+  "@searchHistoryCleared": {
+    "description": "Confirmation message after clearing search history"
+  },
+
   "retry": "Retry",
   "@retry": {
     "description": "Retry button label"

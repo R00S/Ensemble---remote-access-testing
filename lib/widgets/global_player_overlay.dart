@@ -531,6 +531,22 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
             ),
           ),
 
+        // Preemptive solid backdrop - shows instantly when transitioning to welcome
+        // This covers the home screen before the animated welcome starts
+        if (_waitingForConnection && !_isHintModeActive)
+          Selector<MusicAssistantProvider, bool>(
+            selector: (_, provider) => provider.isConnected && provider.selectedPlayer != null,
+            builder: (context, isReady, _) {
+              if (!isReady) return const SizedBox.shrink();
+              // Show solid backdrop immediately to cover home screen
+              return Positioned.fill(
+                child: Container(
+                  color: colorScheme.surface,
+                ),
+              );
+            },
+          ),
+
         // Blur backdrop for hint/welcome mode - animated fade from solid to semi-transparent
         if (_isHintModeActive)
           Positioned.fill(

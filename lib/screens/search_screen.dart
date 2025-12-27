@@ -31,32 +31,34 @@ class _ListItem {
   final MediaItem? mediaItem;
   final String? headerTitle;
   final int? headerCount;
+  final double? relevanceScore; // For unified view sorting
 
   _ListItem.header(this.headerTitle, this.headerCount)
       : type = _ListItemType.header,
-        mediaItem = null;
+        mediaItem = null,
+        relevanceScore = null;
 
-  _ListItem.artist(this.mediaItem)
+  _ListItem.artist(this.mediaItem, {this.relevanceScore})
       : type = _ListItemType.artist,
         headerTitle = null,
         headerCount = null;
 
-  _ListItem.album(this.mediaItem)
+  _ListItem.album(this.mediaItem, {this.relevanceScore})
       : type = _ListItemType.album,
         headerTitle = null,
         headerCount = null;
 
-  _ListItem.track(this.mediaItem)
+  _ListItem.track(this.mediaItem, {this.relevanceScore})
       : type = _ListItemType.track,
         headerTitle = null,
         headerCount = null;
 
-  _ListItem.playlist(this.mediaItem)
+  _ListItem.playlist(this.mediaItem, {this.relevanceScore})
       : type = _ListItemType.playlist,
         headerTitle = null,
         headerCount = null;
 
-  _ListItem.audiobook(this.mediaItem)
+  _ListItem.audiobook(this.mediaItem, {this.relevanceScore})
       : type = _ListItemType.audiobook,
         headerTitle = null,
         headerCount = null;
@@ -65,7 +67,8 @@ class _ListItem {
       : type = _ListItemType.spacer,
         mediaItem = null,
         headerTitle = null,
-        headerCount = null;
+        headerCount = null,
+        relevanceScore = null;
 }
 
 class SearchScreenState extends State<SearchScreen> {
@@ -338,19 +341,20 @@ class SearchScreenState extends State<SearchScreen> {
                 itemCount: listItems.length,
                 itemBuilder: (context, index) {
                   final item = listItems[index];
+                  final showTypeInSubtitle = _activeFilter == 'all';
                   switch (item.type) {
                     case _ListItemType.header:
                       return _buildSectionHeader(item.headerTitle!, item.headerCount!);
                     case _ListItemType.artist:
                       return _buildArtistTile(item.mediaItem! as Artist);
                     case _ListItemType.album:
-                      return _buildAlbumTile(item.mediaItem! as Album);
+                      return _buildAlbumTile(item.mediaItem! as Album, showType: showTypeInSubtitle);
                     case _ListItemType.track:
-                      return _buildTrackTile(item.mediaItem! as Track);
+                      return _buildTrackTile(item.mediaItem! as Track, showType: showTypeInSubtitle);
                     case _ListItemType.playlist:
-                      return _buildPlaylistTile(item.mediaItem! as Playlist);
+                      return _buildPlaylistTile(item.mediaItem! as Playlist, showType: showTypeInSubtitle);
                     case _ListItemType.audiobook:
-                      return _buildAudiobookTile(item.mediaItem! as Audiobook);
+                      return _buildAudiobookTile(item.mediaItem! as Audiobook, showType: showTypeInSubtitle);
                     case _ListItemType.spacer:
                       return const SizedBox(height: 24);
                   }
@@ -363,6 +367,73 @@ class SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  /// Calculate relevance score for a media item based on query match
+  double _calculateRelevanceScore(MediaItem item, String query) {
+    final queryLower = query.toLowerCase().trim();
+    if (queryLower.isEmpty) return 0;
+
+    double score = 0;
+    final nameLower = item.name.toLowerCase();
+
+    // Primary name matching
+    if (nameLower == queryLower) {
+      score = 100; // Exact match
+    } else if (nameLower.startsWith(queryLower)) {
+      score = 80; // Starts with query
+    } else if (_matchesWordBoundary(nameLower, queryLower)) {
+      score = 60; // Contains query at word boundary
+    } else if (nameLower.contains(queryLower)) {
+      score = 40; // Contains query anywhere
+    } else {
+      score = 20; // Fuzzy/partial match (MA returned it, so some relevance)
+    }
+
+    // Bonus for library items
+    if (item.inLibrary) {
+      score += 10;
+    }
+
+    // Bonus for favorites
+    if (item.favorite) {
+      score += 5;
+    }
+
+    // Secondary field matching (artist name for albums/tracks)
+    if (item is Album) {
+      final artistLower = item.artistsString.toLowerCase();
+      if (artistLower == queryLower) {
+        score += 15; // Artist exact match
+      } else if (artistLower.contains(queryLower)) {
+        score += 8; // Artist contains query
+      }
+    } else if (item is Track) {
+      final artistLower = item.artistsString.toLowerCase();
+      if (artistLower == queryLower) {
+        score += 15;
+      } else if (artistLower.contains(queryLower)) {
+        score += 8;
+      }
+      // Also check album name for tracks
+      if (item.albumName != null) {
+        final albumLower = item.albumName!.toLowerCase();
+        if (albumLower.contains(queryLower)) {
+          score += 5;
+        }
+      }
+    }
+
+    return score;
+  }
+
+  /// Check if query matches at a word boundary in text
+  bool _matchesWordBoundary(String text, String query) {
+    final words = text.split(RegExp(r'\s+'));
+    for (final word in words) {
+      if (word.startsWith(query)) return true;
+    }
+    return false;
+  }
+
   List<_ListItem> _buildListItems(
     List<MediaItem> artists,
     List<MediaItem> albums,
@@ -371,56 +442,66 @@ class SearchScreenState extends State<SearchScreen> {
     List<MediaItem> audiobooks,
   ) {
     final items = <_ListItem>[];
+    final query = _searchController.text;
 
-    // Add artists section
-    if ((_activeFilter == 'all' || _activeFilter == 'artists') && artists.isNotEmpty) {
-      if (_activeFilter == 'all') {
-        items.add(_ListItem.header(S.of(context)!.artists, artists.length));
+    // For 'all' filter, create unified relevance-sorted list
+    if (_activeFilter == 'all') {
+      final scoredItems = <_ListItem>[];
+
+      // Score and add all items
+      for (final artist in artists) {
+        final score = _calculateRelevanceScore(artist, query);
+        scoredItems.add(_ListItem.artist(artist, relevanceScore: score));
       }
+      for (final album in albums) {
+        final score = _calculateRelevanceScore(album, query);
+        scoredItems.add(_ListItem.album(album, relevanceScore: score));
+      }
+      for (final track in tracks) {
+        final score = _calculateRelevanceScore(track, query);
+        scoredItems.add(_ListItem.track(track, relevanceScore: score));
+      }
+      for (final playlist in playlists) {
+        final score = _calculateRelevanceScore(playlist, query);
+        scoredItems.add(_ListItem.playlist(playlist, relevanceScore: score));
+      }
+      for (final audiobook in audiobooks) {
+        final score = _calculateRelevanceScore(audiobook, query);
+        scoredItems.add(_ListItem.audiobook(audiobook, relevanceScore: score));
+      }
+
+      // Sort by relevance score descending
+      scoredItems.sort((a, b) => (b.relevanceScore ?? 0).compareTo(a.relevanceScore ?? 0));
+
+      return scoredItems;
+    }
+
+    // For specific type filters, use sectioned view (no headers needed for single type)
+    if (_activeFilter == 'artists' && artists.isNotEmpty) {
       for (final artist in artists) {
         items.add(_ListItem.artist(artist));
       }
-      items.add(_ListItem.spacer());
     }
 
-    // Add albums section
-    if ((_activeFilter == 'all' || _activeFilter == 'albums') && albums.isNotEmpty) {
-      if (_activeFilter == 'all') {
-        items.add(_ListItem.header(S.of(context)!.albums, albums.length));
-      }
+    if (_activeFilter == 'albums' && albums.isNotEmpty) {
       for (final album in albums) {
         items.add(_ListItem.album(album));
       }
-      items.add(_ListItem.spacer());
     }
 
-    // Add tracks section
-    if ((_activeFilter == 'all' || _activeFilter == 'tracks') && tracks.isNotEmpty) {
-      if (_activeFilter == 'all') {
-        items.add(_ListItem.header(S.of(context)!.tracks, tracks.length));
-      }
+    if (_activeFilter == 'tracks' && tracks.isNotEmpty) {
       for (final track in tracks) {
         items.add(_ListItem.track(track));
       }
-      items.add(_ListItem.spacer());
     }
 
-    // Add playlists section
-    if ((_activeFilter == 'all' || _activeFilter == 'playlists') && playlists.isNotEmpty) {
-      if (_activeFilter == 'all') {
-        items.add(_ListItem.header(S.of(context)!.playlists, playlists.length));
-      }
+    if (_activeFilter == 'playlists' && playlists.isNotEmpty) {
       for (final playlist in playlists) {
         items.add(_ListItem.playlist(playlist));
       }
-      items.add(_ListItem.spacer());
     }
 
-    // Add audiobooks section
-    if ((_activeFilter == 'all' || _activeFilter == 'audiobooks') && audiobooks.isNotEmpty) {
-      if (_activeFilter == 'all') {
-        items.add(_ListItem.header(S.of(context)!.audiobooks, audiobooks.length));
-      }
+    if (_activeFilter == 'audiobooks' && audiobooks.isNotEmpty) {
       for (final audiobook in audiobooks) {
         items.add(_ListItem.audiobook(audiobook));
       }
@@ -507,10 +588,13 @@ class SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildAlbumTile(Album album) {
+  Widget _buildAlbumTile(Album album, {bool showType = false}) {
     final maProvider = context.read<MusicAssistantProvider>();
     final imageUrl = maProvider.getImageUrl(album, size: 128);
     final colorScheme = Theme.of(context).colorScheme;
+    final subtitleText = showType
+        ? '${album.artistsString} • ${S.of(context)!.albumSingular}'
+        : album.artistsString;
 
     return RepaintBoundary(
       child: ListTile(
@@ -542,7 +626,7 @@ class SearchScreenState extends State<SearchScreen> {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        album.artistsString,
+        subtitleText,
         style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -562,12 +646,15 @@ class SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildTrackTile(Track track) {
+  Widget _buildTrackTile(Track track, {bool showType = false}) {
     final maProvider = context.read<MusicAssistantProvider>();
     final imageUrl = track.album != null
         ? maProvider.getImageUrl(track.album!, size: 128)
         : null;
     final colorScheme = Theme.of(context).colorScheme;
+    final subtitleText = showType
+        ? '${track.artistsString} • ${S.of(context)!.trackSingular}'
+        : track.artistsString;
 
     return RepaintBoundary(
       child: ListTile(
@@ -599,7 +686,7 @@ class SearchScreenState extends State<SearchScreen> {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        track.artistsString,
+        subtitleText,
         style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -615,10 +702,13 @@ class SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildPlaylistTile(Playlist playlist) {
+  Widget _buildPlaylistTile(Playlist playlist, {bool showType = false}) {
     final maProvider = context.read<MusicAssistantProvider>();
     final imageUrl = maProvider.getImageUrl(playlist, size: 128);
     final colorScheme = Theme.of(context).colorScheme;
+    final subtitleText = showType
+        ? (playlist.owner != null ? '${playlist.owner} • ${S.of(context)!.playlist}' : S.of(context)!.playlist)
+        : (playlist.owner ?? S.of(context)!.playlist);
 
     return RepaintBoundary(
       child: ListTile(
@@ -650,7 +740,7 @@ class SearchScreenState extends State<SearchScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          playlist.owner ?? S.of(context)!.playlist,
+          subtitleText,
           style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -677,10 +767,14 @@ class SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildAudiobookTile(Audiobook audiobook) {
+  Widget _buildAudiobookTile(Audiobook audiobook, {bool showType = false}) {
     final maProvider = context.read<MusicAssistantProvider>();
     final imageUrl = maProvider.getImageUrl(audiobook, size: 128);
     final colorScheme = Theme.of(context).colorScheme;
+    final authorText = audiobook.authors?.map((a) => a.name).join(', ') ?? S.of(context)!.unknownAuthor;
+    final subtitleText = showType
+        ? '$authorText • ${S.of(context)!.audiobookSingular}'
+        : authorText;
 
     return RepaintBoundary(
       child: ListTile(
@@ -712,7 +806,7 @@ class SearchScreenState extends State<SearchScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          audiobook.authors?.map((a) => a.name).join(', ') ?? S.of(context)!.unknownAuthor,
+          subtitleText,
           style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

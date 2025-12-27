@@ -1133,6 +1133,16 @@
     "description": "Singular form of audiobook"
   },
 
+  "albumSingular": "Album",
+  "@albumSingular": {
+    "description": "Singular form of album for search type indicator"
+  },
+
+  "trackSingular": "Track",
+  "@trackSingular": {
+    "description": "Singular form of track for search type indicator"
+  },
+
   "trackCount": "{count} {count, plural, =1{track} other{tracks}}",
   "@trackCount": {
     "description": "Track count with plural",

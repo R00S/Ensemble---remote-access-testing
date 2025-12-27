@@ -281,11 +281,6 @@
     "description": "Toggle to search only in library"
   },
 
-  "voiceSearch": "Voice search",
-  "@voiceSearch": {
-    "description": "Button to start voice search"
-  },
-
   "retry": "Retry",
   "@retry": {
     "description": "Retry button label"

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../constants/timings.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
@@ -92,53 +91,12 @@ class SearchScreenState extends State<SearchScreen> {
   List<String> _recentSearches = [];
   bool _libraryOnly = false;
 
-  // Voice search
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _speechAvailable = false;
-  bool _isListening = false;
-
   @override
   void initState() {
     super.initState();
     // Don't auto-focus - let user tap to focus
     // This prevents keyboard popup bug when SearchScreen is in widget tree but not visible
     _loadRecentSearches();
-    _initSpeech();
-  }
-
-  Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize(
-      onError: (error) => _logger.log('Speech error: $error'),
-      onStatus: (status) => _logger.log('Speech status: $status'),
-    );
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _startListening() async {
-    if (!_speechAvailable) return;
-
-    setState(() => _isListening = true);
-
-    await _speech.listen(
-      onResult: (result) {
-        if (result.finalResult) {
-          _searchController.text = result.recognizedWords;
-          _performSearch(result.recognizedWords);
-          setState(() => _isListening = false);
-        } else {
-          // Update text field with partial results
-          _searchController.text = result.recognizedWords;
-        }
-      },
-      listenFor: const Duration(seconds: 10),
-      pauseFor: const Duration(seconds: 3),
-      localeId: 'en_US',
-    );
-  }
-
-  void _stopListening() {
-    _speech.stop();
-    setState(() => _isListening = false);
   }
 
   Future<void> _loadRecentSearches() async {
@@ -272,16 +230,6 @@ class SearchScreenState extends State<SearchScreen> {
           onSubmitted: (query) => _performSearch(query),
         ),
         actions: [
-          // Voice search button
-          if (_speechAvailable)
-            IconButton(
-              icon: Icon(
-                _isListening ? Icons.mic : Icons.mic_none,
-                color: _isListening ? colorScheme.error : colorScheme.onSurface.withOpacity(0.5),
-              ),
-              onPressed: _isListening ? _stopListening : _startListening,
-              tooltip: S.of(context)!.voiceSearch,
-            ),
           // Library-only toggle
           Tooltip(
             message: S.of(context)!.libraryOnly,

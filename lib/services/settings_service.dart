@@ -77,6 +77,7 @@ class SettingsService {
   // Hint System Settings
   static const String _keyShowHints = 'show_hints'; // Master toggle for hints
   static const String _keyHasUsedPlayerReveal = 'has_used_player_reveal'; // Track if user has pulled to reveal players
+  static const String _keyHasCompletedOnboarding = 'has_completed_onboarding'; // Track if user has seen welcome screen
 
   static Future<String?> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
@@ -791,5 +792,17 @@ class SettingsService {
   static Future<void> setHasUsedPlayerReveal(bool hasUsed) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyHasUsedPlayerReveal, hasUsed);
+  }
+
+  /// Check if user has completed onboarding (seen welcome screen)
+  static Future<bool> getHasCompletedOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyHasCompletedOnboarding) ?? false;
+  }
+
+  /// Mark that user has completed onboarding
+  static Future<void> setHasCompletedOnboarding(bool completed) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyHasCompletedOnboarding, completed);
   }
 }

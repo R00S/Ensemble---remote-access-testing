@@ -168,6 +168,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
 
   // Hint system state
   bool _showHints = true;
+  bool _hasCompletedOnboarding = false; // First-use welcome screen
   bool _hintTriggered = false; // Prevent multiple triggers per session
   final _hintOpacityNotifier = ValueNotifier<double>(0.0);
 
@@ -232,8 +233,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
 
   Future<void> _loadHintSettings() async {
     _showHints = await SettingsService.getShowHints();
-    // Start welcome screen immediately if hints enabled (no delay)
-    if (_showHints && mounted && !_hintTriggered) {
+    _hasCompletedOnboarding = await SettingsService.getHasCompletedOnboarding();
+    // Show welcome screen only on first use (not completed onboarding yet)
+    if (!_hasCompletedOnboarding && mounted && !_hintTriggered) {
       _startWelcomeScreen();
     }
   }
@@ -304,6 +306,11 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     _hintOpacityNotifier.value = 0.0;
     _isHintModeActive = false;
 
+    // Mark onboarding as completed if coming from welcome screen
+    if (wasInHintMode) {
+      SettingsService.setHasCompletedOnboarding(true);
+    }
+
     // Trigger single bounce on expand
     _singleBounceController.reset();
     _singleBounceController.forward();
@@ -336,13 +343,15 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     _singleBounceController.forward();
   }
 
-  /// End hint mode (called when user taps backdrop to skip)
+  /// End hint mode (called when user taps skip button)
   void _endHintMode() {
     if (!_isHintModeActive) return;
     _hintBounceTimer?.cancel();
     _hintBounceTimer = null;
     _hintOpacityNotifier.value = 0.0;
     _bounceOffsetNotifier.value = 0.0;
+    // Mark onboarding as completed (first use only)
+    SettingsService.setHasCompletedOnboarding(true);
     setState(() {
       _isHintModeActive = false;
     });

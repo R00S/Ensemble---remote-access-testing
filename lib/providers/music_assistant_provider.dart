@@ -2095,12 +2095,15 @@ class MusicAssistantProvider with ChangeNotifier {
   // SEARCH CACHING
   // ============================================================================
 
-  Future<Map<String, List<MediaItem>>> searchWithCache(String query, {bool forceRefresh = false}) async {
-    final cacheKey = query.toLowerCase().trim();
-    if (cacheKey.isEmpty) return {'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': []};
+  Future<Map<String, List<MediaItem>>> searchWithCache(String query, {bool forceRefresh = false, bool libraryOnly = false}) async {
+    final baseKey = query.toLowerCase().trim();
+    if (baseKey.isEmpty) return {'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': []};
+
+    // Include libraryOnly in cache key to separate results
+    final cacheKey = libraryOnly ? '$baseKey:library' : baseKey;
 
     if (_cacheService.isSearchCacheValid(cacheKey, forceRefresh: forceRefresh)) {
-      _logger.log('📦 Using cached search results for "$query"');
+      _logger.log('📦 Using cached search results for "$query" (libraryOnly: $libraryOnly)');
       return _cacheService.getCachedSearchResults(cacheKey)!;
     }
 
@@ -2109,8 +2112,8 @@ class MusicAssistantProvider with ChangeNotifier {
     }
 
     try {
-      _logger.log('🔄 Searching for "$query"...');
-      final results = await _api!.search(query);
+      _logger.log('🔄 Searching for "$query" (libraryOnly: $libraryOnly)...');
+      final results = await _api!.search(query, libraryOnly: libraryOnly);
 
       final cachedResults = <String, List<MediaItem>>{
         'artists': results['artists'] ?? [],
@@ -3412,6 +3415,18 @@ class MusicAssistantProvider with ChangeNotifier {
       final errorInfo = ErrorHandler.handleError(e, context: 'Play track');
       _error = errorInfo.userMessage;
       ErrorHandler.logError('Play track', e);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> addTrackToQueue(String playerId, Track track) async {
+    try {
+      await _api?.addTrackToQueue(playerId, track);
+    } catch (e) {
+      final errorInfo = ErrorHandler.handleError(e, context: 'Add to queue');
+      _error = errorInfo.userMessage;
+      ErrorHandler.logError('Add to queue', e);
       notifyListeners();
       rethrow;
     }

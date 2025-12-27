@@ -1614,6 +1614,25 @@ class MusicAssistantAPI {
     }
   }
 
+  /// Add a single track to the queue without starting playback
+  Future<void> addTrackToQueue(String playerId, Track track) async {
+    try {
+      final uri = _buildTrackUri(track);
+
+      await _sendCommand(
+        'player_queues/play_media',
+        args: {
+          'queue_id': playerId,
+          'media': [uri],
+          'option': 'add',  // Add to queue without starting
+        },
+      );
+    } catch (e) {
+      _logger.log('Error adding track to queue: $e');
+      rethrow;
+    }
+  }
+
   /// Play multiple tracks via queue
   /// If clearQueue is true, replaces the queue (default behavior)
   /// If startIndex is provided, only tracks from that index onwards will be queued

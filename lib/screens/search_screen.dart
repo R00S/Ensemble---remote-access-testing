@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../constants/timings.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
@@ -89,6 +90,12 @@ class SearchScreenState extends State<SearchScreen> {
   String _activeFilter = 'all'; // 'all', 'artists', 'albums', 'tracks', 'playlists', 'audiobooks'
   String? _searchError;
   List<String> _recentSearches = [];
+  bool _libraryOnly = false;
+
+  // Voice search
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
 
   @override
   void initState() {
@@ -96,6 +103,42 @@ class SearchScreenState extends State<SearchScreen> {
     // Don't auto-focus - let user tap to focus
     // This prevents keyboard popup bug when SearchScreen is in widget tree but not visible
     _loadRecentSearches();
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    _speechAvailable = await _speech.initialize(
+      onError: (error) => _logger.log('Speech error: $error'),
+      onStatus: (status) => _logger.log('Speech status: $status'),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _startListening() async {
+    if (!_speechAvailable) return;
+
+    setState(() => _isListening = true);
+
+    await _speech.listen(
+      onResult: (result) {
+        if (result.finalResult) {
+          _searchController.text = result.recognizedWords;
+          _performSearch(result.recognizedWords);
+          setState(() => _isListening = false);
+        } else {
+          // Update text field with partial results
+          _searchController.text = result.recognizedWords;
+        }
+      },
+      listenFor: const Duration(seconds: 10),
+      pauseFor: const Duration(seconds: 3),
+      localeId: 'en_US',
+    );
+  }
+
+  void _stopListening() {
+    _speech.stop();
+    setState(() => _isListening = false);
   }
 
   Future<void> _loadRecentSearches() async {
@@ -152,7 +195,7 @@ class SearchScreenState extends State<SearchScreen> {
 
     try {
       final provider = context.read<MusicAssistantProvider>();
-      final results = await provider.searchWithCache(query);
+      final results = await provider.searchWithCache(query, libraryOnly: _libraryOnly);
 
       if (mounted) {
         setState(() {
@@ -228,6 +271,37 @@ class SearchScreenState extends State<SearchScreen> {
           },
           onSubmitted: (query) => _performSearch(query),
         ),
+        actions: [
+          // Voice search button
+          if (_speechAvailable)
+            IconButton(
+              icon: Icon(
+                _isListening ? Icons.mic : Icons.mic_none,
+                color: _isListening ? colorScheme.error : colorScheme.onSurface.withOpacity(0.5),
+              ),
+              onPressed: _isListening ? _stopListening : _startListening,
+              tooltip: S.of(context)!.voiceSearch,
+            ),
+          // Library-only toggle
+          Tooltip(
+            message: S.of(context)!.libraryOnly,
+            child: IconButton(
+              icon: Icon(
+                _libraryOnly ? Icons.library_music : Icons.library_music_outlined,
+                color: _libraryOnly ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.5),
+              ),
+              onPressed: () {
+                setState(() {
+                  _libraryOnly = !_libraryOnly;
+                });
+                // Re-search if there's a query
+                if (_searchController.text.isNotEmpty) {
+                  _performSearch(_searchController.text);
+                }
+              },
+            ),
+          ),
+        ],
       ),
       body: !maProvider.isConnected
           ? DisconnectedState.simple(context)
@@ -821,6 +895,7 @@ class SearchScreenState extends State<SearchScreen> {
               )
             : null,
         onTap: () => _playTrack(track),
+        onLongPress: () => _showTrackQuickActions(track),
       ),
     );
   }
@@ -970,6 +1045,168 @@ class SearchScreenState extends State<SearchScreen> {
       maProvider.selectedPlayer!.playerId,
       track,
     );
+  }
+
+  void _showTrackQuickActions(Track track) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final maProvider = context.read<MusicAssistantProvider>();
+    final imageUrl = track.album != null
+        ? maProvider.getImageUrl(track.album!, size: 128)
+        : null;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Track info header
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceVariant,
+                        borderRadius: BorderRadius.circular(8),
+                        image: imageUrl != null
+                            ? DecorationImage(
+                                image: CachedNetworkImageProvider(imageUrl),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: imageUrl == null
+                          ? Icon(Icons.music_note_rounded, color: colorScheme.onSurfaceVariant)
+                          : null,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            track.name,
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            track.artistsString,
+                            style: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                              fontSize: 14,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // Quick actions
+              ListTile(
+                leading: Icon(Icons.play_arrow_rounded, color: colorScheme.primary),
+                title: Text(S.of(context)!.playNow),
+                onTap: () {
+                  Navigator.pop(context);
+                  _playTrack(track);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.playlist_add_rounded, color: colorScheme.primary),
+                title: Text(S.of(context)!.addToQueue),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _addTrackToQueue(track);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.radio_rounded, color: colorScheme.primary),
+                title: Text(S.of(context)!.playRadio),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _playTrackRadio(track);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _addTrackToQueue(Track track) async {
+    final maProvider = context.read<MusicAssistantProvider>();
+
+    if (maProvider.selectedPlayer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context)!.noPlayerSelected)),
+      );
+      return;
+    }
+
+    try {
+      await maProvider.addTrackToQueue(
+        maProvider.selectedPlayer!.playerId,
+        track,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context)!.addedToQueue)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context)!.failedToAddToQueue(e.toString()))),
+        );
+      }
+    }
+  }
+
+  Future<void> _playTrackRadio(Track track) async {
+    final maProvider = context.read<MusicAssistantProvider>();
+
+    if (maProvider.selectedPlayer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context)!.noPlayerSelected)),
+      );
+      return;
+    }
+
+    try {
+      await maProvider.playRadio(
+        maProvider.selectedPlayer!.playerId,
+        track,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context)!.startingRadio(track.name))),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context)!.failedToStartRadio(e.toString()))),
+        );
+      }
+    }
   }
 
   String _formatDuration(Duration duration) {

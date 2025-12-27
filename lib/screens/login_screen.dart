@@ -443,6 +443,18 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (provider.isConnected) {
+        // For first-time users, wait for player selection so the welcome
+        // overlay can appear immediately without home screen flash.
+        // This matches the logic in AppStartup._checkAndConnect().
+        final hasCompletedOnboarding = await SettingsService.getHasCompletedOnboarding();
+        if (!hasCompletedOnboarding) {
+          // First-time user: wait for connection + player selection
+          for (int i = 0; i < 20; i++) {
+            await Future.delayed(const Duration(milliseconds: 250));
+            if (provider.selectedPlayer != null) break;
+          }
+        }
+
         // Navigate to home screen
         if (mounted) {
           // Ensure keyboard is closed before navigating

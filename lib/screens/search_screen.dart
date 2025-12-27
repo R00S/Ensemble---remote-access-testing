@@ -90,6 +90,7 @@ class SearchScreenState extends State<SearchScreen> {
   String? _searchError;
   List<String> _recentSearches = [];
   bool _libraryOnly = false;
+  String? _expandedTrackId; // Track ID for expanded quick actions
 
   @override
   void initState() {
@@ -800,50 +801,135 @@ class SearchScreenState extends State<SearchScreen> {
     final subtitleText = showType
         ? '${track.artistsString} • ${S.of(context)!.trackSingular}'
         : track.artistsString;
+    final trackId = track.uri ?? track.itemId;
+    final isExpanded = _expandedTrackId == trackId;
 
     return RepaintBoundary(
-      child: ListTile(
-        key: ValueKey(track.uri ?? track.itemId),
-        leading: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(8),
-          image: imageUrl != null
-              ? DecorationImage(
-                  image: CachedNetworkImageProvider(imageUrl),
-                  fit: BoxFit.cover,
-                )
-              : null,
-        ),
-        child: imageUrl == null
-            ? Icon(Icons.music_note_rounded, color: colorScheme.onSurfaceVariant)
-            : null,
-      ),
-      title: Text(
-        track.name,
-        style: TextStyle(
-          color: colorScheme.onSurface,
-          fontWeight: FontWeight.w500,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        subtitleText,
-        style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-        trailing: track.duration != null
-            ? Text(
-                _formatDuration(track.duration!),
-                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5), fontSize: 12),
-              )
-            : null,
-        onTap: () => _playTrack(track),
-        onLongPress: () => _showTrackQuickActions(track),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            key: ValueKey(trackId),
+            leading: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant,
+                borderRadius: BorderRadius.circular(8),
+                image: imageUrl != null
+                    ? DecorationImage(
+                        image: CachedNetworkImageProvider(imageUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+              ),
+              child: imageUrl == null
+                  ? Icon(Icons.music_note_rounded, color: colorScheme.onSurfaceVariant)
+                  : null,
+            ),
+            title: Text(
+              track.name,
+              style: TextStyle(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              subtitleText,
+              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: track.duration != null
+                ? Text(
+                    _formatDuration(track.duration!),
+                    style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5), fontSize: 12),
+                  )
+                : null,
+            onTap: () {
+              if (isExpanded) {
+                setState(() => _expandedTrackId = null);
+              } else {
+                _playTrack(track);
+              }
+            },
+            onLongPress: () {
+              setState(() {
+                _expandedTrackId = isExpanded ? null : trackId;
+              });
+            },
+          ),
+          // Expandable quick actions row
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: isExpanded
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 16.0, bottom: 12.0, top: 4.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // Radio button
+                        SizedBox(
+                          height: 44,
+                          width: 44,
+                          child: FilledButton.tonal(
+                            onPressed: () => _showRadioMenu(track),
+                            style: FilledButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Icon(Icons.radio, size: 20),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Add to queue button
+                        SizedBox(
+                          height: 44,
+                          width: 44,
+                          child: FilledButton.tonal(
+                            onPressed: () => _showAddToQueueMenu(track),
+                            style: FilledButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Icon(Icons.playlist_add, size: 20),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Favorite button
+                        SizedBox(
+                          height: 44,
+                          width: 44,
+                          child: FilledButton.tonal(
+                            onPressed: () => _toggleTrackFavorite(track),
+                            style: FilledButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(22),
+                              ),
+                            ),
+                            child: Icon(
+                              track.favorite == true ? Icons.favorite : Icons.favorite_border,
+                              size: 20,
+                              color: track.favorite == true
+                                  ? colorScheme.error
+                                  : colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
       ),
     );
   }
@@ -995,163 +1081,231 @@ class SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  void _showTrackQuickActions(Track track) {
-    final colorScheme = Theme.of(context).colorScheme;
+  void _showRadioMenu(Track track) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final imageUrl = track.album != null
-        ? maProvider.getImageUrl(track.album!, size: 128)
-        : null;
+    final players = maProvider.availablePlayers;
+
+    GlobalPlayerOverlay.hidePlayer();
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Track info header
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 16),
+            Text(
+              S.of(context)!.playOn,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            if (players.isEmpty)
               Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceVariant,
-                        borderRadius: BorderRadius.circular(8),
-                        image: imageUrl != null
-                            ? DecorationImage(
-                                image: CachedNetworkImageProvider(imageUrl),
-                                fit: BoxFit.cover,
-                              )
-                            : null,
+                padding: const EdgeInsets.all(32.0),
+                child: Text(S.of(context)!.noPlayersAvailable),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: players.length,
+                  itemBuilder: (context, index) {
+                    final player = players[index];
+                    return ListTile(
+                      leading: Icon(
+                        Icons.speaker,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
-                      child: imageUrl == null
-                          ? Icon(Icons.music_note_rounded, color: colorScheme.onSurfaceVariant)
-                          : null,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            track.name,
-                            style: TextStyle(
-                              color: colorScheme.onSurface,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            track.artistsString,
-                            style: TextStyle(
-                              color: colorScheme.onSurface.withOpacity(0.6),
-                              fontSize: 14,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                      title: Text(player.name),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        try {
+                          maProvider.selectPlayer(player);
+                          await maProvider.playRadio(player.playerId, track);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(S.of(context)!.startingRadio(track.name)),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(S.of(context)!.failedToStartRadio(e.toString()))),
+                            );
+                          }
+                        }
+                      },
+                    );
+                  },
                 ),
               ),
-              const Divider(height: 1),
-              // Quick actions
-              ListTile(
-                leading: Icon(Icons.play_arrow_rounded, color: colorScheme.primary),
-                title: Text(S.of(context)!.playNow),
-                onTap: () {
-                  Navigator.pop(context);
-                  _playTrack(track);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.playlist_add_rounded, color: colorScheme.primary),
-                title: Text(S.of(context)!.addToQueue),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _addTrackToQueue(track);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.radio_rounded, color: colorScheme.primary),
-                title: Text(S.of(context)!.playRadio),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await _playTrackRadio(track);
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    ).whenComplete(() {
+      GlobalPlayerOverlay.showPlayer();
+    });
   }
 
-  Future<void> _addTrackToQueue(Track track) async {
+  void _showAddToQueueMenu(Track track) {
     final maProvider = context.read<MusicAssistantProvider>();
+    final players = maProvider.availablePlayers;
 
-    if (maProvider.selectedPlayer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context)!.noPlayerSelected)),
-      );
-      return;
-    }
+    GlobalPlayerOverlay.hidePlayer();
 
-    try {
-      await maProvider.addTrackToQueue(
-        maProvider.selectedPlayer!.playerId,
-        track,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.of(context)!.addedToQueue)),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.of(context)!.failedToAddToQueue(e.toString()))),
-        );
-      }
-    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 16),
+            Text(
+              S.of(context)!.addToQueueOn,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            if (players.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Text(S.of(context)!.noPlayersAvailable),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: players.length,
+                  itemBuilder: (context, index) {
+                    final player = players[index];
+                    return ListTile(
+                      leading: Icon(
+                        Icons.speaker,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                      title: Text(player.name),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        try {
+                          await maProvider.addTrackToQueue(player.playerId, track);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(S.of(context)!.addedToQueue),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(S.of(context)!.failedToAddToQueue(e.toString()))),
+                            );
+                          }
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    ).whenComplete(() {
+      GlobalPlayerOverlay.showPlayer();
+    });
   }
 
-  Future<void> _playTrackRadio(Track track) async {
+  Future<void> _toggleTrackFavorite(Track track) async {
     final maProvider = context.read<MusicAssistantProvider>();
-
-    if (maProvider.selectedPlayer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context)!.noPlayerSelected)),
-      );
-      return;
-    }
+    final currentFavorite = track.favorite ?? false;
 
     try {
-      await maProvider.playRadio(
-        maProvider.selectedPlayer!.playerId,
-        track,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.of(context)!.startingRadio(track.name))),
+      bool success;
+
+      if (currentFavorite) {
+        // Remove from favorites
+        int? libraryItemId;
+        if (track.provider == 'library') {
+          libraryItemId = int.tryParse(track.itemId);
+        } else if (track.providerMappings != null) {
+          final libraryMapping = track.providerMappings!.firstWhere(
+            (m) => m.providerInstance == 'library',
+            orElse: () => track.providerMappings!.first,
+          );
+          if (libraryMapping.providerInstance == 'library') {
+            libraryItemId = int.tryParse(libraryMapping.itemId);
+          }
+        }
+
+        if (libraryItemId != null) {
+          success = await maProvider.removeFromFavorites(
+            mediaType: 'track',
+            libraryItemId: libraryItemId,
+          );
+        } else {
+          success = false;
+        }
+      } else {
+        // Add to favorites
+        String actualProvider = track.provider;
+        String actualItemId = track.itemId;
+
+        if (track.providerMappings != null && track.providerMappings!.isNotEmpty) {
+          final mapping = track.providerMappings!.firstWhere(
+            (m) => m.available && m.providerInstance != 'library',
+            orElse: () => track.providerMappings!.firstWhere(
+              (m) => m.available,
+              orElse: () => track.providerMappings!.first,
+            ),
+          );
+          actualProvider = mapping.providerInstance;
+          actualItemId = mapping.itemId;
+        }
+
+        success = await maProvider.addToFavorites(
+          mediaType: 'track',
+          provider: actualProvider,
+          itemId: actualItemId,
         );
       }
+
+      if (success && mounted) {
+        // Update the track's favorite state in search results
+        setState(() {
+          final tracks = _searchResults['tracks'] as List<Track>?;
+          if (tracks != null) {
+            final index = tracks.indexWhere((t) => (t.uri ?? t.itemId) == (track.uri ?? track.itemId));
+            if (index != -1) {
+              // Create updated track with new favorite state
+              final updatedTrack = Track.fromJson({
+                ...tracks[index].toJson(),
+                'favorite': !currentFavorite,
+              });
+              tracks[index] = updatedTrack;
+            }
+          }
+        });
+      }
     } catch (e) {
+      _logger.log('Error toggling favorite: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.of(context)!.failedToStartRadio(e.toString()))),
+          SnackBar(content: Text('Failed to update favorite: $e')),
         );
       }
     }

@@ -630,21 +630,6 @@
     "description": "Radio button label"
   },
 
-  "playNow": "Play Now",
-  "@playNow": {
-    "description": "Quick action to play track immediately"
-  },
-
-  "addToQueue": "Add to Queue",
-  "@addToQueue": {
-    "description": "Quick action to add track to queue"
-  },
-
-  "playRadio": "Play Radio",
-  "@playRadio": {
-    "description": "Quick action to start radio based on track"
-  },
-
   "addedToQueue": "Added to queue",
   "@addedToQueue": {
     "description": "Confirmation when item added to queue"

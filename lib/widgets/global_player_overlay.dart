@@ -266,8 +266,10 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   }
 
   /// Check connection state and start welcome screen if appropriate.
-  /// NOTE: AppStartup now gates the transition, so by the time we get here,
-  /// if it's a first-time user, we're already connected with a player.
+  /// This is called from multiple places:
+  /// 1. didChangeDependencies() - when widget first builds
+  /// 2. _loadHintSettings() - when settings finish loading
+  /// 3. build() - when provider state changes (via post-frame callback)
   void _checkConnectionForMiniPlayerHints() {
     if (_hintTriggered || !mounted || !_settingsLoaded) return;
     if (_hasCompletedOnboarding) return; // Not first-time user
@@ -406,12 +408,24 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // NOTE: Preemptive backdrop logic removed.
-    // AppStartup now handles the gate - it waits for:
-    // - First-time users: connected + player selected before showing HomeScreen
-    // - Returning users: connected before showing HomeScreen
-    // This eliminates the race condition. When we get here, if it's a first-time
-    // user, the welcome screen will start immediately via _loadHintSettings().
+    // Watch provider to trigger rebuilds when connection state changes
+    final provider = context.watch<MusicAssistantProvider>();
+
+    // Check if we should start welcome screen - this runs on every build,
+    // which happens when provider state changes (via context.watch above).
+    // The check is idempotent (won't trigger twice due to _hintTriggered flag).
+    if (_settingsLoaded && !_hasCompletedOnboarding && !_hintTriggered) {
+      if (provider.isConnected && provider.selectedPlayer != null) {
+        // Schedule for post-frame to avoid setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_hintTriggered) {
+            _miniPlayerHintsReady = true;
+            _startWelcomeScreen();
+            _startMiniPlayerBounce();
+          }
+        });
+      }
+    }
 
     // Handle back gesture at top level - dismiss hint mode or device list if visible
     return PopScope(

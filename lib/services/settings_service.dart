@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'device_id_service.dart';
 
 class SettingsService {
   static const String _keyServerUrl = 'server_url';
@@ -394,12 +395,14 @@ class SettingsService {
   }
 
   // Helper to create player name with possessive apostrophe
+  // Automatically detects Phone vs Tablet based on screen size
   static String _makePlayerName(String ownerName) {
-    // Handle possessive: "Chris" -> "Chris' Phone", "Mom" -> "Mom's Phone"
+    final deviceType = DeviceIdService.isTablet ? 'Tablet' : 'Phone';
+    // Handle possessive: "Chris" -> "Chris' Tablet", "Mom" -> "Mom's Phone"
     if (ownerName.toLowerCase().endsWith('s')) {
-      return "$ownerName' Phone";
+      return "$ownerName' $deviceType";
     } else {
-      return "$ownerName's Phone";
+      return "$ownerName's $deviceType";
     }
   }
 

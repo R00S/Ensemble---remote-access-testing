@@ -190,13 +190,14 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
       return;
     }
 
-    // At top and swiping down = dismiss gesture
+    // Only process dismiss gesture when swiping DOWN (positive delta = finger moving down)
+    // Ignore swipe up when not scrollable - cards should stay fixed
+    if (delta <= 0) return;
+
+    // Swiping down = dismiss gesture
     setState(() {
       _isDragging = true;
-      // Negate delta so swipe down = cards move down (toward dismissal)
-      _dragOffset -= delta;
-      // Clamp: allow moving down (positive) freely, limit moving up to 20px
-      _dragOffset = _dragOffset.clamp(-20.0, double.infinity);
+      _dragOffset += delta;
     });
   }
 

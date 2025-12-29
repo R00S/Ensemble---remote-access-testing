@@ -98,9 +98,12 @@ class SearchScreenState extends State<SearchScreen> {
   List<String> _recentSearches = [];
   bool _libraryOnly = false;
   String? _expandedTrackId; // Track ID for expanded quick actions
+  bool _hasSearchText = false; // PERF: Track separately to avoid rebuild on every keystroke
 
   // PERF: Cache list items per filter to avoid rebuilding during PageView animation
   Map<String, List<_ListItem>> _cachedListItems = {};
+  // PERF: Cache available filters to avoid recalculating during build
+  List<String>? _cachedAvailableFilters;
 
   // Scroll-to-hide search bar (vertical scroll only)
   bool _isSearchBarVisible = true;
@@ -115,8 +118,10 @@ class SearchScreenState extends State<SearchScreen> {
     _loadRecentSearches();
   }
 
-  /// Get list of available filters based on current results
+  /// Get list of available filters based on current results (cached)
   List<String> _getAvailableFilters() {
+    if (_cachedAvailableFilters != null) return _cachedAvailableFilters!;
+
     final filters = <String>['all'];
     if (_searchResults['artists']?.isNotEmpty == true) filters.add('artists');
     if (_searchResults['albums']?.isNotEmpty == true) filters.add('albums');
@@ -125,6 +130,7 @@ class SearchScreenState extends State<SearchScreen> {
     if (_searchResults['audiobooks']?.isNotEmpty == true) filters.add('audiobooks');
     // Always show podcasts filter (placeholder until fully integrated)
     filters.add('podcasts');
+    _cachedAvailableFilters = filters;
     return filters;
   }
 
@@ -275,6 +281,7 @@ class SearchScreenState extends State<SearchScreen> {
         _hasSearched = false;
         _searchError = null;
         _cachedListItems.clear(); // PERF: Clear cache
+        _cachedAvailableFilters = null;
       });
       return;
     }
@@ -294,6 +301,7 @@ class SearchScreenState extends State<SearchScreen> {
           _isSearching = false;
           _hasSearched = true;
           _cachedListItems.clear(); // PERF: Clear cache on new results
+          _cachedAvailableFilters = null;
         });
 
         // Save to search history if we got results
@@ -325,7 +333,8 @@ class SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final maProvider = context.watch<MusicAssistantProvider>();
+    // PERF: Only rebuild when connection status changes, not on every provider update
+    final isConnected = context.select<MusicAssistantProvider, bool>((p) => p.isConnected);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -366,23 +375,31 @@ class SearchScreenState extends State<SearchScreen> {
                               hintText: S.of(context)!.searchMusic,
                               hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
                               border: InputBorder.none,
-                              suffixIcon: _searchController.text.isNotEmpty
+                              suffixIcon: _hasSearchText
                                   ? IconButton(
                                       icon: Icon(Icons.clear_rounded, color: colorScheme.onSurface.withOpacity(0.5)),
                                       onPressed: () {
                                         _searchController.clear();
                                         setState(() {
+                                          _hasSearchText = false;
                                           _searchResults = {'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': [], 'podcasts': []};
                                           _hasSearched = false;
                                           _searchError = null;
                                           _cachedListItems.clear();
+                                          _cachedAvailableFilters = null;
                                         });
                                       },
                                     )
                                   : null,
                             ),
                             onChanged: (value) {
-                              setState(() {});
+                              // PERF: Only rebuild when clear button visibility changes
+                              final hasText = value.isNotEmpty;
+                              if (hasText != _hasSearchText) {
+                                setState(() {
+                                  _hasSearchText = hasText;
+                                });
+                              }
                               _onSearchChanged(value);
                             },
                             onSubmitted: (query) => _performSearch(query),
@@ -414,7 +431,7 @@ class SearchScreenState extends State<SearchScreen> {
             ),
             // Main content
             Expanded(
-              child: !maProvider.isConnected
+              child: !isConnected
                   ? DisconnectedState.simple(context)
                   : _buildSearchContent(),
             ),
@@ -733,95 +750,6 @@ class SearchScreenState extends State<SearchScreen> {
     return crossRefArtists;
   }
 
-  List<_ListItem> _buildListItems(
-    List<MediaItem> artists,
-    List<MediaItem> albums,
-    List<MediaItem> tracks,
-    List<MediaItem> playlists,
-    List<MediaItem> audiobooks,
-  ) {
-    final items = <_ListItem>[];
-    final query = _searchController.text;
-
-    // For 'all' filter, create unified relevance-sorted list
-    if (_activeFilter == 'all') {
-      final scoredItems = <_ListItem>[];
-
-      // Score and add all items
-      for (final artist in artists) {
-        final score = _calculateRelevanceScore(artist, query);
-        scoredItems.add(_ListItem.artist(artist, relevanceScore: score));
-      }
-      for (final album in albums) {
-        final score = _calculateRelevanceScore(album, query);
-        scoredItems.add(_ListItem.album(album, relevanceScore: score));
-      }
-      for (final track in tracks) {
-        final score = _calculateRelevanceScore(track, query);
-        scoredItems.add(_ListItem.track(track, relevanceScore: score));
-      }
-      for (final playlist in playlists) {
-        final score = _calculateRelevanceScore(playlist, query);
-        scoredItems.add(_ListItem.playlist(playlist, relevanceScore: score));
-      }
-      for (final audiobook in audiobooks) {
-        final score = _calculateRelevanceScore(audiobook, query);
-        scoredItems.add(_ListItem.audiobook(audiobook, relevanceScore: score));
-      }
-
-      // Smart cross-referencing: Add artists from matched tracks/albums
-      // if the artist name matches the query but wasn't in direct results
-      final crossRefArtists = _extractCrossReferencedArtists(
-        query,
-        artists.cast<Artist>(),
-        albums.cast<Album>(),
-        tracks.cast<Track>(),
-      );
-      for (final artist in crossRefArtists) {
-        // Give cross-referenced artists a lower score (25) since they're indirect matches
-        scoredItems.add(_ListItem.artist(artist, relevanceScore: 25));
-      }
-
-      // Sort by relevance score descending
-      scoredItems.sort((a, b) => (b.relevanceScore ?? 0).compareTo(a.relevanceScore ?? 0));
-
-      return scoredItems;
-    }
-
-    // For specific type filters, use sectioned view (no headers needed for single type)
-    if (_activeFilter == 'artists' && artists.isNotEmpty) {
-      for (final artist in artists) {
-        items.add(_ListItem.artist(artist));
-      }
-    }
-
-    if (_activeFilter == 'albums' && albums.isNotEmpty) {
-      for (final album in albums) {
-        items.add(_ListItem.album(album));
-      }
-    }
-
-    if (_activeFilter == 'tracks' && tracks.isNotEmpty) {
-      for (final track in tracks) {
-        items.add(_ListItem.track(track));
-      }
-    }
-
-    if (_activeFilter == 'playlists' && playlists.isNotEmpty) {
-      for (final playlist in playlists) {
-        items.add(_ListItem.playlist(playlist));
-      }
-    }
-
-    if (_activeFilter == 'audiobooks' && audiobooks.isNotEmpty) {
-      for (final audiobook in audiobooks) {
-        items.add(_ListItem.audiobook(audiobook));
-      }
-    }
-
-    return items;
-  }
-
   /// Build list items for a specific filter (used by PageView)
   List<_ListItem> _buildListItemsForFilter(
     String filter,
@@ -861,9 +789,9 @@ class SearchScreenState extends State<SearchScreen> {
 
       final crossRefArtists = _extractCrossReferencedArtists(
         query,
-        artists.cast<Artist>(),
-        albums.cast<Album>(),
-        tracks.cast<Track>(),
+        artists.whereType<Artist>().toList(),
+        albums.whereType<Album>().toList(),
+        tracks.whereType<Track>().toList(),
       );
       for (final artist in crossRefArtists) {
         scoredItems.add(_ListItem.artist(artist, relevanceScore: 25));
@@ -932,10 +860,10 @@ class SearchScreenState extends State<SearchScreen> {
         children: filters.map((filter) {
           final isSelected = _activeFilter == filter;
           return Material(
-            // Solid color matching library tabs (surfaceVariant with opacity blended on dark bg)
+            // Use theme-aware colors for light/dark mode support
             color: isSelected
                 ? colorScheme.primaryContainer
-                : const Color(0xFF313035),
+                : colorScheme.surfaceVariant.withOpacity(0.6),
             child: InkWell(
               onTap: () {
                 setState(() {

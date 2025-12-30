@@ -25,9 +25,12 @@ class RemoteAccessLoginScreen extends StatefulWidget {
 
 class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
   final TextEditingController _remoteIdController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final _logger = DebugLogger();
   
   bool _isConnecting = false;
+  bool _obscurePassword = true;
   String? _error;
 
   @override
@@ -39,6 +42,8 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
   @override
   void dispose() {
     _remoteIdController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -79,10 +84,19 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
 
   Future<void> _connect() async {
     final remoteId = _remoteIdController.text.trim();
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
     
     if (remoteId.isEmpty) {
       setState(() {
         _error = 'Please enter or scan a Remote Access ID';
+      });
+      return;
+    }
+
+    if (username.isEmpty || password.isEmpty) {
+      setState(() {
+        _error = 'Please enter username and password';
       });
       return;
     }
@@ -107,7 +121,12 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
       final provider = Provider.of<MusicAssistantProvider>(context, listen: false);
       
       // Use a placeholder URL - the actual connection will use WebRTC transport
-      await provider.connectToServer('wss://remote.music-assistant.io');
+      // Pass username and password for authentication
+      await provider.connectToServer(
+        'wss://remote.music-assistant.io',
+        username: username,
+        password: password,
+      );
       
       _logger.log('[RemoteAccess] MA API connected successfully via WebRTC');
       
@@ -328,6 +347,96 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
                   fontSize: 12,
                 ),
                 textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 32),
+
+              // Username field
+              Text(
+                'Username',
+                style: textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onBackground,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              TextField(
+                controller: _usernameController,
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 16,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Enter your username',
+                  hintStyle: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.38),
+                  ),
+                  filled: true,
+                  fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.person_outline_rounded,
+                    color: colorScheme.onSurface.withOpacity(0.54),
+                  ),
+                ),
+                enabled: !_isConnecting,
+                textInputAction: TextInputAction.next,
+                autocorrect: false,
+              ),
+
+              const SizedBox(height: 24),
+
+              // Password field
+              Text(
+                'Password',
+                style: textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onBackground,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              TextField(
+                controller: _passwordController,
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 16,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Enter your password',
+                  hintStyle: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.38),
+                  ),
+                  filled: true,
+                  fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.lock_outline_rounded,
+                    color: colorScheme.onSurface.withOpacity(0.54),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                      color: colorScheme.onSurface.withOpacity(0.54),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                ),
+                enabled: !_isConnecting,
+                obscureText: _obscurePassword,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _connect(),
               ),
 
               const SizedBox(height: 32),

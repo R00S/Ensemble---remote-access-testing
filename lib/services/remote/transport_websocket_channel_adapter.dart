@@ -7,13 +7,14 @@
 /// the WebSocketChannel interface expected by MusicAssistantAPI.
 
 import 'dart:async';
+import 'package:stream_channel/stream_channel.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 import 'transport.dart';
 
 /// Adapter that makes our Transport look like a WebSocketChannel
 /// This allows MusicAssistantAPI to use WebRTC (or any transport) transparently
-class TransportWebSocketChannelAdapter implements WebSocketChannel {
+class TransportWebSocketChannelAdapter extends StreamChannelMixin implements WebSocketChannel {
   final ITransport _transport;
   final StreamController<dynamic> _streamController;
   final _TransportWebSocketSink _sink;

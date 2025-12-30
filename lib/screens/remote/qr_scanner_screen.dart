@@ -41,14 +41,40 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         setState(() => _isProcessing = true);
         
         // Extract Remote ID from QR code
-        // The QR code from MA might be in format: "ma-remote://<ID>" or just the ID
+        // The QR code from MA can be in various formats:
+        // 1. Just the ID: "XXXX-XXXX-XXXX"
+        // 2. URL with path: "https://example.com/remote/XXXX-XXXX-XXXX"
+        // 3. URL with query: "https://example.com?id=XXXX-XXXX-XXXX"
+        // 4. Protocol scheme: "ma-remote://XXXX-XXXX-XXXX"
+        
         String remoteId = code;
+        
         if (code.startsWith('ma-remote://')) {
+          // Protocol scheme format
           remoteId = code.substring('ma-remote://'.length);
-        } else if (code.startsWith('http')) {
-          // If it's a URL, try to extract ID from query parameter
+        } else if (code.startsWith('http://') || code.startsWith('https://')) {
+          // Full URL - extract ID from path or query
           final uri = Uri.tryParse(code);
-          remoteId = uri?.queryParameters['id'] ?? code;
+          if (uri != null) {
+            // Try query parameter first
+            if (uri.queryParameters.containsKey('id')) {
+              remoteId = uri.queryParameters['id']!;
+            } else if (uri.queryParameters.containsKey('remote_id')) {
+              remoteId = uri.queryParameters['remote_id']!;
+            } else {
+              // Extract from path (e.g., /remote/XXXX-XXXX-XXXX)
+              final pathSegments = uri.pathSegments;
+              if (pathSegments.isNotEmpty) {
+                remoteId = pathSegments.last;
+              }
+            }
+          }
+        }
+        
+        // Clean up the ID (remove any trailing slashes, whitespace)
+        remoteId = remoteId.trim();
+        while (remoteId.endsWith('/')) {
+          remoteId = remoteId.substring(0, remoteId.length - 1);
         }
 
         // Return the scanned ID

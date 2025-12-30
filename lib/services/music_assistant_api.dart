@@ -13,6 +13,8 @@ import 'settings_service.dart';
 import 'device_id_service.dart';
 import 'retry_helper.dart';
 import 'auth/auth_manager.dart';
+import 'remote/remote_access_manager.dart';
+import 'remote/transport_websocket_channel_adapter.dart';
 
 enum MAConnectionState {
   disconnected,
@@ -90,6 +92,45 @@ class MusicAssistantAPI {
     try {
       _updateConnectionState(MAConnectionState.connecting);
 
+      // Check if we're using remote access (WebRTC transport)
+      if (RemoteAccessManager.instance.isRemoteMode) {
+        _logger.log('Connection: Using Remote Access (WebRTC) transport');
+        
+        final transport = RemoteAccessManager.instance.transport;
+        if (transport == null) {
+          throw Exception('Remote Access mode enabled but transport not available');
+        }
+        
+        // Wrap the transport as a WebSocketChannel
+        _channel = TransportWebSocketChannelAdapter(transport);
+        _logger.log('Connection: WebRTC transport wrapped as WebSocketChannel');
+        
+        // Wait for server info message before considering connected
+        _connectionCompleter = Completer<void>();
+        
+        // Listen to messages (same as regular WebSocket)
+        _channel!.stream.listen(
+          _handleMessage,
+          onError: _handleWebSocketError,
+          onDone: _handleWebSocketClosed,
+        );
+        
+        // Start heartbeat
+        _startHeartbeat();
+        
+        // Wait for server_info message (sent automatically by MA server)
+        await _connectionCompleter!.future.timeout(
+          const Duration(seconds: Timings.connectionTimeout),
+          onTimeout: () {
+            throw TimeoutException('No response from MA server over WebRTC');
+          },
+        );
+        
+        _connectionInProgress!.complete();
+        return;
+      }
+
+      // Regular WebSocket connection (existing code)
       // Load and cache custom port setting
       _cachedCustomPort = await SettingsService.getWebSocketPort();
 

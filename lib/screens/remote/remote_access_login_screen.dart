@@ -9,8 +9,11 @@
 /// 3. Connect via WebRTC to MA server
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../services/remote/remote_access_manager.dart';
 import '../../services/debug_logger.dart';
+import '../../providers/music_assistant_provider.dart';
+import '../home_screen.dart';
 import 'qr_scanner_screen.dart';
 
 class RemoteAccessLoginScreen extends StatefulWidget {
@@ -95,15 +98,49 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
       // Connect via Remote Access Manager
       final transport = await RemoteAccessManager.instance.connectWithRemoteId(remoteId);
       
-      _logger.log('[RemoteAccess] WebRTC connection established');
+      _logger.log('[RemoteAccess] WebRTC connection established successfully');
       
-      // TODO: Now we need to integrate this transport with the existing MA API
-      // For now, we'll show success and return
-      // In the next phase, we'll create a non-invasive wrapper to inject this transport
+      // Now connect the app using the WebRTC transport
+      // The transport provides a WebSocket-like interface that bridges to the WebRTC data channel
+      if (!mounted) return;
       
-      if (mounted) {
-        // Return success - the transport is ready to use
-        Navigator.of(context).pop(transport);
+      final provider = context.read<MusicAssistantProvider>();
+      
+      // Use a special URL prefix to indicate this is a remote connection
+      // The transport will be used instead of a real WebSocket
+      final virtualUrl = 'wss://remote.music-assistant.io/ws'; // Virtual URL - not actually used
+      
+      _logger.log('[RemoteAccess] Connecting MusicAssistantProvider with WebRTC transport...');
+      
+      // Connect to the MA server via the WebRTC transport
+      // The MusicAssistantAPI will use the transport provided by RemoteAccessManager
+      await provider.connectToServer(virtualUrl);
+      
+      _logger.log('[RemoteAccess] Waiting for connection to complete...');
+      
+      // Wait for connection and authentication to complete
+      for (int i = 0; i < 20; i++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (provider.isConnected) break;
+      }
+      
+      if (!mounted) return;
+      
+      if (provider.isConnected) {
+        _logger.log('[RemoteAccess] Successfully connected! Navigating to home screen...');
+        
+        // Navigate to home screen
+        FocusScope.of(context).unfocus();
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } else {
+        _logger.log('[RemoteAccess] Connection established but not authenticated');
+        setState(() {
+          _isConnecting = false;
+          _error = 'Connection established but authentication failed.\n'
+                   'Please check your Music Assistant settings.';
+        });
       }
     } catch (e) {
       _logger.log('[RemoteAccess] Connection failed: $e');

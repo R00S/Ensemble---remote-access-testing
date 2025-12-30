@@ -24,8 +24,29 @@ if (flutterVersionName == null) {
 
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
+def hasValidKeystore = false
+
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    
+    // Validate that the keystore file exists and can be loaded
+    try {
+        def keystoreFile = file(keystoreProperties['storeFile'])
+        if (keystoreFile.exists()) {
+            // Try to actually load the keystore to verify it's not corrupted
+            def keyStore = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
+            keystoreFile.withInputStream { stream ->
+                keyStore.load(stream, keystoreProperties['storePassword'].toCharArray())
+            }
+            hasValidKeystore = true
+            println "✓ Valid keystore found, will use release signing"
+        } else {
+            println "✗ Keystore file not found: ${keystoreProperties['storeFile']}, will use debug signing"
+        }
+    } catch (Exception e) {
+        println "✗ Keystore validation failed: ${e.message}, will use debug signing"
+        hasValidKeystore = false
+    }
 }
 
 android {
@@ -48,22 +69,12 @@ android {
 
     signingConfigs {
         release {
-            if (keystorePropertiesFile.exists()) {
-                try {
-                    keyAlias keystoreProperties['keyAlias']
-                    keyPassword keystoreProperties['keyPassword']
-                    def keystoreFile = file(keystoreProperties['storeFile'])
-                    if (keystoreFile.exists()) {
-                        storeFile keystoreFile
-                        storePassword keystoreProperties['storePassword']
-                    } else {
-                        // Keystore file doesn't exist, will fall back to debug signing
-                        println "Warning: Keystore file not found: ${keystoreProperties['storeFile']}"
-                    }
-                } catch (Exception e) {
-                    // Error loading keystore, will fall back to debug signing
-                    println "Warning: Could not load keystore configuration: ${e.message}"
-                }
+            // Only configure release signing if we have a valid keystore
+            if (hasValidKeystore) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
             }
         }
     }
@@ -78,15 +89,8 @@ android {
 
     buildTypes {
         release {
-            // Only use release signing if keystore file actually exists and is readable
-            def useReleaseSigning = false
-            if (keystorePropertiesFile.exists()) {
-                def keystoreFile = file(keystoreProperties['storeFile'])
-                if (keystoreFile.exists() && keystoreFile.canRead()) {
-                    useReleaseSigning = true
-                }
-            }
-            signingConfig useReleaseSigning ? signingConfigs.release : signingConfigs.debug
+            // Use release signing only if we validated the keystore successfully
+            signingConfig hasValidKeystore ? signingConfigs.release : signingConfigs.debug
         }
     }
 }

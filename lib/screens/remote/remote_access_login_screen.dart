@@ -110,53 +110,42 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
         _isConnecting = false;
       });
       
-      // Show success dialog
-      _logger.log('[RemoteAccess] WebRTC transport ready. Connection successful.');
+      // WebRTC connection successful - navigate to home screen
+      _logger.log('[RemoteAccess] WebRTC transport ready. Navigating to home screen.');
       
-      await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 32),
-              SizedBox(width: 12),
-              Text('WebRTC Connected'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Successfully connected to Remote ID:'),
-              SizedBox(height: 8),
-              Text(
-                remoteId,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                ),
-              ),
-              SizedBox(height: 16),
-              Text(
-                'WebRTC transport layer is ready and tested. '
-                'Full API integration requires minimal modifications to MusicAssistantAPI.',
-                style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('OK'),
-            ),
-          ],
+      // Navigate to home screen with success message
+      if (!mounted) return;
+      
+      // Pop this screen and go to home
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => const HomeScreen(),
         ),
       );
       
-      if (!mounted) return;
-      
-      // Return to login screen
-      Navigator.of(context).pop();
+      // Show success snackbar on home screen
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'WebRTC connected via Remote Access ID',
+                    style: TextStyle(fontSize: 15),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green[700],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      });
     } catch (e) {
       _logger.log('[RemoteAccess] Connection failed: $e');
       

@@ -5,6 +5,8 @@
 /// This allows the existing MusicAssistantAPI to work transparently over WebRTC.
 ///
 /// Adapted from: music-assistant/desktop-companion/src/plugins/remote/websocket-transport.ts
+/// Original Copyright 2024 Music Assistant (Apache License 2.0)
+/// Adapted for Flutter/Dart by Ensemble contributors (MIT License)
 
 import 'dart:async';
 import 'transport.dart';

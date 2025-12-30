@@ -4,6 +4,8 @@
 /// Used for remote connections to Music Assistant instances via NAT traversal.
 /// 
 /// Adapted from: music-assistant/desktop-companion/src/plugins/remote/webrtc-transport.ts
+/// Original Copyright 2024 Music Assistant (Apache License 2.0)
+/// Adapted for Flutter/Dart by Ensemble contributors (MIT License)
 
 import 'dart:async';
 import 'dart:convert';

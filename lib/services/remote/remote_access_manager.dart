@@ -4,6 +4,10 @@
 /// This is a SEPARATE, OPTIONAL service that works alongside the existing
 /// connection system without modifying it.
 ///
+/// Adapted from: music-assistant/desktop-companion/src/plugins/remote/connection-manager.ts
+/// Original Copyright 2024 Music Assistant (Apache License 2.0)
+/// Adapted for Flutter/Dart by Ensemble contributors (MIT License)
+///
 /// Integration approach:
 /// - Does NOT modify MusicAssistantAPI
 /// - Does NOT reimplement authentication

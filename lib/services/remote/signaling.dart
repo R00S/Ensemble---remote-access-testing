@@ -4,6 +4,8 @@
 /// Connects to the Music Assistant signaling server to exchange SDP offers/answers and ICE candidates.
 /// 
 /// Adapted from: music-assistant/desktop-companion/src/plugins/remote/signaling.ts
+/// Original Copyright 2024 Music Assistant (Apache License 2.0)
+/// Adapted for Flutter/Dart by Ensemble contributors (MIT License)
 
 import 'dart:async';
 import 'dart:convert';

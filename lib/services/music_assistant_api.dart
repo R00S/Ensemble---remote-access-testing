@@ -3024,6 +3024,9 @@ class _TransportChannelAdapter extends StreamChannelMixin implements WebSocketCh
 
   @override
   String? get protocol => null;
+
+  @override
+  Future<void> get ready => Future.value();
 }
 
 /// Adapter to make ITransport send operations work like WebSocketSink

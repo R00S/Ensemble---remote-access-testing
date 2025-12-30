@@ -364,12 +364,27 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         final freshQueue = await maProvider.getQueue(player.playerId);
         if (mounted && freshQueue != null) {
           debugPrint('🔀 Queue loaded: shuffle=${freshQueue.shuffle}, shuffleEnabled=${freshQueue.shuffleEnabled}');
-          // Only update if queue changed
+          // Check if queue items were reordered by comparing first few item IDs
+          bool itemsReordered = false;
+          if (_queue != null && _queue!.items.isNotEmpty && freshQueue.items.isNotEmpty) {
+            // Compare first 3 items to detect reordering (shuffle changes item order)
+            final maxCheck = (_queue!.items.length < 3 ? _queue!.items.length : 3).clamp(1, freshQueue.items.length);
+            for (int i = 0; i < maxCheck; i++) {
+              if (_queue!.items[i].queueItemId != freshQueue.items[i].queueItemId) {
+                itemsReordered = true;
+                debugPrint('🔀 Queue items reordered detected at position $i');
+                break;
+              }
+            }
+          }
+          // Update if queue metadata or item order changed
           final queueChanged = _queue == null ||
               _queue!.items.length != freshQueue.items.length ||
               _queue!.currentIndex != freshQueue.currentIndex ||
-              _queue!.shuffle != freshQueue.shuffle;
+              _queue!.shuffle != freshQueue.shuffle ||
+              itemsReordered;
           if (queueChanged) {
+            debugPrint('🔀 Queue changed, updating UI (reordered=$itemsReordered)');
             setState(() {
               _queue = freshQueue;
               _isLoadingQueue = false;
@@ -434,7 +449,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final maProvider = context.read<MusicAssistantProvider>();
     // Toggle: if currently shuffled, disable; if not shuffled, enable
     await maProvider.toggleShuffle(_queue!.playerId, newShuffleState);
-    debugPrint('🔀 Shuffle: command sent, reloading queue');
+    debugPrint('🔀 Shuffle: command sent, waiting for server to reorder queue');
+    // Small delay to allow server to finish reordering queue items
+    await Future.delayed(const Duration(milliseconds: 150));
+    debugPrint('🔀 Shuffle: reloading queue');
     await _loadQueue();
   }
 

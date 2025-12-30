@@ -79,7 +79,9 @@ This application was built with AI-assisted development using **Claude Code** an
 
 ## Download
 
-Download the latest release from the [Releases page](https://github.com/CollotsSpot/Ensemble/releases).
+Download the latest release from the [Releases page](https://github.com/R00S/Ensemble---remote-access-testing/releases).
+
+**Note:** This is a development/testing build with Remote Access features. For the stable version, see the [main Ensemble repository](https://github.com/CollotsSpot/Ensemble/releases).
 
 ## Setup
 

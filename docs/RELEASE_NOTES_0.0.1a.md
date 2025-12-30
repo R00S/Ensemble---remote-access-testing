@@ -41,11 +41,43 @@ git checkout 0.0.1a
 # Install dependencies
 flutter pub get
 
-# Build the APK (release mode)
-flutter build apk --release
+# Build the APK (release mode, skip analysis to avoid pre-existing linting warnings)
+flutter build apk --release --no-analyze
 
 # The APK will be at: build/app/outputs/flutter-apk/app-release.apk
 ```
+
+**Build Requirements:**
+- Flutter SDK 3.0.0 or higher
+- Android SDK with API 21+ (Android 5.0+)
+- Java JDK 8 or higher
+- Gradle 8.1.0 (included in project)
+
+**Troubleshooting Build Issues:**
+
+If you encounter Gradle build failures:
+
+1. **Clean and rebuild:**
+   ```bash
+   flutter clean
+   flutter pub get
+   flutter build apk --release --no-analyze
+   ```
+
+2. **Check Java version:**
+   ```bash
+   java -version  # Should be Java 8 or higher
+   ```
+
+3. **Ensure Flutter WebRTC native dependencies are downloaded:**
+   ```bash
+   flutter pub get
+   cd android && ./gradlew clean && cd ..
+   ```
+
+4. **If build times out (10+ minutes):** The flutter_webrtc package includes large native libraries. Increase Gradle memory:
+   - Create/edit `android/gradle.properties`
+   - Add: `org.gradle.jvmargs=-Xmx2048m`
 
 ### 📋 Requirements
 

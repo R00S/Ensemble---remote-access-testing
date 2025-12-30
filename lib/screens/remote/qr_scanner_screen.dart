@@ -42,10 +42,10 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         
         // Extract Remote ID from QR code
         // The QR code from MA can be in various formats:
-        // 1. Just the ID: "XXXX-XXXX-XXXX"
-        // 2. URL with path: "https://example.com/remote/XXXX-XXXX-XXXX"
-        // 3. URL with query: "https://example.com?id=XXXX-XXXX-XXXX"
-        // 4. Protocol scheme: "ma-remote://XXXX-XXXX-XXXX"
+        // 1. Just the ID: "SPUAH9MEWENF6KFLNCQ4NYHXTQ"
+        // 2. URL with query parameter: "https://app.music-assistant.io/?remote_id=SPUAH9MEWENF6KFLNCQ4NYHXTQ"
+        // 3. URL with path: "https://example.com/remote/SPUAH9MEWENF6KFLNCQ4NYHXTQ"
+        // 4. Protocol scheme: "ma-remote://SPUAH9MEWENF6KFLNCQ4NYHXTQ"
         
         String remoteId = code;
         
@@ -53,16 +53,18 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           // Protocol scheme format
           remoteId = code.substring('ma-remote://'.length);
         } else if (code.startsWith('http://') || code.startsWith('https://')) {
-          // Full URL - extract ID from path or query
+          // Full URL - extract ID from query parameters or path
           final uri = Uri.tryParse(code);
           if (uri != null) {
-            // Try query parameter first
-            if (uri.queryParameters.containsKey('id')) {
-              remoteId = uri.queryParameters['id']!;
-            } else if (uri.queryParameters.containsKey('remote_id')) {
+            // Try various query parameter names
+            if (uri.queryParameters.containsKey('remote_id')) {
               remoteId = uri.queryParameters['remote_id']!;
+            } else if (uri.queryParameters.containsKey('id')) {
+              remoteId = uri.queryParameters['id']!;
+            } else if (uri.queryParameters.containsKey('remoteId')) {
+              remoteId = uri.queryParameters['remoteId']!;
             } else {
-              // Extract from path (e.g., /remote/XXXX-XXXX-XXXX)
+              // Extract from path (e.g., /remote/SPUAH9MEWENF6KFLNCQ4NYHXTQ)
               final pathSegments = uri.pathSegments;
               if (pathSegments.isNotEmpty) {
                 remoteId = pathSegments.last;
@@ -71,10 +73,15 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           }
         }
         
-        // Clean up the ID (remove any trailing slashes, whitespace)
+        // Clean up the ID (remove any trailing slashes, whitespace, fragments)
         remoteId = remoteId.trim();
         while (remoteId.endsWith('/')) {
           remoteId = remoteId.substring(0, remoteId.length - 1);
+        }
+        
+        // Remove any URL fragments (e.g., #something)
+        if (remoteId.contains('#')) {
+          remoteId = remoteId.substring(0, remoteId.indexOf('#'));
         }
 
         // Return the scanned ID

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
+import 'package:stream_channel/stream_channel.dart';
 import 'package:uuid/uuid.dart';
 import '../constants/network.dart';
 import '../constants/timings.dart' show Timings, LibraryConstants;
@@ -2996,7 +2997,7 @@ class MusicAssistantAPI {
 
 /// Adapter to make ITransport look like a WebSocketChannel
 /// This allows the existing MusicAssistantAPI code to work with WebRTC transport
-class _TransportChannelAdapter implements WebSocketChannel {
+class _TransportChannelAdapter extends StreamChannelMixin implements WebSocketChannel {
   final ITransport _transport;
   final StreamController<String> _messageController = StreamController<String>.broadcast();
 

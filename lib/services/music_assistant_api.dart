@@ -111,8 +111,19 @@ class MusicAssistantAPI {
         // Listen to messages (same as regular WebSocket)
         _channel!.stream.listen(
           _handleMessage,
-          onError: _handleWebSocketError,
-          onDone: _handleWebSocketClosed,
+          onError: (error) {
+            _logger.log('WebRTC transport error: $error');
+            _updateConnectionState(MAConnectionState.error);
+            _reconnect();
+          },
+          onDone: () {
+            _logger.log('WebRTC connection closed');
+            _updateConnectionState(MAConnectionState.disconnected);
+            if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
+              _connectionCompleter!.completeError(Exception('Connection closed'));
+            }
+            _reconnect();
+          },
         );
         
         // Start heartbeat
@@ -120,7 +131,7 @@ class MusicAssistantAPI {
         
         // Wait for server_info message (sent automatically by MA server)
         await _connectionCompleter!.future.timeout(
-          const Duration(seconds: Timings.connectionTimeout),
+          Timings.connectionTimeout,
           onTimeout: () {
             throw TimeoutException('No response from MA server over WebRTC');
           },

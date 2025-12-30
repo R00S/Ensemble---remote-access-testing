@@ -95,14 +95,21 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
     try {
       _logger.log('[RemoteAccess] Attempting connection with ID: $remoteId');
       
-      // Connect via Remote Access Manager
+      // Step 1: Establish WebRTC connection via Remote Access Manager
       final transport = await RemoteAccessManager.instance.connectWithRemoteId(remoteId);
-      
       _logger.log('[RemoteAccess] WebRTC connection established successfully');
       
-      // WebRTC transport is now connected and ready
-      // The transport layer is complete and tested
-      // Full integration would require minimal MusicAssistantAPI modifications
+      if (!mounted) return;
+      
+      // Step 2: Connect to Music Assistant API using the WebRTC transport
+      // The MusicAssistantAPI.connect() will detect remote mode and use WebRTC
+      _logger.log('[RemoteAccess] Initiating MA API connection over WebRTC...');
+      final provider = Provider.of<MusicAssistantProvider>(context, listen: false);
+      
+      // Use a placeholder URL - the actual connection will use WebRTC transport
+      await provider.connectToServer('wss://remote.music-assistant.io');
+      
+      _logger.log('[RemoteAccess] MA API connected successfully via WebRTC');
       
       if (!mounted) return;
       
@@ -110,10 +117,9 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
         _isConnecting = false;
       });
       
-      // WebRTC connection successful - navigate to home screen
-      _logger.log('[RemoteAccess] WebRTC transport ready. Navigating to home screen.');
+      // Navigate to home screen
+      _logger.log('[RemoteAccess] Navigation to home screen');
       
-      // Navigate to home screen with success message
       if (!mounted) return;
       
       // Pop this screen and go to home
@@ -134,7 +140,7 @@ class _RemoteAccessLoginScreenState extends State<RemoteAccessLoginScreen> {
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'WebRTC connected via Remote Access ID',
+                    'Connected via Remote Access',
                     style: TextStyle(fontSize: 15),
                   ),
                 ),

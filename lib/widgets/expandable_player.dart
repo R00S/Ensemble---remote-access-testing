@@ -360,10 +360,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       try {
         final freshQueue = await maProvider.getQueue(player.playerId);
         if (mounted && freshQueue != null) {
+          debugPrint('🔀 Queue loaded: shuffle=${freshQueue.shuffle}, shuffleEnabled=${freshQueue.shuffleEnabled}');
           // Only update if queue changed
           final queueChanged = _queue == null ||
               _queue!.items.length != freshQueue.items.length ||
-              _queue!.currentIndex != freshQueue.currentIndex;
+              _queue!.currentIndex != freshQueue.currentIndex ||
+              _queue!.shuffle != freshQueue.shuffle;
           if (queueChanged) {
             setState(() {
               _queue = freshQueue;

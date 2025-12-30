@@ -49,10 +49,21 @@ android {
     signingConfigs {
         release {
             if (keystorePropertiesFile.exists()) {
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-                storeFile file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
+                try {
+                    keyAlias keystoreProperties['keyAlias']
+                    keyPassword keystoreProperties['keyPassword']
+                    def keystoreFile = file(keystoreProperties['storeFile'])
+                    if (keystoreFile.exists()) {
+                        storeFile keystoreFile
+                        storePassword keystoreProperties['storePassword']
+                    } else {
+                        // Keystore file doesn't exist, will fall back to debug signing
+                        println "Warning: Keystore file not found: ${keystoreProperties['storeFile']}"
+                    }
+                } catch (Exception e) {
+                    // Error loading keystore, will fall back to debug signing
+                    println "Warning: Could not load keystore configuration: ${e.message}"
+                }
             }
         }
     }
@@ -67,7 +78,15 @@ android {
 
     buildTypes {
         release {
-            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            // Only use release signing if keystore file actually exists and is readable
+            def useReleaseSigning = false
+            if (keystorePropertiesFile.exists()) {
+                def keystoreFile = file(keystoreProperties['storeFile'])
+                if (keystoreFile.exists() && keystoreFile.canRead()) {
+                    useReleaseSigning = true
+                }
+            }
+            signingConfig useReleaseSigning ? signingConfigs.release : signingConfigs.debug
         }
     }
 }

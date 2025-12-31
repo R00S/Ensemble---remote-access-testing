@@ -81,7 +81,35 @@ This application was built with AI-assisted development using **Claude Code** an
 
 Download the latest release from the [Releases page](https://github.com/R00S/Ensemble---remote-access-testing/releases).
 
-**Note:** This is a development/testing build with Remote Access features. For the stable version, see the [main Ensemble repository](https://github.com/CollotsSpot/Ensemble/releases).
+**Note:** This is a development/testing build with **experimental Remote Access features**. The feature is currently in **ALPHA** status with known issues:
+- Connection stability issues (timeouts/disconnects)
+- Player registration not working for remote connections
+
+For a stable production build, see the [main Ensemble repository](https://github.com/CollotsSpot/Ensemble/releases).
+
+### Remote Access (Alpha)
+
+Connect to your Music Assistant server from anywhere using WebRTC - no port forwarding or VPN required.
+
+**Status:** ⚠️ Alpha - Partially functional with known issues
+
+**What works:**
+- ✅ QR code scanning for easy setup
+- ✅ WebRTC connection establishment
+- ✅ Authentication over encrypted channel
+- ✅ Library browsing
+
+**Known issues:**
+- ❌ Connection unstable (frequent timeouts/disconnects)
+- ❌ App doesn't register as player (can't play music to device)
+
+**For details:** See [Remote Access Status](docs/REMOTE_ACCESS_STATUS.md)
+
+**To use:**
+1. Tap "Connect via Remote Access" on login screen
+2. Scan QR code from Music Assistant settings
+3. Enter your MA username and password
+4. Connect (may require multiple attempts)
 
 ## Setup
 

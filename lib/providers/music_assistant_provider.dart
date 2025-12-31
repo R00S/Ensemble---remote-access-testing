@@ -23,7 +23,6 @@ import '../services/sendspin_service.dart';
 import '../services/pcm_audio_player.dart';
 import '../services/offline_action_queue.dart';
 import '../services/remote/remote_access_manager.dart';
-import '../services/remote/transport.dart';
 import '../constants/timings.dart';
 import '../services/database_service.dart';
 import '../main.dart' show audioHandler;
@@ -608,13 +607,6 @@ class MusicAssistantProvider with ChangeNotifier {
       if (!_localPlayer.isInitialized) {
         await _initializeLocalPlayback();
       }
-      
-      // For remote connections, add a small delay to ensure connection is fully stable
-      final remoteManager = RemoteAccessManager.instance;
-      if (remoteManager.isRemoteMode) {
-        _logger.log('🔄 Remote connection detected, waiting for stability...');
-        await Future.delayed(const Duration(seconds: 2));
-      }
 
       await _tryAdoptGhostPlayer();
       await _registerLocalPlayer();
@@ -801,28 +793,39 @@ class MusicAssistantProvider with ChangeNotifier {
       _logger.log('🔄 No server URL saved, skipping reconnect');
       return;
     }
-    
-    // Check if we're using remote access
+
+    // CRITICAL: Check if we're using remote access by checking for saved remote ID
+    // This persists across app lifecycle unlike isRemoteMode which depends on active state
     final remoteManager = RemoteAccessManager.instance;
-    if (remoteManager.isRemoteMode) {
-      _logger.log('🔄 Remote access mode detected');
+    final savedRemoteId = await remoteManager.getSavedRemoteId();
+    final savedMode = await remoteManager.getSavedMode();
+    
+    final isRemoteMode = savedMode == ConnectionMode.remote && 
+                        savedRemoteId != null && 
+                        savedRemoteId.isNotEmpty;
+    
+    if (isRemoteMode) {
+      _logger.log('🔄 Remote Access mode detected (ID: ${savedRemoteId!.substring(0, 8)}...)');
       
-      // Check if WebRTC transport is still healthy
-      if (!remoteManager.isTransportConnected) {
-        _logger.log('🔄 Remote transport disconnected, reconnecting...');
-        final remoteId = remoteManager.remoteId;
-        if (remoteId != null) {
-          try {
-            // Reconnect WebRTC transport
-            await remoteManager.connectWithRemoteId(remoteId);
-            _logger.log('🔄 Remote transport reconnected');
-          } catch (e) {
-            _logger.log('🔄 Remote transport reconnection failed: $e');
-            // Fall through to regular reconnection logic
-          }
+      // Force WebRTC reconnection on app resume
+      // Mobile OSes suspend peer connections when app backgrounds
+      _logger.log('🔄 Forcing WebRTC transport reconnection...');
+      try {
+        // Disconnect old transport if it exists
+        if (remoteManager.transport != null) {
+          _logger.log('🔄 Cleaning up old WebRTC transport');
+          remoteManager.transport!.disconnect();
         }
-      } else {
-        _logger.log('🔄 Remote transport still connected');
+        
+        // Create fresh WebRTC connection
+        await remoteManager.connectWithRemoteId(savedRemoteId);
+        _logger.log('🔄 WebRTC transport reconnected successfully');
+      } catch (e) {
+        _logger.log('❌ WebRTC transport reconnection failed: $e');
+        _error = 'Failed to reconnect: $e';
+        _connectionState = MAConnectionState.error;
+        notifyListeners();
+        return;
       }
     }
 
@@ -1020,11 +1023,6 @@ class MusicAssistantProvider with ChangeNotifier {
     }
 
     _registrationInProgress = Completer<void>();
-    
-    // Log connection mode for debugging
-    final remoteManager = RemoteAccessManager.instance;
-    final isRemote = remoteManager.isRemoteMode;
-    _logger.log('🎵 Starting player registration (remote: $isRemote)');
 
     try {
       final playerId = await DeviceIdService.getOrCreateDevicePlayerId();
@@ -1033,7 +1031,6 @@ class MusicAssistantProvider with ChangeNotifier {
       await SettingsService.setBuiltinPlayerId(playerId);
 
       final name = await SettingsService.getLocalPlayerName();
-      _logger.log('🎵 Player name: $name');
 
       // Check if server uses Sendspin (MA 2.7.0b20+) - skip builtin_player entirely
       if (_serverUsesSendspin()) {
@@ -1085,12 +1082,6 @@ class MusicAssistantProvider with ChangeNotifier {
     } catch (e) {
       // Check if this is because builtin_player API is not available (MA 2.7.0b20+)
       final errorStr = e.toString();
-      _logger.log('❌ Player registration error: $errorStr');
-      
-      // Log remote connection status for debugging
-      final remoteManager = RemoteAccessManager.instance;
-      _logger.log('🔍 Connection mode - Remote: ${remoteManager.isRemoteMode}, Transport connected: ${remoteManager.isTransportConnected}');
-      
       if (errorStr.contains('Invalid command') && errorStr.contains('builtin_player')) {
         _logger.log('⚠️ Builtin player API not available (MA 2.7.0b20+ uses Sendspin)');
         _builtinPlayerAvailable = false;

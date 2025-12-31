@@ -85,11 +85,6 @@ class RemoteAccessManager {
 
   /// Get the transport (for integration with existing API)
   ITransport? get transport => _transport;
-  
-  /// Check if the transport connection is healthy
-  bool get isTransportConnected => 
-      _transport != null && 
-      _transport!.state == TransportState.connected;
 
   /// Initialize from stored settings
   Future<void> initialize() async {

@@ -432,11 +432,18 @@ class MusicAssistantProvider with ChangeNotifier {
   // CONNECTION
   // ============================================================================
 
-  Future<void> connectToServer(String serverUrl) async {
+  Future<void> connectToServer(String serverUrl, {String? username, String? password}) async {
     try {
       _error = null;
       _serverUrl = serverUrl;
       await SettingsService.setServerUrl(serverUrl);
+      
+      // Store credentials if provided (for remote access authentication)
+      if (username != null && password != null) {
+        await SettingsService.setUsername(username);
+        await SettingsService.setPassword(password);
+        _logger.log('🔐 Remote access credentials stored for authentication');
+      }
 
       // Dispose the old API to stop any pending reconnects
       _api?.dispose();
@@ -593,6 +600,11 @@ class MusicAssistantProvider with ChangeNotifier {
 
       if (_api!.authRequired) {
         await _fetchAndSetUserProfileName();
+      }
+
+      // Initialize local playback (if not already initialized)
+      if (!_localPlayer.isInitialized) {
+        await _initializeLocalPlayback();
       }
 
       await _tryAdoptGhostPlayer();

@@ -1435,7 +1435,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             _handleHorizontalDragEnd(details, maProvider);
           }
         },
-        child: Container(
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
           // Use foregroundDecoration for border so it renders ON TOP of content
           // This prevents the album art from clipping the yellow synced border
           foregroundDecoration: maProvider.isPlayerManuallySynced(selectedPlayer.playerId) && t < 0.5
@@ -2076,38 +2079,38 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     ),
                   ),
 
-                // Player name pill - attached to bottom-right of mini player
-                // Always visible when collapsed, fades out during expansion
-                if (t < 0.5)
-                  Positioned(
-                    right: 8,
-                    bottom: -12, // Extends below mini player
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        // Use adaptive tertiary color for complementary look
-                        color: (adaptiveScheme?.tertiary ?? colorScheme.tertiary).withOpacity(0.95 * (1.0 - t * 2)),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        selectedPlayer.name,
-                        style: TextStyle(
-                          color: (adaptiveScheme?.onTertiary ?? colorScheme.onTertiary).withOpacity(1.0 - t * 2),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0,
-                          decoration: TextDecoration.none,
-                          fontFamily: null, // Use default font
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
         ),
+        ),
+            // Player name pill - attached to bottom-right of mini player
+            // Outside Material so it's not clipped, always visible when collapsed
+            if (t < 0.5)
+              Positioned(
+                right: 8,
+                bottom: -12, // Extends below mini player
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (adaptiveScheme?.tertiary ?? colorScheme.tertiary).withOpacity(0.95 * (1.0 - t * 2)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    selectedPlayer.name,
+                    style: TextStyle(
+                      color: (adaptiveScheme?.onTertiary ?? colorScheme.onTertiary).withOpacity(1.0 - t * 2),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0,
+                      decoration: TextDecoration.none,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

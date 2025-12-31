@@ -22,6 +22,8 @@ import '../services/position_tracker.dart';
 import '../services/sendspin_service.dart';
 import '../services/pcm_audio_player.dart';
 import '../services/offline_action_queue.dart';
+import '../services/remote/remote_access_manager.dart';
+import '../services/remote/transport.dart';
 import '../constants/timings.dart';
 import '../services/database_service.dart';
 import '../main.dart' show audioHandler;
@@ -792,6 +794,30 @@ class MusicAssistantProvider with ChangeNotifier {
       _logger.log('🔄 No server URL saved, skipping reconnect');
       return;
     }
+    
+    // Check if we're using remote access
+    final remoteManager = RemoteAccessManager.instance;
+    if (remoteManager.isRemoteMode) {
+      _logger.log('🔄 Remote access mode detected');
+      
+      // Check if WebRTC transport is still healthy
+      if (!remoteManager.isTransportConnected) {
+        _logger.log('🔄 Remote transport disconnected, reconnecting...');
+        final remoteId = remoteManager.remoteId;
+        if (remoteId != null) {
+          try {
+            // Reconnect WebRTC transport
+            await remoteManager.connectWithRemoteId(remoteId);
+            _logger.log('🔄 Remote transport reconnected');
+          } catch (e) {
+            _logger.log('🔄 Remote transport reconnection failed: $e');
+            // Fall through to regular reconnection logic
+          }
+        }
+      } else {
+        _logger.log('🔄 Remote transport still connected');
+      }
+    }
 
     // IMMEDIATELY load cached players for instant UI display
     // This makes mini player and device button appear instantly on app resume
@@ -987,6 +1013,11 @@ class MusicAssistantProvider with ChangeNotifier {
     }
 
     _registrationInProgress = Completer<void>();
+    
+    // Log connection mode for debugging
+    final remoteManager = RemoteAccessManager.instance;
+    final isRemote = remoteManager.isRemoteMode;
+    _logger.log('🎵 Starting player registration (remote: $isRemote)');
 
     try {
       final playerId = await DeviceIdService.getOrCreateDevicePlayerId();
@@ -995,6 +1026,7 @@ class MusicAssistantProvider with ChangeNotifier {
       await SettingsService.setBuiltinPlayerId(playerId);
 
       final name = await SettingsService.getLocalPlayerName();
+      _logger.log('🎵 Player name: $name');
 
       // Check if server uses Sendspin (MA 2.7.0b20+) - skip builtin_player entirely
       if (_serverUsesSendspin()) {

@@ -57,6 +57,13 @@ class WebRTCTransport extends BaseTransport {
   Timer? _reconnectTimer;
   bool _intentionalClose = false;
   List<Map<String, dynamic>> _iceServers = [];
+  
+  // Keep-alive mechanism
+  Timer? _keepAliveTimer;
+  DateTime? _lastMessageReceived;
+  DateTime? _lastMessageSent;
+  static const _keepAliveInterval = Duration(seconds: 30);
+  static const _keepAliveTimeout = Duration(seconds: 60);
 
   WebRTCTransport(this.options) : super();
 
@@ -115,6 +122,9 @@ class WebRTCTransport extends BaseTransport {
       _reconnectAttempts = 0;
       setState(TransportState.connected);
       _logger.log('[WebRTC] Connection established successfully');
+      
+      // Start keep-alive mechanism
+      _startKeepAlive();
     } catch (e) {
       _logger.log('[WebRTC] Connection failed: $e');
       _cleanup();
@@ -132,6 +142,7 @@ class WebRTCTransport extends BaseTransport {
   @override
   void disconnect() {
     _intentionalClose = true;
+    _stopKeepAlive();
     _clearReconnectTimer();
     _cleanup();
     setState(TransportState.disconnected);
@@ -144,6 +155,7 @@ class WebRTCTransport extends BaseTransport {
       throw Exception('DataChannel is not open');
     }
     _dataChannel!.send(RTCDataChannelMessage(data));
+    _lastMessageSent = DateTime.now();
   }
 
   void _setupSignalingHandlers() {
@@ -233,6 +245,7 @@ class WebRTCTransport extends BaseTransport {
 
     _dataChannel!.onMessage = (message) {
       if (message.text != null) {
+        _lastMessageReceived = DateTime.now();
         emitMessage(message.text);
       }
     };
@@ -345,6 +358,60 @@ class WebRTCTransport extends BaseTransport {
   void _clearReconnectTimer() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+  }
+  
+  /// Start keep-alive mechanism to detect stale connections
+  void _startKeepAlive() {
+    _stopKeepAlive();
+    _lastMessageReceived = DateTime.now();
+    _lastMessageSent = DateTime.now();
+    
+    _keepAliveTimer = Timer.periodic(_keepAliveInterval, (_) {
+      _checkKeepAlive();
+    });
+    _logger.log('[WebRTC] Keep-alive started (interval: ${_keepAliveInterval.inSeconds}s)');
+  }
+  
+  /// Stop keep-alive timer
+  void _stopKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+  }
+  
+  /// Check connection health and send keep-alive if needed
+  void _checkKeepAlive() {
+    final now = DateTime.now();
+    
+    // Check if we've received any messages recently
+    if (_lastMessageReceived != null) {
+      final timeSinceLastMessage = now.difference(_lastMessageReceived!);
+      
+      if (timeSinceLastMessage > _keepAliveTimeout) {
+        _logger.log('[WebRTC] Keep-alive timeout - no messages for ${timeSinceLastMessage.inSeconds}s');
+        if (!_intentionalClose && options.reconnect) {
+          _scheduleReconnect();
+        }
+        return;
+      }
+    }
+    
+    // Send keep-alive ping if we haven't sent anything recently
+    if (_lastMessageSent != null) {
+      final timeSinceLastSent = now.difference(_lastMessageSent!);
+      
+      if (timeSinceLastSent > _keepAliveInterval) {
+        try {
+          // Send a minimal ping message
+          send('{"type":"ping"}');
+          _logger.log('[WebRTC] Keep-alive ping sent');
+        } catch (e) {
+          _logger.log('[WebRTC] Keep-alive ping failed: $e');
+          if (!_intentionalClose && options.reconnect) {
+            _scheduleReconnect();
+          }
+        }
+      }
+    }
   }
 
   void _cleanup() {

@@ -608,6 +608,13 @@ class MusicAssistantProvider with ChangeNotifier {
       if (!_localPlayer.isInitialized) {
         await _initializeLocalPlayback();
       }
+      
+      // For remote connections, add a small delay to ensure connection is fully stable
+      final remoteManager = RemoteAccessManager.instance;
+      if (remoteManager.isRemoteMode) {
+        _logger.log('🔄 Remote connection detected, waiting for stability...');
+        await Future.delayed(const Duration(seconds: 2));
+      }
 
       await _tryAdoptGhostPlayer();
       await _registerLocalPlayer();
@@ -1078,6 +1085,12 @@ class MusicAssistantProvider with ChangeNotifier {
     } catch (e) {
       // Check if this is because builtin_player API is not available (MA 2.7.0b20+)
       final errorStr = e.toString();
+      _logger.log('❌ Player registration error: $errorStr');
+      
+      // Log remote connection status for debugging
+      final remoteManager = RemoteAccessManager.instance;
+      _logger.log('🔍 Connection mode - Remote: ${remoteManager.isRemoteMode}, Transport connected: ${remoteManager.isTransportConnected}');
+      
       if (errorStr.contains('Invalid command') && errorStr.contains('builtin_player')) {
         _logger.log('⚠️ Builtin player API not available (MA 2.7.0b20+ uses Sendspin)');
         _builtinPlayerAvailable = false;

@@ -10,6 +10,7 @@ import '../services/metadata_service.dart';
 import '../services/debug_logger.dart';
 import '../services/recently_played_service.dart';
 import '../widgets/global_player_overlay.dart';
+import '../widgets/player_picker_sheet.dart';
 import '../l10n/app_localizations.dart';
 import 'artist_details_screen.dart';
 
@@ -912,14 +913,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
                     ],
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    S.of(context)!.tracks,
-                    style: textTheme.titleLarge?.copyWith(
-                      color: colorScheme.onBackground,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -1095,109 +1088,62 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
 
   void _showPlayAlbumFromHereMenu(BuildContext context, int startIndex) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final players = maProvider.availablePlayers;
 
-    _showPlayOnSheet(
-      context,
-      players,
-      onPlayerSelected: (player) {
+    GlobalPlayerOverlay.hidePlayer();
+
+    showPlayerPickerSheet(
+      context: context,
+      title: S.of(context)!.playOn,
+      players: maProvider.availablePlayers,
+      selectedPlayer: maProvider.selectedPlayer,
+      onPlayerSelected: (player) async {
         maProvider.selectPlayer(player);
-        maProvider.playTracks(
+        await maProvider.playTracks(
           player.playerId,
           _tracks,
           startIndex: startIndex,
         );
       },
-    );
+    ).whenComplete(() {
+      GlobalPlayerOverlay.showPlayer();
+    });
   }
 
   void _showPlayRadioMenu(BuildContext context, int trackIndex) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final players = maProvider.availablePlayers;
     final track = _tracks[trackIndex];
 
-    _showPlayOnSheet(
-      context,
-      players,
-      onPlayerSelected: (player) {
+    GlobalPlayerOverlay.hidePlayer();
+
+    showPlayerPickerSheet(
+      context: context,
+      title: S.of(context)!.playOn,
+      players: maProvider.availablePlayers,
+      selectedPlayer: maProvider.selectedPlayer,
+      onPlayerSelected: (player) async {
         maProvider.selectPlayer(player);
-        maProvider.playRadio(player.playerId, track);
+        await maProvider.playRadio(player.playerId, track);
       },
-    );
+    ).whenComplete(() {
+      GlobalPlayerOverlay.showPlayer();
+    });
   }
 
   void _showPlayOnMenu(BuildContext context) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final players = maProvider.availablePlayers;
 
-    _showPlayOnSheet(
-      context,
-      players,
-      onPlayerSelected: (player) {
-        maProvider.selectPlayer(player);
-        maProvider.playTracks(player.playerId, _tracks);
-      },
-    );
-  }
-
-  /// Shared "Play on..." bottom sheet that sizes to content
-  void _showPlayOnSheet(
-    BuildContext context,
-    List players, {
-    required void Function(dynamic player) onPlayerSelected,
-  }) {
-    // Slide mini player down out of the way
     GlobalPlayerOverlay.hidePlayer();
 
-    showModalBottomSheet(
+    showPlayerPickerSheet(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 16),
-            Text(
-              S.of(context)!.playOn,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            if (players.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Text(S.of(context)!.noPlayersAvailable),
-              )
-            else
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: players.length,
-                  itemBuilder: (context, index) {
-                    final player = players[index];
-                    return ListTile(
-                      leading: Icon(
-                        Icons.speaker,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      title: Text(player.name),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPlayerSelected(player);
-                      },
-                    );
-                  },
-                ),
-              ),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-          ],
-        ),
-      ),
+      title: S.of(context)!.playOn,
+      players: maProvider.availablePlayers,
+      selectedPlayer: maProvider.selectedPlayer,
+      onPlayerSelected: (player) async {
+        maProvider.selectPlayer(player);
+        await maProvider.playTracks(player.playerId, _tracks);
+      },
     ).whenComplete(() {
-      // Slide mini player back up when sheet is dismissed
       GlobalPlayerOverlay.showPlayer();
     });
   }

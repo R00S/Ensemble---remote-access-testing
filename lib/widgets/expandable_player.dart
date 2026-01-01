@@ -77,10 +77,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   final ValueNotifier<double?> _seekPositionNotifier = ValueNotifier<double?>(null);
 
   // Dimensions
-  static const double _collapsedHeight = 64.0;
+  static double get _collapsedHeight => MiniPlayerLayout.height;
   static const double _collapsedMargin = 12.0; // Increased from 8 to 12 (4px more gap above nav bar)
   static const double _collapsedBorderRadius = 16.0;
-  static const double _collapsedArtSize = 64.0;
+  static double get _collapsedArtSize => MiniPlayerLayout.artSize;
   static const double _bottomNavHeight = 56.0;
   static const double _edgeDeadZone = 40.0; // Dead zone for Android back gesture
 
@@ -1238,7 +1238,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final expandedArtLeft = (screenSize.width - expandedArtSize) / 2;
     final artLeft = _lerpDouble(collapsedArtLeft, expandedArtLeft, t);
 
-    final collapsedArtTop = 0.0;
+    final collapsedArtTop = (_collapsedHeight - _collapsedArtSize) / 2; // Center vertically
     final expandedArtTop = topPadding + headerHeight + 16;
     final artTop = _lerpDouble(collapsedArtTop, expandedArtTop, t);
 
@@ -1313,6 +1313,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final collapsedArtistTop = MiniPlayerLayout.secondaryTop;
     final expandedArtistTop = expandedTitleTop + expandedTitleHeight + titleToArtistGap;
     final artistTop = _lerpDouble(collapsedArtistTop, expandedArtistTop, t);
+
+    // Player name - only visible when collapsed (third line)
+    final playerNameTop = MiniPlayerLayout.tertiaryTop;
 
     // Album - subtle, below artist
     final expandedAlbumTop = expandedArtistTop + artistHeight + artistToAlbumGap;
@@ -1658,6 +1661,26 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                         textAlign: t > 0.5 ? TextAlign.center : TextAlign.left,
                         maxLines: 1,
                         softWrap: t > 0.5, // false in collapsed to ensure ellipsis truncation
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+
+                // Player name - third line, only visible when collapsed
+                // Same size as artist, same color as track
+                if (t < 0.5 && !(_inTransition && t < 0.1 && _peekPlayer != null) && !(widget.isHintVisible && t < 0.5))
+                  Positioned(
+                    left: titleLeft + miniPlayerSlideOffset,
+                    top: playerNameTop,
+                    child: SizedBox(
+                      width: titleWidth,
+                      child: Text(
+                        selectedPlayer.name,
+                        style: TextStyle(
+                          color: textColor.withOpacity(1.0 - t * 2), // Fade out as expanding
+                          fontSize: MiniPlayerLayout.tertiaryFontSize,
+                        ),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),

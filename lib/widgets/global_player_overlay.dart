@@ -9,6 +9,7 @@ import '../providers/navigation_provider.dart';
 import '../services/settings_service.dart';
 import '../theme/theme_provider.dart';
 import 'expandable_player.dart';
+import 'player/mini_player_content.dart' show MiniPlayerLayout;
 import 'player/player_reveal_overlay.dart';
 
 /// Cached color with contrast adjustment
@@ -56,14 +57,14 @@ class BottomSpacing {
   /// Height of the bottom navigation bar
   static const double navBarHeight = 56.0;
 
-  /// Height of mini player when visible (64px height + 12px margin)
-  static const double miniPlayerHeight = 76.0;
+  /// Height of mini player when visible (height + 12px margin)
+  static double get miniPlayerHeight => MiniPlayerLayout.height + 12.0;
 
   /// Space needed when only nav bar is visible (with some extra padding)
   static const double navBarOnly = navBarHeight + 16.0;
 
   /// Space needed when mini player is also visible
-  static const double withMiniPlayer = navBarHeight + miniPlayerHeight + 22.0;
+  static double get withMiniPlayer => navBarHeight + miniPlayerHeight + 22.0;
 }
 
 /// ValueNotifier for player expansion progress (0.0 to 1.0) and background color

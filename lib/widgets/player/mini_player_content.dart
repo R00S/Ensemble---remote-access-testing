@@ -3,18 +3,21 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 /// Shared constants for mini player layout
 class MiniPlayerLayout {
-  static const double height = 64.0;
-  static const double artSize = 64.0;
+  static const double height = 76.0;
+  static const double artSize = 76.0;
   static const double textLeftOffset = 10.0; // Gap between art and text
-  static const double textLeft = artSize + textLeftOffset; // 74px
-  static const double primaryTop = 13.0;
-  static const double secondaryTop = 33.0;
+  static const double textLeft = artSize + textLeftOffset; // 86px
+  // 3-line layout: track, artist, player
+  static const double primaryTop = 8.0;
+  static const double secondaryTop = 26.0;
+  static const double tertiaryTop = 44.0;
   static const double textRightPadding = 12.0;
   static const double iconSize = 28.0;
   static const double iconOpacity = 0.4;
   static const double secondaryTextOpacity = 0.6;
   static const double primaryFontSize = 16.0;
   static const double secondaryFontSize = 14.0;
+  static const double tertiaryFontSize = 14.0;
   static const FontWeight primaryFontWeight = FontWeight.w500;
 }
 
@@ -99,10 +102,10 @@ class MiniPlayerContent extends StatelessWidget {
               child: Container(color: backgroundColor),
             ),
 
-          // Art / Icon area
+          // Art / Icon area - centered vertically
           Positioned(
             left: slidePixels,
-            top: 0,
+            top: (MiniPlayerLayout.height - MiniPlayerLayout.artSize) / 2,
             child: SizedBox(
               width: MiniPlayerLayout.artSize,
               height: MiniPlayerLayout.artSize,

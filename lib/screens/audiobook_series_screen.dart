@@ -451,7 +451,7 @@ class _AudiobookSeriesScreenState extends State<AudiobookSeriesScreen> {
             _buildAudiobookSliver(maProvider),
 
           // Bottom padding for mini player
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: SizedBox(height: BottomSpacing.withMiniPlayer),
           ),
         ],

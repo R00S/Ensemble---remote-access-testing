@@ -131,6 +131,72 @@ class MusicAssistantProvider with ChangeNotifier {
     return _availablePlayers;
   }
 
+  /// Check if a player should show the "manually synced" indicator (yellow border)
+  /// Returns true for BOTH the leader AND children of a manually created sync group
+  /// Excludes pre-configured MA speaker groups (provider = 'player_group')
+  bool isPlayerManuallySynced(String playerId) {
+    final player = _availablePlayers.where((p) => p.playerId == playerId).firstOrNull;
+    if (player == null) return false;
+
+    // Debug: log player info to diagnose yellow border issues
+    _logger.info('🔍 isPlayerManuallySynced: ${player.name} (${player.playerId}) | provider: ${player.provider} | syncedTo: ${player.syncedTo} | groupMembers: ${player.groupMembers}');
+
+    // Group players (like "All Speakers") should NEVER have yellow border
+    // They are pre-configured containers, not manually synced players
+    // Check this FIRST before any other logic to prevent edge cases
+    if (player.provider == 'player_group') return false;
+
+    // Case 1: Player is a child synced to another player
+    if (player.syncedTo != null) {
+      // Look up sync target - also check translated IDs for Cast+Sendspin players
+      // The syncedTo might contain a Cast ID but the player list has the Sendspin version
+      Player? syncTarget = _availablePlayers.where((p) => p.playerId == player.syncedTo).firstOrNull;
+
+      // If not found, try looking up by translated Sendspin ID
+      if (syncTarget == null) {
+        final translatedId = _castToSendspinIdMap[player.syncedTo];
+        if (translatedId != null) {
+          syncTarget = _availablePlayers.where((p) => p.playerId == translatedId).firstOrNull;
+        }
+      }
+
+      // Also check reverse: syncedTo might be Sendspin ID, look for Cast player
+      if (syncTarget == null) {
+        // Build reverse map on demand
+        for (final entry in _castToSendspinIdMap.entries) {
+          if (entry.value == player.syncedTo) {
+            syncTarget = _availablePlayers.where((p) => p.playerId == entry.key).firstOrNull;
+            if (syncTarget != null) break;
+          }
+        }
+      }
+
+      if (syncTarget == null) return false;
+
+      // If synced to a group player, it's part of a pre-configured group
+      if (syncTarget.provider == 'player_group') return false;
+
+      // Synced to a regular player - this is a manual sync child
+      return true;
+    }
+
+    // Case 2: Player is a leader with group members
+    if (player.groupMembers != null && player.groupMembers!.length > 1) {
+      // Key distinction: In a MANUAL sync, the leader's own ID is in groupMembers
+      // In a PRE-CONFIGURED group (UGP), the group player's ID is NOT in groupMembers
+      // (the members are the child players, not including the group itself)
+      final isInOwnGroup = player.groupMembers!.contains(player.playerId);
+      if (!isInOwnGroup) {
+        // This is a pre-configured group player (like "All Speakers")
+        return false;
+      }
+      // Leader's ID is in groupMembers = manual sync
+      return true;
+    }
+
+    return false;
+  }
+
   Track? get currentTrack => _currentTrack;
 
   /// Whether we have cached players available (for instant UI display on app resume)
@@ -174,6 +240,7 @@ class MusicAssistantProvider with ChangeNotifier {
 
   /// Get cached track for a player (used for smooth swipe transitions)
   /// For grouped child players, returns the leader's track
+  /// Also checks translated Cast<->Sendspin IDs (both from map and computed dynamically)
   Track? getCachedTrackForPlayer(String playerId) {
     // If player is a group child, get the leader's track instead
     final player = _availablePlayers.firstWhere(
@@ -191,7 +258,72 @@ class MusicAssistantProvider with ChangeNotifier {
         ? player.syncedTo!
         : playerId;
 
-    return _cacheService.getCachedTrackForPlayer(effectivePlayerId);
+    // Try direct lookup first
+    var track = _cacheService.getCachedTrackForPlayer(effectivePlayerId);
+
+    // If not found, try translated Cast<->Sendspin ID
+    if (track == null) {
+      // Check Cast -> Sendspin (from map)
+      final sendspinId = _castToSendspinIdMap[effectivePlayerId];
+      if (sendspinId != null) {
+        track = _cacheService.getCachedTrackForPlayer(sendspinId);
+      }
+
+      // Check Sendspin -> Cast (reverse lookup from map)
+      if (track == null) {
+        for (final entry in _castToSendspinIdMap.entries) {
+          if (entry.value == effectivePlayerId) {
+            track = _cacheService.getCachedTrackForPlayer(entry.key);
+            if (track != null) break;
+          }
+        }
+      }
+
+      // Dynamic ID computation for chromecast players
+      // This handles cases where the map doesn't have the entry yet
+      if (track == null) {
+        // If effectivePlayerId looks like a Sendspin ID (cast-{8chars}), compute Cast ID
+        if (effectivePlayerId.startsWith('cast-') && effectivePlayerId.length >= 13) {
+          // Sendspin ID: cast-7df484e3 -> need to find Cast ID that starts with 7df484e3
+          final prefix = effectivePlayerId.substring(5); // Remove "cast-"
+          // Search through available players for a chromecast player with matching UUID prefix
+          for (final p in _availablePlayers) {
+            if (p.provider == 'chromecast' && p.playerId.startsWith(prefix)) {
+              track = _cacheService.getCachedTrackForPlayer(p.playerId);
+              if (track != null) {
+                _logger.log('🔍 Found track via computed Cast ID: ${p.playerId}');
+                break;
+              }
+            }
+          }
+          // Also try direct cache lookup with the prefix as partial ID
+          if (track == null) {
+            // Try common UUID patterns - the cache might have the full Cast UUID
+            final possibleCastIds = _cacheService.getAllCachedPlayerIds()
+                .where((id) => id.startsWith(prefix))
+                .toList();
+            for (final castId in possibleCastIds) {
+              track = _cacheService.getCachedTrackForPlayer(castId);
+              if (track != null) {
+                _logger.log('🔍 Found track via cache scan for prefix $prefix: $castId');
+                break;
+              }
+            }
+          }
+        }
+
+        // If effectivePlayerId looks like a Cast UUID, compute Sendspin ID
+        if (track == null && effectivePlayerId.length >= 8 && effectivePlayerId.contains('-')) {
+          final computedSendspinId = 'cast-${effectivePlayerId.substring(0, 8)}';
+          track = _cacheService.getCachedTrackForPlayer(computedSendspinId);
+          if (track != null) {
+            _logger.log('🔍 Found track via computed Sendspin ID: $computedSendspinId');
+          }
+        }
+      }
+    }
+
+    return track;
   }
 
   /// Get artwork URL for a player from cache
@@ -1587,8 +1719,16 @@ class MusicAssistantProvider with ChangeNotifier {
       final playerId = event['player_id'] as String?;
       if (playerId == null) return;
 
-      if (_selectedPlayer != null && playerId == _selectedPlayer!.playerId) {
-        _updatePlayerState();
+      // Check if this event is for the selected player - also check translated Cast<->Sendspin IDs
+      // Events may come with Cast ID but selected player uses Sendspin ID (or vice versa)
+      if (_selectedPlayer != null) {
+        final selectedId = _selectedPlayer!.playerId;
+        final isMatch = playerId == selectedId ||
+            _castToSendspinIdMap[playerId] == selectedId ||
+            _castToSendspinIdMap[selectedId] == playerId;
+        if (isMatch) {
+          _updatePlayerState();
+        }
       }
 
       final currentMedia = event['current_media'] as Map<String, dynamic>?;
@@ -1703,6 +1843,18 @@ class MusicAssistantProvider with ChangeNotifier {
           if (!keepExisting) {
             _cacheService.setCachedTrackForPlayer(playerId, trackFromEvent);
             _logger.log('📋 Cached track for $playerName from player_updated: ${trackFromEvent.name}');
+
+            // Dual-cache for Cast<->Sendspin players so track is findable by either ID
+            final sendspinId = _castToSendspinIdMap[playerId];
+            if (sendspinId != null) {
+              _cacheService.setCachedTrackForPlayer(sendspinId, trackFromEvent);
+              _logger.log('📋 Also cached under Sendspin ID: $sendspinId');
+            } else if (playerId.length >= 8 && playerId.contains('-')) {
+              // Compute Sendspin ID for chromecast players not yet in map
+              final computedSendspinId = 'cast-${playerId.substring(0, 8)}';
+              _cacheService.setCachedTrackForPlayer(computedSendspinId, trackFromEvent);
+              _logger.log('📋 Also cached under computed Sendspin ID: $computedSendspinId');
+            }
           } else {
             _logger.log('📋 Skipped caching for $playerName - already have better data (artist: $existingHasProperArtist, image: $existingHasImage)');
           }
@@ -2204,6 +2356,20 @@ class MusicAssistantProvider with ChangeNotifier {
         return;
       }
 
+      // Load persisted Cast-to-Sendspin mappings from database
+      // This ensures we remember mappings even when Sendspin players are unavailable
+      if (_castToSendspinIdMap.isEmpty) {
+        try {
+          final persistedMappings = await DatabaseService.instance.getAllCastToSendspinMappings();
+          _castToSendspinIdMap.addAll(persistedMappings);
+          if (persistedMappings.isNotEmpty) {
+            _logger.log('🔗 Loaded ${persistedMappings.length} Cast->Sendspin mappings from database');
+          }
+        } catch (e) {
+          _logger.log('⚠️ Failed to load Cast->Sendspin mappings: $e');
+        }
+      }
+
       final allPlayers = await getPlayers();
       final builtinPlayerId = await SettingsService.getBuiltinPlayerId();
 
@@ -2258,9 +2424,19 @@ class MusicAssistantProvider with ChangeNotifier {
       // - When ungrouped: show original Cast, hide Sendspin version
       // This gives power control and proper queue behavior when not syncing
       final sendspinSuffix = ' (Sendspin)';
-      final sendspinPlayers = _availablePlayers
-          .where((p) => p.name.endsWith(sendspinSuffix))
-          .toList();
+
+      // Detect Sendspin players by:
+      // 1. Name ends with " (Sendspin)" (e.g., "Kitchen speaker (Sendspin)")
+      // 2. ID starts with "cast-" and name equals ID (e.g., ID="cast-7df484e3", name="cast-7df484e3")
+      //    This handles Cast devices where MA registers Sendspin player with raw ID as name
+      bool isSendspinPlayer(Player p) {
+        if (p.name.endsWith(sendspinSuffix)) return true;
+        // Check for Sendspin players named with their raw ID (cast-{uuid-prefix})
+        if (p.playerId.startsWith('cast-') && p.name == p.playerId) return true;
+        return false;
+      }
+
+      final sendspinPlayers = _availablePlayers.where(isSendspinPlayer).toList();
 
       // NOTE: Don't clear _castToSendspinIdMap - we want to remember mappings
       // even when the Sendspin player is temporarily unavailable (e.g., device off)
@@ -2270,18 +2446,47 @@ class MusicAssistantProvider with ChangeNotifier {
         // Build maps for Sendspin players and their grouped status
         final sendspinByBaseName = <String, Player>{};
         final groupedSendspinBaseNames = <String>{};
+        // Track Sendspin players that have raw ID as name (need renaming)
+        final rawIdSendspinPlayers = <String, Player>{};
 
         for (final player in sendspinPlayers) {
-          final baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+          String baseName;
+          Player? regularCastPlayer;
+
+          if (player.name.endsWith(sendspinSuffix)) {
+            // Standard "(Sendspin)" suffix naming
+            baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+            regularCastPlayer = _availablePlayers.where(
+              (p) => p.name == baseName && !isSendspinPlayer(p)
+            ).firstOrNull;
+          } else if (player.playerId.startsWith('cast-') && player.name == player.playerId) {
+            // Raw ID naming (e.g., "cast-7df484e3") - find matching Cast player by UUID prefix
+            // Sendspin ID format: cast-{first 8 chars of Cast UUID}
+            // Cast ID format: {uuid} e.g., 7df484e3-d2ee-c897-f746-2dffc29595ff
+            final sendspinPrefix = player.playerId.substring(5); // Remove "cast-" prefix
+            regularCastPlayer = _availablePlayers.where(
+              (p) => p.playerId.startsWith(sendspinPrefix) && !isSendspinPlayer(p)
+            ).firstOrNull;
+            baseName = regularCastPlayer?.name ?? player.name;
+            if (regularCastPlayer != null) {
+              rawIdSendspinPlayers[player.playerId] = player;
+              _logger.log('🔍 Found raw-ID Sendspin player: ${player.playerId} matches Cast player "${regularCastPlayer.name}"');
+            }
+          } else {
+            continue;
+          }
+
           sendspinByBaseName[baseName] = player;
 
-          // Find the corresponding regular Cast player and store the ID mapping
-          final regularCastPlayer = _availablePlayers.where(
-            (p) => p.name == baseName && !p.name.endsWith(sendspinSuffix)
-          ).firstOrNull;
+          // Store the ID mapping and persist to database
           if (regularCastPlayer != null) {
             _castToSendspinIdMap[regularCastPlayer.playerId] = player.playerId;
             _logger.log('🔗 Mapped Cast ID ${regularCastPlayer.playerId} -> Sendspin ID ${player.playerId}');
+            // Persist mapping so it survives when Sendspin player is unavailable
+            DatabaseService.instance.saveCastToSendspinMapping(
+              regularCastPlayer.playerId,
+              player.playerId,
+            );
           }
 
           if (player.isGrouped) {
@@ -2294,10 +2499,23 @@ class MusicAssistantProvider with ChangeNotifier {
 
         // Filter players based on grouped status
         _availablePlayers = _availablePlayers.where((player) {
-          final isSendspin = player.name.endsWith(sendspinSuffix);
+          final isSendspin = isSendspinPlayer(player);
 
           if (isSendspin) {
-            final baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+            // Get base name for this Sendspin player
+            String baseName;
+            if (player.name.endsWith(sendspinSuffix)) {
+              baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+            } else if (rawIdSendspinPlayers.containsKey(player.playerId)) {
+              // For raw ID players, find the base name from our earlier mapping
+              baseName = sendspinByBaseName.entries
+                  .firstWhere((e) => e.value.playerId == player.playerId,
+                      orElse: () => MapEntry(player.name, player))
+                  .key;
+            } else {
+              baseName = player.name;
+            }
+
             // Keep Sendspin only if grouped
             if (player.isGrouped) {
               return true;
@@ -2317,12 +2535,23 @@ class MusicAssistantProvider with ChangeNotifier {
           }
         }).toList();
 
-        // Rename remaining Sendspin players to remove the suffix
+        // Rename remaining Sendspin players to remove the suffix or give proper name
         _availablePlayers = _availablePlayers.map((player) {
           if (player.name.endsWith(sendspinSuffix)) {
             final cleanName = player.name.substring(0, player.name.length - sendspinSuffix.length);
             _logger.log('✨ Renaming "${player.name}" to "$cleanName"');
             return player.copyWith(name: cleanName);
+          }
+          // Rename raw ID Sendspin players to their proper name
+          if (rawIdSendspinPlayers.containsKey(player.playerId)) {
+            final properName = sendspinByBaseName.entries
+                .firstWhere((e) => e.value.playerId == player.playerId,
+                    orElse: () => MapEntry(player.name, player))
+                .key;
+            if (properName != player.name) {
+              _logger.log('✨ Renaming raw ID Sendspin "${player.name}" to "$properName"');
+              return player.copyWith(name: properName);
+            }
           }
           return player;
         }).toList();
@@ -2362,16 +2591,34 @@ class MusicAssistantProvider with ChangeNotifier {
         // But allow switching to a playing player when preferLocalPlayer is OFF
         // On coldStart, skip this block and apply full priority logic (playing > local > last selected)
         if (playerToSelect == null && _selectedPlayer != null && !coldStart) {
+          // Check if selected player is still available - also check translated Cast/Sendspin IDs
+          // When Cast player gets replaced by Sendspin version (or vice versa), we should keep selection
+          final selectedId = _selectedPlayer!.playerId;
+          final translatedId = _castToSendspinIdMap[selectedId];
+          String? reverseTranslatedId;
+          for (final entry in _castToSendspinIdMap.entries) {
+            if (entry.value == selectedId) {
+              reverseTranslatedId = entry.key;
+              break;
+            }
+          }
+
           final stillAvailable = _availablePlayers.any(
-            (p) => p.playerId == _selectedPlayer!.playerId && p.available,
+            (p) => p.available && (p.playerId == selectedId ||
+                   (translatedId != null && p.playerId == translatedId) ||
+                   (reverseTranslatedId != null && p.playerId == reverseTranslatedId)),
           );
           if (stillAvailable) {
+            // Find the actual player in the list (might be Cast or Sendspin version)
+            final currentPlayer = _availablePlayers.firstWhere(
+              (p) => p.playerId == selectedId ||
+                     (translatedId != null && p.playerId == translatedId) ||
+                     (reverseTranslatedId != null && p.playerId == reverseTranslatedId),
+            );
+
             // If preferLocalPlayer is OFF, check if we should switch to a playing player
             if (!preferLocalPlayer) {
-              final currentPlayerState = _availablePlayers
-                  .firstWhere((p) => p.playerId == _selectedPlayer!.playerId)
-                  .state;
-              final currentIsPlaying = currentPlayerState == 'playing';
+              final currentIsPlaying = currentPlayer.state == 'playing';
               // Exclude external sources - they're not playing MA content
               final playingPlayers = _availablePlayers.where(
                 (p) => p.state == 'playing' && p.available && !p.isExternalSource,
@@ -2386,9 +2633,10 @@ class MusicAssistantProvider with ChangeNotifier {
 
             // Keep current selection if no switch happened
             if (playerToSelect == null) {
-              playerToSelect = _availablePlayers.firstWhere(
-                (p) => p.playerId == _selectedPlayer!.playerId,
-              );
+              playerToSelect = currentPlayer;
+              if (currentPlayer.playerId != selectedId) {
+                _logger.log('🔄 Selected player ID changed (Cast<->Sendspin): $selectedId -> ${currentPlayer.playerId}');
+              }
             }
           }
         }
@@ -2815,6 +3063,15 @@ class MusicAssistantProvider with ChangeNotifier {
           _cacheService.setCachedTrackForPlayer(player.playerId, track);
           _logger.log('🔍 Preload ${player.name}: CACHED track "${track.name}"');
 
+          // Dual-cache for Cast<->Sendspin players
+          final sendspinId = _castToSendspinIdMap[player.playerId];
+          if (sendspinId != null) {
+            _cacheService.setCachedTrackForPlayer(sendspinId, track);
+          } else if (player.provider == 'chromecast' && player.playerId.length >= 8) {
+            final computedSendspinId = 'cast-${player.playerId.substring(0, 8)}';
+            _cacheService.setCachedTrackForPlayer(computedSendspinId, track);
+          }
+
           // Also precache the image so it's ready for swipe preview
           final imageUrl = getImageUrl(track, size: 512);
           if (imageUrl != null) {
@@ -2914,10 +3171,51 @@ class MusicAssistantProvider with ChangeNotifier {
     try {
       bool stateChanged = false;
 
+      // Get fresh player data - but look up from _availablePlayers which has
+      // the processed names (Sendspin suffix removed) and correct filtering
+      // Also check translated Cast<->Sendspin IDs
+      final selectedId = _selectedPlayer!.playerId;
+      final translatedSendspinId = _castToSendspinIdMap[selectedId];
+      String? translatedCastId;
+      for (final entry in _castToSendspinIdMap.entries) {
+        if (entry.value == selectedId) {
+          translatedCastId = entry.key;
+          break;
+        }
+      }
+
+      // Try to refresh from API first for latest state
       final allPlayers = await getPlayers();
-      final updatedPlayer = allPlayers.firstWhere(
-        (p) => p.playerId == _selectedPlayer!.playerId,
+      Player? rawPlayer = allPlayers.firstWhere(
+        (p) => p.playerId == selectedId ||
+               (translatedSendspinId != null && p.playerId == translatedSendspinId) ||
+               (translatedCastId != null && p.playerId == translatedCastId),
         orElse: () => _selectedPlayer!,
+      );
+
+      // Now get the processed version from _availablePlayers to preserve renamed name
+      // But update with latest state (volume, playing state, etc.) from rawPlayer
+      final processedPlayer = _availablePlayers.firstWhere(
+        (p) => p.playerId == selectedId ||
+               (translatedSendspinId != null && p.playerId == translatedSendspinId) ||
+               (translatedCastId != null && p.playerId == translatedCastId),
+        orElse: () => rawPlayer,
+      );
+
+      // Use the processed player's name but raw player's state
+      final updatedPlayer = processedPlayer.copyWith(
+        state: rawPlayer.state,
+        volumeLevel: rawPlayer.volumeLevel,
+        volumeMuted: rawPlayer.volumeMuted,
+        elapsedTime: rawPlayer.elapsedTime,
+        elapsedTimeLastUpdated: rawPlayer.elapsedTimeLastUpdated,
+        powered: rawPlayer.powered,
+        available: rawPlayer.available,
+        groupMembers: rawPlayer.groupMembers,
+        syncedTo: rawPlayer.syncedTo,
+        currentItemId: rawPlayer.currentItemId,
+        isExternalSource: rawPlayer.isExternalSource,
+        appId: rawPlayer.appId,
       );
 
       _selectedPlayer = updatedPlayer;
@@ -3037,6 +3335,15 @@ class MusicAssistantProvider with ChangeNotifier {
             // Update cache if queue track has good metadata
             if (queueHasImage || queueHasProperArtist) {
               _cacheService.setCachedTrackForPlayer(_selectedPlayer!.playerId, queueTrack);
+
+              // Dual-cache for Cast<->Sendspin players
+              final sendspinId = _castToSendspinIdMap[_selectedPlayer!.playerId];
+              if (sendspinId != null) {
+                _cacheService.setCachedTrackForPlayer(sendspinId, queueTrack);
+              } else if (_selectedPlayer!.provider == 'chromecast' && _selectedPlayer!.playerId.length >= 8) {
+                final computedSendspinId = 'cast-${_selectedPlayer!.playerId.substring(0, 8)}';
+                _cacheService.setCachedTrackForPlayer(computedSendspinId, queueTrack);
+              }
             }
           }
           stateChanged = true;
@@ -3409,6 +3716,31 @@ class MusicAssistantProvider with ChangeNotifier {
       effectivePlayerId = player.syncedTo!;
     }
 
+    // Translate Sendspin ID to Cast UUID for queue fetch
+    // MA stores queues under the Cast UUID, not the Sendspin ID
+    if (effectivePlayerId.startsWith('cast-') && effectivePlayerId.length >= 13) {
+      // Sendspin ID format: cast-7df484e3 -> need Cast UUID starting with 7df484e3
+      final prefix = effectivePlayerId.substring(5); // Remove "cast-"
+      // Reverse lookup in the map
+      for (final entry in _castToSendspinIdMap.entries) {
+        if (entry.value == effectivePlayerId) {
+          _logger.log('🔗 Translated Sendspin ID $effectivePlayerId to Cast UUID ${entry.key} for queue fetch');
+          effectivePlayerId = entry.key;
+          break;
+        }
+      }
+      // If not in map, try to find in available players
+      if (effectivePlayerId.startsWith('cast-')) {
+        for (final p in _availablePlayers) {
+          if (p.provider == 'chromecast' && p.playerId.startsWith(prefix)) {
+            _logger.log('🔗 Found Cast UUID ${p.playerId} for Sendspin ID $effectivePlayerId via player lookup');
+            effectivePlayerId = p.playerId;
+            break;
+          }
+        }
+      }
+    }
+
     final queue = await _api?.getQueue(effectivePlayerId);
 
     // Persist queue to database for instant display on app resume
@@ -3699,11 +4031,28 @@ class MusicAssistantProvider with ChangeNotifier {
         return;
       }
 
-      // Translate Cast player IDs to Sendspin IDs if available
-      // This is needed because regular Cast players can't sync with Sendspin players
-      // Both target AND leader need translation for Cast+Sendspin players
-      final actualTargetId = _castToSendspinIdMap[targetPlayerId] ?? targetPlayerId;
-      final actualLeaderId = _castToSendspinIdMap[leaderPlayer.playerId] ?? leaderPlayer.playerId;
+      // Translate Cast player IDs to Sendspin IDs for group commands
+      // Cast players don't support group commands - only their Sendspin counterparts do
+      // We need to translate BOTH target and leader IDs
+      //
+      // The mapping comes from _castToSendspinIdMap which contains:
+      // 1. Currently discovered mappings (from available Sendspin players)
+      // 2. Persisted mappings from database (survives when Sendspin player is unavailable)
+      String translateToSendspinId(String playerId, Player? player) {
+        if (_castToSendspinIdMap.containsKey(playerId)) {
+          _logger.log('🔗 Found Sendspin mapping: $playerId -> ${_castToSendspinIdMap[playerId]}');
+          return _castToSendspinIdMap[playerId]!;
+        }
+        // No Sendspin counterpart known - use original ID
+        return playerId;
+      }
+
+      // Find target player to check its provider
+      final targetPlayer = _availablePlayers.where((p) => p.playerId == targetPlayerId).firstOrNull;
+
+      final actualTargetId = translateToSendspinId(targetPlayerId, targetPlayer);
+      final actualLeaderId = translateToSendspinId(leaderPlayer.playerId, leaderPlayer);
+
       if (actualTargetId != targetPlayerId) {
         _logger.log('🔗 Translated target Cast ID to Sendspin ID: $targetPlayerId -> $actualTargetId');
       }
@@ -3730,7 +4079,51 @@ class MusicAssistantProvider with ChangeNotifier {
   Future<void> unsyncPlayer(String playerId) async {
     try {
       _logger.log('🔓 Unsyncing player: $playerId');
-      await _api?.unsyncPlayer(playerId);
+
+      // Find the player to check if it's a child
+      final player = _availablePlayers.firstWhere(
+        (p) => p.playerId == playerId,
+        orElse: () => Player(
+          playerId: playerId,
+          name: '',
+          available: false,
+          powered: false,
+          state: 'idle',
+        ),
+      );
+
+      // If player is a child (syncedTo is set), try to unsync via the leader
+      // Some players (like Sendspin CLI) don't support set_members, so we need
+      // to call unsync on the leader instead
+      String effectivePlayerId = playerId;
+      if (player.syncedTo != null) {
+        _logger.log('🔓 Player is a child synced to ${player.syncedTo}, will try leader first');
+
+        // First try to find the leader in available players
+        var leaderId = player.syncedTo!;
+
+        // Check if we need to translate Cast UUID to Sendspin ID
+        final sendspinLeaderId = _castToSendspinIdMap[leaderId];
+        if (sendspinLeaderId != null) {
+          // Use Sendspin ID as the leader (it's the one with group control)
+          leaderId = sendspinLeaderId;
+          _logger.log('🔓 Translated leader ID to Sendspin: $leaderId');
+        }
+
+        // Try unsyncing via the leader first
+        try {
+          _logger.log('🔓 Attempting unsync via leader: $leaderId');
+          await _api?.unsyncPlayer(leaderId);
+          await refreshPlayers();
+          return;
+        } catch (leaderError) {
+          _logger.log('🔓 Unsync via leader failed: $leaderError, trying child directly');
+          // Fall through to try the original player
+        }
+      }
+
+      // Try unsyncing the player directly (works for leaders and some children)
+      await _api?.unsyncPlayer(effectivePlayerId);
 
       // Refresh players to get updated group state
       await refreshPlayers();

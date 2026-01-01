@@ -1545,30 +1545,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                       ),
                     ),
 
-                // Volume swipe overlay (covers entire mini player when dragging volume)
-                // Only visible when device reveal is open and user is dragging
-                if (_isDraggingVolume && t < 0.5)
-                  Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(borderRadius),
-                      child: Stack(
-                        children: [
-                          // Unfilled (darker) background
-                          Container(color: collapsedBgUnplayed),
-                          // Filled (lighter) portion based on volume
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: FractionallySizedBox(
-                              widthFactor: _dragVolumeLevel.clamp(0.0, 1.0),
-                              heightFactor: 1.0,
-                              child: Container(color: collapsedBg),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
                 // Peek player content (shows when dragging OR during transition)
                 // Show when: actively dragging (slideOffset != 0) OR in transition state
                 // Must have peek data to render
@@ -2162,6 +2138,31 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                                 onClose: _toggleQueuePanel,
                                 onRefresh: _loadQueue,
                               ),
+                      ),
+                    ),
+                  ),
+
+                // Volume swipe overlay (covers entire mini player when dragging volume)
+                // Only visible when device reveal is open and user is dragging
+                // Positioned last in Stack so it renders ON TOP of all content
+                if (_isDraggingVolume && t < 0.5)
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(borderRadius),
+                      child: Stack(
+                        children: [
+                          // Unfilled (darker) background
+                          Container(color: collapsedBgUnplayed),
+                          // Filled (lighter) portion based on volume
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: FractionallySizedBox(
+                              widthFactor: _dragVolumeLevel.clamp(0.0, 1.0),
+                              heightFactor: 1.0,
+                              child: Container(color: collapsedBg),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

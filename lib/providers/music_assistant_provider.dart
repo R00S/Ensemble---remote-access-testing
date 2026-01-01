@@ -2302,9 +2302,19 @@ class MusicAssistantProvider with ChangeNotifier {
       // - When ungrouped: show original Cast, hide Sendspin version
       // This gives power control and proper queue behavior when not syncing
       final sendspinSuffix = ' (Sendspin)';
-      final sendspinPlayers = _availablePlayers
-          .where((p) => p.name.endsWith(sendspinSuffix))
-          .toList();
+
+      // Detect Sendspin players by:
+      // 1. Name ends with " (Sendspin)" (e.g., "Kitchen speaker (Sendspin)")
+      // 2. ID starts with "cast-" and name equals ID (e.g., ID="cast-7df484e3", name="cast-7df484e3")
+      //    This handles Cast devices where MA registers Sendspin player with raw ID as name
+      bool isSendspinPlayer(Player p) {
+        if (p.name.endsWith(sendspinSuffix)) return true;
+        // Check for Sendspin players named with their raw ID (cast-{uuid-prefix})
+        if (p.playerId.startsWith('cast-') && p.name == p.playerId) return true;
+        return false;
+      }
+
+      final sendspinPlayers = _availablePlayers.where(isSendspinPlayer).toList();
 
       // NOTE: Don't clear _castToSendspinIdMap - we want to remember mappings
       // even when the Sendspin player is temporarily unavailable (e.g., device off)
@@ -2314,15 +2324,39 @@ class MusicAssistantProvider with ChangeNotifier {
         // Build maps for Sendspin players and their grouped status
         final sendspinByBaseName = <String, Player>{};
         final groupedSendspinBaseNames = <String>{};
+        // Track Sendspin players that have raw ID as name (need renaming)
+        final rawIdSendspinPlayers = <String, Player>{};
 
         for (final player in sendspinPlayers) {
-          final baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+          String baseName;
+          Player? regularCastPlayer;
+
+          if (player.name.endsWith(sendspinSuffix)) {
+            // Standard "(Sendspin)" suffix naming
+            baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+            regularCastPlayer = _availablePlayers.where(
+              (p) => p.name == baseName && !isSendspinPlayer(p)
+            ).firstOrNull;
+          } else if (player.playerId.startsWith('cast-') && player.name == player.playerId) {
+            // Raw ID naming (e.g., "cast-7df484e3") - find matching Cast player by UUID prefix
+            // Sendspin ID format: cast-{first 8 chars of Cast UUID}
+            // Cast ID format: {uuid} e.g., 7df484e3-d2ee-c897-f746-2dffc29595ff
+            final sendspinPrefix = player.playerId.substring(5); // Remove "cast-" prefix
+            regularCastPlayer = _availablePlayers.where(
+              (p) => p.playerId.startsWith(sendspinPrefix) && !isSendspinPlayer(p)
+            ).firstOrNull;
+            baseName = regularCastPlayer?.name ?? player.name;
+            if (regularCastPlayer != null) {
+              rawIdSendspinPlayers[player.playerId] = player;
+              _logger.log('🔍 Found raw-ID Sendspin player: ${player.playerId} matches Cast player "${regularCastPlayer.name}"');
+            }
+          } else {
+            continue;
+          }
+
           sendspinByBaseName[baseName] = player;
 
-          // Find the corresponding regular Cast player and store the ID mapping
-          final regularCastPlayer = _availablePlayers.where(
-            (p) => p.name == baseName && !p.name.endsWith(sendspinSuffix)
-          ).firstOrNull;
+          // Store the ID mapping
           if (regularCastPlayer != null) {
             _castToSendspinIdMap[regularCastPlayer.playerId] = player.playerId;
             _logger.log('🔗 Mapped Cast ID ${regularCastPlayer.playerId} -> Sendspin ID ${player.playerId}');
@@ -2338,10 +2372,23 @@ class MusicAssistantProvider with ChangeNotifier {
 
         // Filter players based on grouped status
         _availablePlayers = _availablePlayers.where((player) {
-          final isSendspin = player.name.endsWith(sendspinSuffix);
+          final isSendspin = isSendspinPlayer(player);
 
           if (isSendspin) {
-            final baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+            // Get base name for this Sendspin player
+            String baseName;
+            if (player.name.endsWith(sendspinSuffix)) {
+              baseName = player.name.substring(0, player.name.length - sendspinSuffix.length);
+            } else if (rawIdSendspinPlayers.containsKey(player.playerId)) {
+              // For raw ID players, find the base name from our earlier mapping
+              baseName = sendspinByBaseName.entries
+                  .firstWhere((e) => e.value.playerId == player.playerId,
+                      orElse: () => MapEntry(player.name, player))
+                  .key;
+            } else {
+              baseName = player.name;
+            }
+
             // Keep Sendspin only if grouped
             if (player.isGrouped) {
               return true;
@@ -2361,12 +2408,23 @@ class MusicAssistantProvider with ChangeNotifier {
           }
         }).toList();
 
-        // Rename remaining Sendspin players to remove the suffix
+        // Rename remaining Sendspin players to remove the suffix or give proper name
         _availablePlayers = _availablePlayers.map((player) {
           if (player.name.endsWith(sendspinSuffix)) {
             final cleanName = player.name.substring(0, player.name.length - sendspinSuffix.length);
             _logger.log('✨ Renaming "${player.name}" to "$cleanName"');
             return player.copyWith(name: cleanName);
+          }
+          // Rename raw ID Sendspin players to their proper name
+          if (rawIdSendspinPlayers.containsKey(player.playerId)) {
+            final properName = sendspinByBaseName.entries
+                .firstWhere((e) => e.value.playerId == player.playerId,
+                    orElse: () => MapEntry(player.name, player))
+                .key;
+            if (properName != player.name) {
+              _logger.log('✨ Renaming raw ID Sendspin "${player.name}" to "$properName"');
+              return player.copyWith(name: properName);
+            }
           }
           return player;
         }).toList();

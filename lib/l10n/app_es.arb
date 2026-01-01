@@ -483,5 +483,6 @@
   "showHints": "Mostrar Sugerencias",
   "showHintsDescription": "Mostrar consejos útiles para descubrir funciones",
   "pullToSelectPlayers": "Desliza para seleccionar dispositivos",
-  "holdToSync": "Mantén presionado un dispositivo para sincronizar"
+  "holdToSync": "Mantén presionado para sync",
+  "swipeToAdjustVolume": "Desliza para ajustar volumen"
 }

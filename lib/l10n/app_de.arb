@@ -287,5 +287,6 @@
   "showHints": "Hinweise anzeigen",
   "showHintsDescription": "Hilfreiche Tipps zum Entdecken von Funktionen anzeigen",
   "pullToSelectPlayers": "Ziehen um Geräte auszuwählen",
-  "holdToSync": "Gerät gedrückt halten zum Synchronisieren"
+  "holdToSync": "Gedrückt halten zum Sync",
+  "swipeToAdjustVolume": "Wischen für Lautstärke"
 }

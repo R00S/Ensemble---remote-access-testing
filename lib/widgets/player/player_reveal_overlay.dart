@@ -307,9 +307,28 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
 
                               // Show different hint for onboarding vs regular use
                               final isOnboarding = widget.showOnboardingHints;
-                              final hintText = isOnboarding
-                                  ? S.of(context)!.selectPlayerHint
-                                  : S.of(context)!.holdToSync;
+
+                              Widget buildHintRow(IconData icon, String text) {
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      icon,
+                                      size: 18,
+                                      color: colorScheme.onSurface.withOpacity(0.7),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      text,
+                                      style: TextStyle(
+                                        color: colorScheme.onSurface.withOpacity(0.7),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }
 
                               return Transform.translate(
                                 offset: Offset(0, hintSlideOffset),
@@ -317,25 +336,16 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                                   padding: const EdgeInsets.only(bottom: 12),
                                   child: Material(
                                     type: MaterialType.transparency,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          isOnboarding ? Icons.touch_app_outlined : Icons.lightbulb_outline,
-                                          size: 18,
-                                          color: colorScheme.onSurface.withOpacity(0.7),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          hintText,
-                                          style: TextStyle(
-                                            color: colorScheme.onSurface.withOpacity(0.7),
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
+                                    child: isOnboarding
+                                        ? buildHintRow(Icons.touch_app_outlined, S.of(context)!.selectPlayerHint)
+                                        : Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              buildHintRow(Icons.lightbulb_outline, S.of(context)!.holdToSync),
+                                              const SizedBox(height: 4),
+                                              buildHintRow(Icons.lightbulb_outline, S.of(context)!.swipeToAdjustVolume),
+                                            ],
                                           ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
                                 ),
                               );

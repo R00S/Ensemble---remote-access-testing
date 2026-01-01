@@ -1273,9 +1273,14 @@
     "description": "Hint shown when mini player bounces"
   },
 
-  "holdToSync": "Tap and hold a player to sync",
+  "holdToSync": "Long-press to sync",
   "@holdToSync": {
     "description": "Hint for long-press to sync players"
+  },
+
+  "swipeToAdjustVolume": "Swipe to adjust volume",
+  "@swipeToAdjustVolume": {
+    "description": "Hint for swiping left/right to adjust player volume"
   },
 
   "selectPlayerHint": "Choose a player, or dismiss by swiping down",

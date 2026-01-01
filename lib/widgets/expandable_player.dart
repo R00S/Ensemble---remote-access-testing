@@ -1442,16 +1442,16 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             // The curved corner of the mini player reveals the tail tapering down
             if (t < 0.5)
               Positioned(
-                right: 0,
+                right: 1, // Offset left to hide sharp corner behind mini player's curve
                 top: -18, // Starts above mini player
                 child: Container(
                   // Extends down behind the player - the curved corner reveals the "tail"
-                  padding: const EdgeInsets.only(left: 12, right: 12, top: 5, bottom: 24),
+                  padding: const EdgeInsets.only(left: 16, right: 14, top: 3, bottom: 24),
                   decoration: BoxDecoration(
                     color: (adaptiveScheme?.tertiary ?? colorScheme.tertiary).withOpacity(0.95 * (1.0 - t * 2)),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(10),
-                      topRight: Radius.circular(10),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(_collapsedBorderRadius),
+                      topRight: Radius.circular(_collapsedBorderRadius),
                     ),
                   ),
                   child: Text(

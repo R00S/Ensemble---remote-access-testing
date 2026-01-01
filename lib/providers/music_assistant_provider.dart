@@ -4047,33 +4047,16 @@ class MusicAssistantProvider with ChangeNotifier {
       // Find target player to check its provider
       final targetPlayer = _availablePlayers.where((p) => p.playerId == targetPlayerId).firstOrNull;
 
-      // Translate target to Sendspin ID (target player needs to support group commands)
+      // Translate BOTH target AND leader to Sendspin IDs
+      // Only Sendspin players support the SET_MEMBERS feature required for grouping
+      // Cast players will return "Player X does not support group commands"
       final actualTargetId = translateToSendspinId(targetPlayerId, targetPlayer);
-
-      // For the leader, try to use the Cast UUID instead of Sendspin ID
-      // This tells MA to use the Cast player's queue, not the Sendspin queue
-      // (The Sendspin queue may have stale content from previous sessions)
       String actualLeaderId = leaderPlayer.playerId;
 
-      // If leader is a Sendspin player (cast-XXXX format), find the Cast UUID
-      if (leaderPlayer.playerId.startsWith('cast-')) {
-        // Reverse lookup: find Cast UUID that maps to this Sendspin ID
-        String? foundCastUuid;
-        for (final entry in _castToSendspinIdMap.entries) {
-          if (entry.value == leaderPlayer.playerId) {
-            foundCastUuid = entry.key;
-            break;
-          }
-        }
-        if (foundCastUuid != null) {
-          actualLeaderId = foundCastUuid;
-          _logger.log('🔗 Using Cast UUID for leader: ${leaderPlayer.playerId} -> $actualLeaderId');
-        } else {
-          _logger.log('🔗 No Cast UUID found for Sendspin leader: ${leaderPlayer.playerId}');
-        }
-      } else if (_castToSendspinIdMap.containsKey(leaderPlayer.playerId)) {
-        // Leader is already a Cast UUID, keep it
-        _logger.log('🔗 Leader is already Cast UUID: $actualLeaderId');
+      // If leader is a Cast player, translate to its Sendspin counterpart
+      if (_castToSendspinIdMap.containsKey(leaderPlayer.playerId)) {
+        actualLeaderId = _castToSendspinIdMap[leaderPlayer.playerId]!;
+        _logger.log('🔗 Translated leader Cast ID to Sendspin ID: ${leaderPlayer.playerId} -> $actualLeaderId');
       }
 
       if (actualTargetId != targetPlayerId) {

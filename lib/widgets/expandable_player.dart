@@ -104,6 +104,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   // When true, we hide main content and show peek content at center
   bool _inTransition = false;
 
+  // Volume swipe state (only active when device reveal is visible)
+  bool _isDraggingVolume = false;
+  double _dragVolumeLevel = 0.0;
+
   // Track favorite state for current track
   bool _isCurrentTrackFavorite = false;
   String? _lastTrackUri; // Track which track we last checked favorite status for
@@ -1400,9 +1404,33 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         },
         onHorizontalDragStart: (details) {
           _horizontalDragStartX = details.globalPosition.dx;
+          // Start volume drag if device reveal is visible
+          if (widget.isDeviceRevealVisible && !isExpanded) {
+            final currentVolume = (selectedPlayer.volumeLevel ?? 0).toDouble() / 100.0;
+            setState(() {
+              _isDraggingVolume = true;
+              _dragVolumeLevel = currentVolume;
+            });
+            HapticFeedback.lightImpact();
+          }
         },
         onHorizontalDragUpdate: (details) {
-          // Only handle in collapsed mode with multiple players
+          // Volume swipe when device reveal is visible
+          if (widget.isDeviceRevealVisible && _isDraggingVolume && !isExpanded) {
+            final dragDelta = details.delta.dx;
+            final volumeDelta = dragDelta / collapsedWidth;
+            final newVolume = (_dragVolumeLevel + volumeDelta).clamp(0.0, 1.0);
+            if ((newVolume - _dragVolumeLevel).abs() > 0.001) {
+              setState(() {
+                _dragVolumeLevel = newVolume;
+              });
+              // Live volume update
+              maProvider.setVolume(selectedPlayer.playerId, (newVolume * 100).round());
+            }
+            return;
+          }
+
+          // Only handle player swipe in collapsed mode with multiple players
           if (isExpanded || !hasMultiplePlayers) return;
 
           // Ignore drags that started in the edge dead zone
@@ -1415,6 +1443,16 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           _handleHorizontalDragUpdate(details, maProvider, collapsedWidth);
         },
         onHorizontalDragEnd: (details) {
+          // End volume drag
+          if (_isDraggingVolume) {
+            setState(() {
+              _isDraggingVolume = false;
+            });
+            HapticFeedback.lightImpact();
+            _horizontalDragStartX = null;
+            return;
+          }
+
           // Ignore swipes that started near the edges (Android back gesture zone)
           final screenWidth = MediaQuery.of(context).size.width;
           final startedInDeadZone = _horizontalDragStartX != null &&
@@ -1498,6 +1536,30 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                         },
                       ),
                     ),
+
+                // Volume swipe overlay (covers entire mini player when dragging volume)
+                // Only visible when device reveal is open and user is dragging
+                if (_isDraggingVolume && t < 0.5)
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(borderRadius),
+                      child: Stack(
+                        children: [
+                          // Unfilled (darker) background
+                          Container(color: collapsedBgUnplayed),
+                          // Filled (lighter) portion based on volume
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: FractionallySizedBox(
+                              widthFactor: _dragVolumeLevel.clamp(0.0, 1.0),
+                              heightFactor: 1.0,
+                              child: Container(color: collapsedBg),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
                 // Peek player content (shows when dragging OR during transition)
                 // Show when: actively dragging (slideOffset != 0) OR in transition state

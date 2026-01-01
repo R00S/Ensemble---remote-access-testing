@@ -3699,15 +3699,20 @@ class MusicAssistantProvider with ChangeNotifier {
         return;
       }
 
-      // Translate Cast player ID to Sendspin ID if available
+      // Translate Cast player IDs to Sendspin IDs if available
       // This is needed because regular Cast players can't sync with Sendspin players
+      // Both target AND leader need translation for Cast+Sendspin players
       final actualTargetId = _castToSendspinIdMap[targetPlayerId] ?? targetPlayerId;
+      final actualLeaderId = _castToSendspinIdMap[leaderPlayer.playerId] ?? leaderPlayer.playerId;
       if (actualTargetId != targetPlayerId) {
-        _logger.log('🔗 Translated Cast ID to Sendspin ID: $targetPlayerId -> $actualTargetId');
+        _logger.log('🔗 Translated target Cast ID to Sendspin ID: $targetPlayerId -> $actualTargetId');
+      }
+      if (actualLeaderId != leaderPlayer.playerId) {
+        _logger.log('🔗 Translated leader Cast ID to Sendspin ID: ${leaderPlayer.playerId} -> $actualLeaderId');
       }
 
-      _logger.log('🔗 Calling API syncPlayerToLeader($actualTargetId, ${leaderPlayer.playerId})');
-      await _api!.syncPlayerToLeader(actualTargetId, leaderPlayer.playerId);
+      _logger.log('🔗 Calling API syncPlayerToLeader($actualTargetId, $actualLeaderId)');
+      await _api!.syncPlayerToLeader(actualTargetId, actualLeaderId);
       _logger.log('✅ API sync call completed');
 
       // Refresh players to get updated group state

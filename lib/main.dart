@@ -40,6 +40,10 @@ Future<void> main() async {
   // Migrate existing ownerName to profile (one-time for existing users)
   await ProfileService.instance.migrateFromOwnerName();
 
+  // Migrate credentials to secure storage (one-time for existing users)
+  await SettingsService.migrateToSecureStorage();
+  _logger.log('🔐 Secure storage migration complete');
+
   // Load library from cache for instant startup
   await SyncService.instance.loadFromCache();
   _logger.log('📦 Library cache loaded');

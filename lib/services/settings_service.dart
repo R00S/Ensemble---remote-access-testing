@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'device_id_service.dart';
+import 'secure_storage_service.dart';
 
 class SettingsService {
   static const String _keyServerUrl = 'server_url';
@@ -127,66 +128,44 @@ class SettingsService {
     }
   }
 
-  // Get authentication token for stream requests
+  // Get authentication token for stream requests (securely stored)
   static Future<String?> getAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyAuthToken);
+    return await SecureStorageService.getAuthToken();
   }
 
-  // Set authentication token for stream requests
+  // Set authentication token for stream requests (securely stored)
   static Future<void> setAuthToken(String? token) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (token == null || token.isEmpty) {
-      await prefs.remove(_keyAuthToken);
-    } else {
-      await prefs.setString(_keyAuthToken, token);
-    }
+    await SecureStorageService.setAuthToken(token);
   }
 
-  // Get Music Assistant native auth token (long-lived token)
+  // Get Music Assistant native auth token (long-lived token, securely stored)
   static Future<String?> getMaAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyMaAuthToken);
+    return await SecureStorageService.getMaAuthToken();
   }
 
-  // Set Music Assistant native auth token (long-lived token)
+  // Set Music Assistant native auth token (long-lived token, securely stored)
   static Future<void> setMaAuthToken(String? token) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (token == null || token.isEmpty) {
-      await prefs.remove(_keyMaAuthToken);
-    } else {
-      await prefs.setString(_keyMaAuthToken, token);
-    }
+    await SecureStorageService.setMaAuthToken(token);
   }
 
   // Clear Music Assistant native auth token
   static Future<void> clearMaAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyMaAuthToken);
+    await SecureStorageService.clearMaAuthToken();
   }
 
-  // Get authentication credentials (serialized auth strategy credentials)
+  // Get authentication credentials (serialized auth strategy credentials, securely stored)
   static Future<Map<String, dynamic>?> getAuthCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = prefs.getString(_keyAuthCredentials);
-    if (json == null) return null;
-    try {
-      return jsonDecode(json) as Map<String, dynamic>;
-    } catch (e) {
-      return null;
-    }
+    return await SecureStorageService.getAuthCredentials();
   }
 
-  // Set authentication credentials (serialized auth strategy credentials)
+  // Set authentication credentials (serialized auth strategy credentials, securely stored)
   static Future<void> setAuthCredentials(Map<String, dynamic> credentials) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyAuthCredentials, jsonEncode(credentials));
+    await SecureStorageService.setAuthCredentials(credentials);
   }
 
   // Clear authentication credentials
   static Future<void> clearAuthCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyAuthCredentials);
+    await SecureStorageService.clearAuthCredentials();
   }
 
   // Get username for authentication
@@ -205,20 +184,14 @@ class SettingsService {
     }
   }
 
-  // Get password for authentication
+  // Get password for authentication (securely stored)
   static Future<String?> getPassword() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyPassword);
+    return await SecureStorageService.getPassword();
   }
 
-  // Set password for authentication
+  // Set password for authentication (securely stored)
   static Future<void> setPassword(String? password) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (password == null || password.isEmpty) {
-      await prefs.remove(_keyPassword);
-    } else {
-      await prefs.setString(_keyPassword, password);
-    }
+    await SecureStorageService.setPassword(password);
   }
 
   // Get built-in player ID (persistent UUID for this device)
@@ -409,6 +382,13 @@ class SettingsService {
   static Future<void> clearSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    await SecureStorageService.clearAll(); // Also clear secure storage
+  }
+
+  /// Migrate credentials from old SharedPreferences storage to secure storage.
+  /// Should be called once during app startup for existing users.
+  static Future<void> migrateToSecureStorage() async {
+    await SecureStorageService.migrateFromSharedPreferences();
   }
 
   // Home Screen Row Settings (Main rows - default on)
@@ -674,13 +654,11 @@ class SettingsService {
   }
 
   static Future<String?> getAbsApiToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyAbsApiToken);
+    return await SecureStorageService.getAbsApiToken();
   }
 
   static Future<void> setAbsApiToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyAbsApiToken, token);
+    await SecureStorageService.setAbsApiToken(token);
   }
 
   static Future<bool> getAbsEnabled() async {
@@ -696,8 +674,8 @@ class SettingsService {
   static Future<void> clearAbsSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyAbsServerUrl);
-    await prefs.remove(_keyAbsApiToken);
     await prefs.remove(_keyAbsEnabled);
+    await SecureStorageService.setAbsApiToken(null); // Clear from secure storage
   }
 
   // Audiobookshelf Library Settings (via MA browse API)

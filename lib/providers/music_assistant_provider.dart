@@ -57,6 +57,7 @@ class MusicAssistantProvider with ChangeNotifier {
   // Player state
   Player? _selectedPlayer;
   List<Player> _availablePlayers = [];
+  bool _selectPlayerInProgress = false; // Reentrancy guard for selectPlayer()
   Map<String, String> _castToSendspinIdMap = {}; // Maps regular Cast IDs to Sendspin IDs for grouping
   Track? _currentTrack;
   Audiobook? _currentAudiobook; // Currently playing audiobook context (with chapters)
@@ -67,6 +68,7 @@ class MusicAssistantProvider with ChangeNotifier {
   bool _isLocalPlayerPowered = true;
   int _localPlayerVolume = 100; // Tracked MA volume for builtin player (0-100)
   bool _builtinPlayerAvailable = true; // False on MA 2.7.0b20+ (uses Sendspin instead)
+  StreamSubscription? _connectionStateSubscription;
   StreamSubscription? _localPlayerEventSubscription;
   StreamSubscription? _playerUpdatedEventSubscription;
   StreamSubscription? _playerAddedEventSubscription;
@@ -572,7 +574,8 @@ class MusicAssistantProvider with ChangeNotifier {
 
       _api = MusicAssistantAPI(serverUrl, _authManager);
 
-      _api!.connectionState.listen(
+      _connectionStateSubscription?.cancel();
+      _connectionStateSubscription = _api!.connectionState.listen(
         (state) async {
           _connectionState = state;
           notifyListeners();
@@ -2682,12 +2685,13 @@ class MusicAssistantProvider with ChangeNotifier {
 
           // Priority 3: Last manually selected player
           if (playerToSelect == null && lastSelectedPlayerId != null) {
-            try {
-              playerToSelect = _availablePlayers.firstWhere(
-                (p) => p.playerId == lastSelectedPlayerId && p.available,
-              );
+            playerToSelect = _availablePlayers.cast<Player?>().firstWhere(
+              (p) => p!.playerId == lastSelectedPlayerId && p.available,
+              orElse: () => null,
+            );
+            if (playerToSelect != null) {
               _logger.log('🔄 Auto-selected last used player: ${playerToSelect?.name}');
-            } catch (e) {}
+            }
           }
 
           // Priority 4: First available player
@@ -2711,7 +2715,15 @@ class MusicAssistantProvider with ChangeNotifier {
   }
 
   void selectPlayer(Player player, {bool skipNotify = false}) async {
-    _selectedPlayer = player;
+    // Reentrancy guard - prevent concurrent selection which can cause race conditions
+    if (_selectPlayerInProgress) {
+      _logger.log('⚠️ selectPlayer already in progress, skipping for ${player.name}');
+      return;
+    }
+    _selectPlayerInProgress = true;
+
+    try {
+      _selectedPlayer = player;
 
     // Cache for instant display on app resume
     _cacheService.setCachedSelectedPlayer(player);
@@ -2838,6 +2850,9 @@ class MusicAssistantProvider with ChangeNotifier {
 
     if (!skipNotify) {
       notifyListeners();
+    }
+    } finally {
+      _selectPlayerInProgress = false;
     }
   }
 
@@ -4436,6 +4451,7 @@ class MusicAssistantProvider with ChangeNotifier {
     _playerStateTimer?.cancel();
     _notificationPositionTimer?.cancel();
     _localPlayerStateReportTimer?.cancel();
+    _connectionStateSubscription?.cancel();
     _localPlayerEventSubscription?.cancel();
     _playerUpdatedEventSubscription?.cancel();
     _playerAddedEventSubscription?.cancel();

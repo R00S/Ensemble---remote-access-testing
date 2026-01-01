@@ -151,7 +151,10 @@ class RecentlyPlayedService {
         if (item.metadata != null) {
           try {
             metadata = jsonDecode(item.metadata!) as Map<String, dynamic>;
-          } catch (_) {}
+          } catch (e) {
+            // Corrupted metadata JSON - log and continue with null metadata
+            _logger.log('⚠️ Error parsing album metadata for ${item.mediaId}: $e');
+          }
         }
 
         // Build metadata with images if available (for instant artwork display)
@@ -203,7 +206,10 @@ class RecentlyPlayedService {
         if (item.metadata != null) {
           try {
             metadata = jsonDecode(item.metadata!) as Map<String, dynamic>;
-          } catch (_) {}
+          } catch (e) {
+            // Corrupted metadata JSON - log and continue with null metadata
+            _logger.log('⚠️ Error parsing audiobook metadata for ${item.mediaId}: $e');
+          }
         }
 
         audiobooks.add(Audiobook(

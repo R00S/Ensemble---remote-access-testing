@@ -59,8 +59,10 @@ class PlayerControls extends StatelessWidget {
         if (isExpanded && expandedElementsOpacity > 0.1)
           _buildSecondaryButton(
             icon: Icons.shuffle_rounded,
-            color: (shuffle == true ? primaryColor : textColor.withOpacity(0.5))
-                .withOpacity(expandedElementsOpacity),
+            // Fix: compute final opacity once to avoid multiplicative opacity bug
+            color: shuffle == true
+                ? primaryColor.withOpacity(expandedElementsOpacity)
+                : textColor.withOpacity(0.5 * expandedElementsOpacity),
             onPressed: isLoadingQueue ? null : onToggleShuffle,
           ),
         if (isExpanded) SizedBox(width: _lerpDouble(0, 20, t)),
@@ -94,10 +96,10 @@ class PlayerControls extends StatelessWidget {
         if (isExpanded && expandedElementsOpacity > 0.1)
           _buildSecondaryButton(
             icon: repeatMode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-            color: (repeatMode != null && repeatMode != 'off'
-                    ? primaryColor
-                    : textColor.withOpacity(0.5))
-                .withOpacity(expandedElementsOpacity),
+            // Fix: compute final opacity once to avoid multiplicative opacity bug
+            color: (repeatMode != null && repeatMode != 'off')
+                ? primaryColor.withOpacity(expandedElementsOpacity)
+                : textColor.withOpacity(0.5 * expandedElementsOpacity),
             onPressed: isLoadingQueue ? null : onCycleRepeat,
           ),
       ],

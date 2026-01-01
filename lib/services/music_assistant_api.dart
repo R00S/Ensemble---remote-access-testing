@@ -2540,6 +2540,7 @@ class MusicAssistantAPI {
           }
         }
       } catch (e) {
+        _logger.log('⚠️ Error parsing stream URI "$uri": $e');
       }
     }
 

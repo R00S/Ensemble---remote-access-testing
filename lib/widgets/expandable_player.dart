@@ -1143,6 +1143,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
           _handleHorizontalDragEnd(details, maProvider);
         },
+        onPowerToggle: () => maProvider.togglePower(selectedPlayer.playerId),
       ),
       ),
     );

@@ -11,14 +11,17 @@ class MiniPlayerLayout {
   static const double primaryTop = 7.0;
   static const double secondaryTop = 27.0;
   static const double tertiaryTop = 46.0;
-  // 2-line layout (centered): player name, hint
-  static const double primaryTop2Line = 16.0;
-  static const double secondaryTop2Line = 36.0;
+  // 2-line layout (evenly spaced): player name, hint
+  // Height 72 / 3 = 24px spacing. Line 1 center at 24, Line 2 center at 48
+  static const double primaryTop2Line = 14.0; // 24 - (18/2) = 15, adjusted to 14
+  static const double secondaryTop2Line = 42.0; // 48 - (14/2) = 41, adjusted to 42
   static const double textRightPadding = 12.0;
+  static const double powerButtonSize = 40.0; // Power button tap area
   static const double iconSize = 28.0;
   static const double iconOpacity = 0.4;
   static const double secondaryTextOpacity = 0.6;
-  static const double primaryFontSize = 16.0;
+  static const double primaryFontSize = 18.0; // Increased from 16
+  static const double primaryFontSize2Line = 18.0; // Larger for 2-line layout
   static const double secondaryFontSize = 14.0;
   static const double tertiaryFontSize = 14.0;
   static const FontWeight primaryFontWeight = FontWeight.w500;
@@ -67,6 +70,12 @@ class MiniPlayerContent extends StatelessWidget {
   /// Progress value 0.0 to 1.0 (only used if showProgress is true)
   final double progress;
 
+  /// Callback for power button tap (only shown in 2-line mode when provided)
+  final VoidCallback? onPowerToggle;
+
+  /// Whether the player is currently powered on
+  final bool isPoweredOn;
+
   const MiniPlayerContent({
     super.key,
     required this.primaryText,
@@ -81,23 +90,34 @@ class MiniPlayerContent extends StatelessWidget {
     this.isHint = false,
     this.showProgress = false,
     this.progress = 0.0,
+    this.onPowerToggle,
+    this.isPoweredOn = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final hasSecondaryLine = secondaryText != null && secondaryText!.isNotEmpty;
     final hasTertiaryLine = tertiaryText != null && tertiaryText!.isNotEmpty;
+    final is2LineMode = !hasTertiaryLine;
+    final showPowerButton = is2LineMode && onPowerToggle != null;
     final slidePixels = slideOffset * width;
 
     // Use 3-line layout when tertiary exists, 2-line centered otherwise
     final primaryTop = hasTertiaryLine ? MiniPlayerLayout.primaryTop : MiniPlayerLayout.primaryTop2Line;
     final secondaryTop = hasTertiaryLine ? MiniPlayerLayout.secondaryTop : MiniPlayerLayout.secondaryTop2Line;
 
-    // Calculate text width (leaves room for right padding)
-    final textWidth = width - MiniPlayerLayout.textLeft - MiniPlayerLayout.textRightPadding;
+    // Calculate right padding (extra space for power button in 2-line mode)
+    final rightPadding = showPowerButton
+        ? MiniPlayerLayout.powerButtonSize + 8.0
+        : MiniPlayerLayout.textRightPadding;
 
     // Darkened background for icon area (matches DeviceSelectorBar)
     final iconAreaBackground = Color.lerp(backgroundColor, Colors.black, 0.15)!;
+
+    // Font size for primary text (larger in 2-line mode)
+    final primaryFontSize = is2LineMode
+        ? MiniPlayerLayout.primaryFontSize2Line
+        : MiniPlayerLayout.primaryFontSize;
 
     return SizedBox(
       width: width,
@@ -142,13 +162,13 @@ class MiniPlayerContent extends StatelessWidget {
             left: MiniPlayerLayout.textLeft + slidePixels,
             top: hasSecondaryLine
                 ? primaryTop
-                : (MiniPlayerLayout.height - MiniPlayerLayout.primaryFontSize) / 2,
-            right: MiniPlayerLayout.textRightPadding - slidePixels,
+                : (MiniPlayerLayout.height - primaryFontSize) / 2,
+            right: rightPadding - slidePixels,
             child: Text(
               primaryText,
               style: TextStyle(
                 color: textColor,
-                fontSize: MiniPlayerLayout.primaryFontSize,
+                fontSize: primaryFontSize,
                 fontWeight: MiniPlayerLayout.primaryFontWeight,
               ),
               maxLines: 1,
@@ -161,7 +181,7 @@ class MiniPlayerContent extends StatelessWidget {
             Positioned(
               left: MiniPlayerLayout.textLeft + slidePixels,
               top: secondaryTop,
-              right: MiniPlayerLayout.textRightPadding - slidePixels,
+              right: rightPadding - slidePixels,
               child: isHint
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
@@ -210,6 +230,34 @@ class MiniPlayerContent extends StatelessWidget {
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+          // Power button (only for 2-line mode when callback provided)
+          if (showPowerButton)
+            Positioned(
+              right: 8.0 - slidePixels,
+              top: (MiniPlayerLayout.height - MiniPlayerLayout.powerButtonSize) / 2,
+              child: GestureDetector(
+                onTap: onPowerToggle,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: MiniPlayerLayout.powerButtonSize,
+                  height: MiniPlayerLayout.powerButtonSize,
+                  decoration: BoxDecoration(
+                    color: textColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(MiniPlayerLayout.powerButtonSize / 2),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.power_settings_new_rounded,
+                      color: isPoweredOn
+                          ? textColor.withOpacity(0.8)
+                          : textColor.withOpacity(0.4),
+                      size: 22,
+                    ),
+                  ),
+                ),
               ),
             ),
         ],

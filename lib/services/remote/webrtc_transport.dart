@@ -205,6 +205,25 @@ class WebRTCTransport extends BaseTransport {
     // Handle connection state changes
     _peerConnection!.onConnectionState = (state) {
       _logger.log('[WebRTC] Peer connection state: $state');
+      
+      // Handle connection failures
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        _logger.log('[WebRTC] Connection failed, scheduling reconnect');
+        if (!_intentionalClose && options.reconnect) {
+          _scheduleReconnect();
+        }
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        _logger.log('[WebRTC] Connection disconnected');
+        // Give it a moment to see if it reconnects, otherwise schedule reconnect
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_peerConnection?.connectionState == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+            _logger.log('[WebRTC] Still disconnected after 5s, scheduling reconnect');
+            if (!_intentionalClose && options.reconnect) {
+              _scheduleReconnect();
+            }
+          }
+        });
+      }
     };
   }
 

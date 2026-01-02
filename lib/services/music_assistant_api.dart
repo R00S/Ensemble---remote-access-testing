@@ -94,8 +94,10 @@ class MusicAssistantAPI {
       _updateConnectionState(MAConnectionState.connecting);
 
       // Check if RemoteAccessManager has an active WebRTC transport
+      // Don't rely on isRemoteMode state - check if transport exists and is connected
       final remoteManager = RemoteAccessManager.instance;
-      if (remoteManager.isRemoteMode && remoteManager.transport != null) {
+      if (remoteManager.transport != null && 
+          remoteManager.transport!.state == TransportState.connected) {
         _logger.log('Connection: Using Remote Access WebRTC transport');
         return await _connectViaRemoteTransport(remoteManager.transport!);
       }

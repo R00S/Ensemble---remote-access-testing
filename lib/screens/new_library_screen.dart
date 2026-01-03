@@ -6,7 +6,6 @@ import 'package:palette_generator/palette_generator.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
 import '../widgets/global_player_overlay.dart';
-import '../widgets/player_selector.dart';
 import '../widgets/album_card.dart';
 import '../widgets/artist_avatar.dart';
 import '../utils/page_transitions.dart';
@@ -28,7 +27,7 @@ import 'audiobook_detail_screen.dart';
 import 'audiobook_series_screen.dart';
 
 /// Media type for the library
-enum LibraryMediaType { music, books, podcasts }
+enum LibraryMediaType { music, books, podcasts, radio }
 
 class NewLibraryScreen extends StatefulWidget {
   const NewLibraryScreen({super.key});
@@ -38,8 +37,9 @@ class NewLibraryScreen extends StatefulWidget {
 }
 
 class _NewLibraryScreenState extends State<NewLibraryScreen>
-    with SingleTickerProviderStateMixin, RestorationMixin {
-  late TabController _tabController;
+    with RestorationMixin {
+  late PageController _pageController;
+  int _selectedCategoryIndex = 0;
   List<Playlist> _playlists = [];
   List<Track> _favoriteTracks = [];
   List<Audiobook> _audiobooks = [];
@@ -87,6 +87,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         return 3; // Authors, All Books, Series
       case LibraryMediaType.podcasts:
         return 1; // Coming soon placeholder
+      case LibraryMediaType.radio:
+        return 1; // Radio stations
     }
   }
 
@@ -96,19 +98,21 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   @override
   void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
     registerForRestoration(_selectedTabIndex, 'selected_tab_index');
-    // Apply restored tab index after TabController is created
-    if (_tabController.index != _selectedTabIndex.value &&
-        _selectedTabIndex.value < _tabController.length) {
-      _tabController.index = _selectedTabIndex.value;
+    // Apply restored tab index after PageController is created
+    if (_selectedTabIndex.value < _tabCount) {
+      _selectedCategoryIndex = _selectedTabIndex.value;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(_selectedCategoryIndex);
+        }
+      });
     }
   }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabCount, vsync: this);
-    // Listen to tab changes to persist selection
-    _tabController.addListener(_onTabChanged);
+    _pageController = PageController();
     _loadPlaylists();
     _loadViewPreferences();
   }
@@ -346,16 +350,17 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
   }
 
-  void _recreateTabController() {
-    final oldIndex = _tabController.index;
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    _tabController = TabController(length: _tabCount, vsync: this);
-    _tabController.addListener(_onTabChanged);
-    // Restore to previous index if valid, otherwise default to 0
-    if (oldIndex < _tabCount) {
-      _tabController.index = oldIndex;
+  void _resetCategoryIndex() {
+    // Reset to first category when media type changes
+    if (_selectedCategoryIndex >= _tabCount) {
+      _selectedCategoryIndex = 0;
     }
+    // Jump to the selected category without animation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(_selectedCategoryIndex);
+      }
+    });
   }
 
   void _changeMediaType(LibraryMediaType type) {
@@ -366,8 +371,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
     setState(() {
       _selectedMediaType = type;
-      _recreateTabController();
+      _selectedCategoryIndex = 0; // Reset to first category
     });
+    _resetCategoryIndex();
     // Load audiobooks when switching to books tab
     if (type == LibraryMediaType.books) {
       _logger.log('📚 Switched to Books, _audiobooks.isEmpty=${_audiobooks.isEmpty}');
@@ -379,18 +385,39 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _loadSeries();
       }
     }
+    // Load radio stations when switching to radio tab
+    if (type == LibraryMediaType.radio) {
+      final maProvider = context.read<MusicAssistantProvider>();
+      if (maProvider.radioStations.isEmpty) {
+        maProvider.loadRadioStations();
+      }
+    }
   }
 
-  void _onTabChanged() {
-    if (!_tabController.indexIsChanging) {
-      _selectedTabIndex.value = _tabController.index;
+  void _onPageChanged(int index) {
+    setState(() {
+      _selectedCategoryIndex = index;
+      _selectedTabIndex.value = index;
+    });
+  }
+
+  void _animateToCategory(int index) {
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
     }
+    setState(() {
+      _selectedCategoryIndex = index;
+      _selectedTabIndex.value = index;
+    });
   }
 
   @override
   void dispose() {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
+    _pageController.dispose();
     _selectedTabIndex.dispose();
     super.dispose();
   }
@@ -641,8 +668,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   void _toggleFavoritesMode(bool value) {
     setState(() {
       _showFavoritesOnly = value;
-      _recreateTabController();
     });
+    _resetCategoryIndex();
     if (value) {
       _loadPlaylists(favoriteOnly: true);
       _loadFavoriteTracks();
@@ -679,7 +706,6 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 ),
               ),
               centerTitle: true,
-              actions: const [PlayerSelector()],
             ),
             body: DisconnectedState.withSettingsAction(
               context: context,
@@ -693,198 +719,289 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
         return Scaffold(
           backgroundColor: colorScheme.background,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            titleSpacing: 0,
-            toolbarHeight: 56,
-            // Top left: Media type segmented selector
-            title: _buildMediaTypeSelector(colorScheme),
-            leadingWidth: 16,
-            leading: const SizedBox(),
-            centerTitle: false,
-            // Top right: Device selector
-            actions: const [PlayerSelector()],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
-              child: Stack(
-                children: [
-                  // Bottom border line extending full width
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      height: 1,
-                      color: colorScheme.outlineVariant.withOpacity(0.3),
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Filter row: [Media Type ▼] [Sub-categories...] [♥] [⊞]
+                _buildFilterRow(colorScheme, l10n),
+                // Connecting banner when showing cached data
+                // Hide when we have cached players - UI is functional during background reconnect
+                if (!isConnected && syncService.hasCache && !context.read<MusicAssistantProvider>().hasCachedPlayers)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: colorScheme.primaryContainer.withOpacity(0.5),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.connecting,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Row(
-                    children: [
-                      // Tabs centered
-                      Expanded(
-                        child: TabBar(
-                          controller: _tabController,
-                          labelColor: colorScheme.primary,
-                          unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
-                          indicatorColor: colorScheme.primary,
-                          indicatorWeight: 3,
-                          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
-                          tabs: _buildTabs(l10n),
-                        ),
-                      ),
-                      // Favorites + Layout buttons on the right
-                      IconButton(
-                        icon: Icon(
-                          _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
-                          color: _showFavoritesOnly ? Colors.red : colorScheme.onSurface.withOpacity(0.7),
-                          size: 20,
-                        ),
-                        onPressed: () => _toggleFavoritesMode(!_showFavoritesOnly),
-                        tooltip: _showFavoritesOnly ? l10n.showAll : l10n.showFavoritesOnly,
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          _getViewModeIcon(_getCurrentViewMode()),
-                          color: colorScheme.onSurface.withOpacity(0.7),
-                          size: 20,
-                        ),
-                        onPressed: _cycleCurrentViewMode,
-                        tooltip: l10n.changeView,
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    onPageChanged: _onPageChanged,
+                    children: _buildTabViews(context, l10n),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-          body: Column(
-            children: [
-              // Connecting banner when showing cached data
-              // Hide when we have cached players - UI is functional during background reconnect
-              if (!isConnected && syncService.hasCache && !context.read<MusicAssistantProvider>().hasCachedPlayers)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  color: colorScheme.primaryContainer.withOpacity(0.5),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.connecting,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: _buildTabViews(context, l10n),
-                ),
-              ),
-            ],
           ),
         );
       },
     );
   }
 
-  // ============ MEDIA TYPE SELECTOR ============
-  Widget _buildMediaTypeSelector(ColorScheme colorScheme) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+  // ============ FILTER ROW ============
+  Widget _buildFilterRow(ColorScheme colorScheme, S l10n) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+      ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildMediaTypeSegment(
-            type: LibraryMediaType.music,
-            icon: MdiIcons.musicNote,
-            colorScheme: colorScheme,
+          // Media type dropdown
+          _buildMediaTypeDropdown(colorScheme, l10n),
+          const SizedBox(width: 8),
+          // Sub-category chips (scrollable)
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildCategoryChips(colorScheme, l10n),
+            ),
           ),
-          _buildMediaTypeSegment(
-            type: LibraryMediaType.books,
-            icon: MdiIcons.bookOutline,
-            colorScheme: colorScheme,
-          ),
-          _buildMediaTypeSegment(
-            type: LibraryMediaType.podcasts,
-            icon: MdiIcons.podcast,
-            colorScheme: colorScheme,
+          // Action buttons
+          if (_selectedMediaType == LibraryMediaType.music || _selectedMediaType == LibraryMediaType.books) ...[
+            IconButton(
+              icon: Icon(
+                _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
+                color: _showFavoritesOnly ? Colors.red : colorScheme.onSurface.withOpacity(0.7),
+                size: 20,
+              ),
+              onPressed: () => _toggleFavoritesMode(!_showFavoritesOnly),
+              tooltip: _showFavoritesOnly ? l10n.showAll : l10n.showFavoritesOnly,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            ),
+          ],
+          IconButton(
+            icon: Icon(
+              _getViewModeIcon(_getCurrentViewMode()),
+              color: colorScheme.onSurface.withOpacity(0.7),
+              size: 20,
+            ),
+            onPressed: _cycleCurrentViewMode,
+            tooltip: l10n.changeView,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMediaTypeSegment({
-    required LibraryMediaType type,
-    required IconData icon,
-    required ColorScheme colorScheme,
-  }) {
-    final isSelected = _selectedMediaType == type;
+  Widget _buildMediaTypeDropdown(ColorScheme colorScheme, S l10n) {
+    String getMediaTypeLabel(LibraryMediaType type) {
+      switch (type) {
+        case LibraryMediaType.music:
+          return l10n.music;
+        case LibraryMediaType.books:
+          return l10n.audiobooks;
+        case LibraryMediaType.podcasts:
+          return l10n.podcasts;
+        case LibraryMediaType.radio:
+          return l10n.radio;
+      }
+    }
+
+    IconData getMediaTypeIcon(LibraryMediaType type) {
+      switch (type) {
+        case LibraryMediaType.music:
+          return MdiIcons.musicNote;
+        case LibraryMediaType.books:
+          return MdiIcons.bookOpenPageVariant;
+        case LibraryMediaType.podcasts:
+          return MdiIcons.podcast;
+        case LibraryMediaType.radio:
+          return MdiIcons.radio;
+      }
+    }
+
     return Material(
-      color: isSelected
-          ? colorScheme.primaryContainer
-          : colorScheme.surfaceVariant.withOpacity(0.5),
+      color: colorScheme.primaryContainer,
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        onTap: () => _changeMediaType(type),
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: colorScheme.surface,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            builder: (context) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      l10n.selectLibrary,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  ...LibraryMediaType.values.map((type) => ListTile(
+                    leading: Icon(
+                      getMediaTypeIcon(type),
+                      color: _selectedMediaType == type
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                    title: Text(
+                      getMediaTypeLabel(type),
+                      style: TextStyle(
+                        color: _selectedMediaType == type
+                            ? colorScheme.primary
+                            : colorScheme.onSurface,
+                        fontWeight: _selectedMediaType == type
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    trailing: _selectedMediaType == type
+                        ? Icon(Icons.check, color: colorScheme.primary)
+                        : null,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _changeMediaType(type);
+                    },
+                  )),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          );
+        },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Icon(
-            icon,
-            color: isSelected
-                ? colorScheme.onPrimaryContainer
-                : colorScheme.onSurfaceVariant.withOpacity(0.7),
-            size: 20,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                getMediaTypeIcon(_selectedMediaType),
+                color: colorScheme.onPrimaryContainer,
+                size: 18,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                getMediaTypeLabel(_selectedMediaType),
+                style: TextStyle(
+                  color: colorScheme.onPrimaryContainer,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.arrow_drop_down,
+                color: colorScheme.onPrimaryContainer,
+                size: 20,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // ============ CONTEXTUAL TABS ============
-  List<Tab> _buildTabs(S l10n) {
+  Widget _buildCategoryChips(ColorScheme colorScheme, S l10n) {
+    final categories = _getCategoryLabels(l10n);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: categories.asMap().entries.map((entry) {
+          final index = entry.key;
+          final label = entry.value;
+          final isSelected = _selectedCategoryIndex == index;
+
+          return Material(
+            color: isSelected
+                ? colorScheme.primaryContainer
+                : colorScheme.surfaceVariant.withOpacity(0.6),
+            child: InkWell(
+              onTap: () => _animateToCategory(index),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurfaceVariant.withOpacity(0.8),
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  List<String> _getCategoryLabels(S l10n) {
     switch (_selectedMediaType) {
       case LibraryMediaType.music:
         return [
-          Tab(text: l10n.artists),
-          Tab(text: l10n.albums),
-          if (_showFavoritesOnly) Tab(text: l10n.tracks),
-          Tab(text: l10n.playlists),
+          l10n.artists,
+          l10n.albums,
+          if (_showFavoritesOnly) l10n.tracks,
+          l10n.playlists,
         ];
       case LibraryMediaType.books:
         return [
-          Tab(text: l10n.authors),
-          Tab(text: l10n.books),
-          Tab(text: l10n.series),
+          l10n.authors,
+          l10n.books,
+          l10n.series,
         ];
       case LibraryMediaType.podcasts:
-        return [
-          Tab(text: l10n.shows),
-        ];
+        return [l10n.shows];
+      case LibraryMediaType.radio:
+        return [l10n.stations];
     }
   }
 
+  // ============ PAGE VIEWS ============
   List<Widget> _buildTabViews(BuildContext context, S l10n) {
     switch (_selectedMediaType) {
       case LibraryMediaType.music:
@@ -903,6 +1020,10 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       case LibraryMediaType.podcasts:
         return [
           _buildPodcastsComingSoonTab(context, l10n),
+        ];
+      case LibraryMediaType.radio:
+        return [
+          _buildRadioStationsTab(context, l10n),
         ];
     }
   }
@@ -1879,6 +2000,94 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           ),
         ],
       ),
+    );
+  }
+
+  // ============ RADIO TAB ============
+  Widget _buildRadioStationsTab(BuildContext context, S l10n) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final maProvider = context.watch<MusicAssistantProvider>();
+    final radioStations = maProvider.radioStations;
+    final isLoading = maProvider.isLoadingRadio;
+
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator(color: colorScheme.primary));
+    }
+
+    if (radioStations.isEmpty) {
+      return EmptyState.custom(
+        context: context,
+        icon: MdiIcons.radio,
+        title: l10n.noRadioStations,
+        subtitle: l10n.addRadioStationsHint,
+        onRefresh: () => maProvider.loadRadioStations(),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.only(bottom: BottomSpacing.withMiniPlayer),
+      itemCount: radioStations.length,
+      itemBuilder: (context, index) {
+        final station = radioStations[index];
+        final imageUrl = maProvider.getImageUrl(station, size: 256);
+
+        return ListTile(
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: imageUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    width: 56,
+                    height: 56,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 56,
+                      height: 56,
+                      color: colorScheme.surfaceVariant,
+                      child: Icon(MdiIcons.radio, color: colorScheme.onSurfaceVariant),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 56,
+                      height: 56,
+                      color: colorScheme.surfaceVariant,
+                      child: Icon(MdiIcons.radio, color: colorScheme.onSurfaceVariant),
+                    ),
+                  )
+                : Container(
+                    width: 56,
+                    height: 56,
+                    color: colorScheme.surfaceVariant,
+                    child: Icon(MdiIcons.radio, color: colorScheme.onSurfaceVariant),
+                  ),
+          ),
+          title: Text(
+            station.name,
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: station.metadata?.description != null
+              ? Text(
+                  station.metadata!.description!,
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
+              : null,
+          onTap: () {
+            final selectedPlayer = maProvider.selectedPlayer;
+            if (selectedPlayer != null) {
+              maProvider.playMedia(selectedPlayer.playerId, station);
+            }
+          },
+        );
+      },
     );
   }
 

@@ -316,6 +316,36 @@
     "description": "Audiobooks category"
   },
 
+  "music": "Music",
+  "@music": {
+    "description": "Music category"
+  },
+
+  "radio": "Radio",
+  "@radio": {
+    "description": "Radio category"
+  },
+
+  "stations": "Stations",
+  "@stations": {
+    "description": "Radio stations subcategory"
+  },
+
+  "selectLibrary": "Select Library",
+  "@selectLibrary": {
+    "description": "Title for library type selection bottom sheet"
+  },
+
+  "noRadioStations": "No radio stations",
+  "@noRadioStations": {
+    "description": "Empty state when no radio stations are available"
+  },
+
+  "addRadioStationsHint": "Add radio stations in Music Assistant",
+  "@addRadioStationsHint": {
+    "description": "Hint for adding radio stations"
+  },
+
   "searchFailed": "Search failed. Please check your connection.",
   "@searchFailed": {
     "description": "Search error message"

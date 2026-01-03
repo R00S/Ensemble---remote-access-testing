@@ -498,6 +498,33 @@ class MusicAssistantAPI {
     }
   }
 
+  Future<List<MediaItem>> getRadioStations({
+    int? limit,
+    int? offset,
+    bool? favoriteOnly,
+  }) async {
+    try {
+      final response = await _sendCommand(
+        'music/radios/library_items',
+        args: {
+          if (limit != null) 'limit': limit,
+          if (offset != null) 'offset': offset,
+          if (favoriteOnly != null) 'favorite': favoriteOnly,
+        },
+      );
+
+      final items = response['items'] as List<dynamic>? ?? response['result'] as List<dynamic>?;
+      if (items == null) return [];
+
+      return items
+          .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _logger.log('Error getting radio stations: $e');
+      return [];
+    }
+  }
+
   Future<List<Audiobook>> getAudiobooks({
     int? limit,
     int? offset,

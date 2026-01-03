@@ -68,6 +68,12 @@
   "tracks": "Songs",
   "playlists": "Wiedergabelisten",
   "audiobooks": "Hörbücher",
+  "music": "Musik",
+  "radio": "Radio",
+  "stations": "Sender",
+  "selectLibrary": "Bibliothek auswählen",
+  "noRadioStations": "Keine Radiosender",
+  "addRadioStationsHint": "Füge Radiosender in Music Assistant hinzu",
   "searchFailed": "Suche fehlgeschlagen. Bitte überprüfe deine Verbindung.",
 
   "queue": "Warteschlange",

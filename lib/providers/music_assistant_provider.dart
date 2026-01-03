@@ -52,7 +52,9 @@ class MusicAssistantProvider with ChangeNotifier {
   List<Album> _albums = [];
   List<Track> _tracks = [];
   List<Track> _cachedFavoriteTracks = []; // Cached for instant display before full library loads
+  List<MediaItem> _radioStations = [];
   bool _isLoading = false;
+  bool _isLoadingRadio = false;
 
   // Player state
   Player? _selectedPlayer;
@@ -108,7 +110,9 @@ class MusicAssistantProvider with ChangeNotifier {
   List<Artist> get artists => _artists;
   List<Album> get albums => _albums;
   List<Track> get tracks => _tracks;
+  List<MediaItem> get radioStations => _radioStations;
   bool get isLoading => _isLoading;
+  bool get isLoadingRadio => _isLoadingRadio;
 
   /// Whether library is syncing in background
   bool get isSyncing => SyncService.instance.isSyncing;
@@ -3599,6 +3603,26 @@ class MusicAssistantProvider with ChangeNotifier {
 
     syncService.addListener(onSyncComplete);
     await syncService.syncFromApi(_api!);
+  }
+
+  /// Load radio stations from the library
+  Future<void> loadRadioStations() async {
+    if (!isConnected || _api == null) return;
+
+    try {
+      _isLoadingRadio = true;
+      notifyListeners();
+
+      _radioStations = await _api!.getRadioStations(limit: 100);
+
+      _logger.log('📻 Loaded ${_radioStations.length} radio stations');
+      _isLoadingRadio = false;
+      notifyListeners();
+    } catch (e) {
+      _logger.log('⚠️ Failed to load radio stations: $e');
+      _isLoadingRadio = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadArtists({int? limit, int? offset, String? search}) async {

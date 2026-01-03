@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -13,12 +14,16 @@ class AlbumCard extends StatefulWidget {
   final Album album;
   final VoidCallback? onTap;
   final String? heroTagSuffix;
+  /// Image decode size in pixels. Defaults to 256.
+  /// Use smaller values (e.g., 128) for list views, larger for grids.
+  final int? imageCacheSize;
 
   const AlbumCard({
     super.key,
     required this.album,
     this.onTap,
     this.heroTagSuffix,
+    this.imageCacheSize,
   });
 
   @override
@@ -30,11 +35,21 @@ class _AlbumCardState extends State<AlbumCard> {
   bool _triedFallback = false;
   bool _maImageFailed = false;
   String? _cachedMaImageUrl;
+  Timer? _fallbackTimer;
+
+  /// Delay before fetching fallback images to avoid requests during fast scroll
+  static const _fallbackDelay = Duration(milliseconds: 200);
 
   @override
   void initState() {
     super.initState();
     _initFallbackImage();
+  }
+
+  @override
+  void dispose() {
+    _fallbackTimer?.cancel();
+    super.dispose();
   }
 
   void _initFallbackImage() {
@@ -47,6 +62,16 @@ class _AlbumCardState extends State<AlbumCard> {
 
       if (maImageUrl == null && !_triedFallback) {
         _triedFallback = true;
+        _scheduleFallbackFetch();
+      }
+    });
+  }
+
+  /// Schedule fallback fetch with delay to avoid requests during fast scroll
+  void _scheduleFallbackFetch() {
+    _fallbackTimer?.cancel();
+    _fallbackTimer = Timer(_fallbackDelay, () {
+      if (mounted) {
         _fetchFallbackImage();
       }
     });
@@ -69,7 +94,7 @@ class _AlbumCardState extends State<AlbumCard> {
     if (!_triedFallback && !_maImageFailed) {
       _maImageFailed = true;
       _triedFallback = true;
-      _fetchFallbackImage();
+      _scheduleFallbackFetch();
     }
   }
 
@@ -85,6 +110,9 @@ class _AlbumCardState extends State<AlbumCard> {
 
     // Use fallback if MA image failed or wasn't available
     final imageUrl = (_maImageFailed || maImageUrl == null) ? _fallbackImageUrl : maImageUrl;
+
+    // PERF: Use appropriate cache size based on display size
+    final cacheSize = widget.imageCacheSize ?? 256;
 
     return RepaintBoundary(
       child: GestureDetector(
@@ -118,8 +146,8 @@ class _AlbumCardState extends State<AlbumCard> {
                         ? CachedNetworkImage(
                             imageUrl: imageUrl,
                             fit: BoxFit.cover,
-                            memCacheWidth: 256,
-                            memCacheHeight: 256,
+                            memCacheWidth: cacheSize,
+                            memCacheHeight: cacheSize,
                             fadeInDuration: Duration.zero,
                             fadeOutDuration: Duration.zero,
                             placeholder: (context, url) => const SizedBox(),

@@ -601,7 +601,7 @@ class SearchScreenState extends State<SearchScreen> {
                         // PERF: Use key to preserve scroll position per filter
                         key: PageStorageKey('list_$filterForPage'),
                         padding: EdgeInsets.fromLTRB(16, 16, 16, BottomSpacing.navBarOnly),
-                        cacheExtent: 500,
+                        cacheExtent: 1000,
                         addAutomaticKeepAlives: false,
                         // PERF: false because each tile already has RepaintBoundary
                         addRepaintBoundaries: false,

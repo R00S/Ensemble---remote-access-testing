@@ -1270,7 +1270,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             ? ListView.builder(
                 controller: _authorsScrollController,
                 key: const PageStorageKey<String>('books_authors_list'),
-                cacheExtent: 500,
+                cacheExtent: 1000,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: false,
                 itemCount: _sortedAuthorNames.length,
@@ -1283,7 +1283,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             : GridView.builder(
                 controller: _authorsScrollController,
                 key: const PageStorageKey<String>('books_authors_grid'),
-                cacheExtent: 500,
+                cacheExtent: 1000,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: false,
                 padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
@@ -1607,7 +1607,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             ? ListView.builder(
                 controller: _audiobooksScrollController,
                 key: PageStorageKey<String>('all_books_list_${_showFavoritesOnly ? 'fav' : 'all'}'),
-                cacheExtent: 500,
+                cacheExtent: 1000,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: false,
                 itemCount: _sortedAudiobooks.length,
@@ -1619,7 +1619,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             : GridView.builder(
                 controller: _audiobooksScrollController,
                 key: PageStorageKey<String>('all_books_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_audiobooksViewMode'),
-                cacheExtent: 500,
+                cacheExtent: 1000,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: false,
                 padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
@@ -1827,7 +1827,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             ? ListView.builder(
                 controller: _seriesScrollController,
                 key: const PageStorageKey<String>('series_list'),
-                cacheExtent: 500,
+                cacheExtent: 1000,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: false,
                 itemCount: _sortedSeries.length,
@@ -2342,7 +2342,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 ? ListView.builder(
                     controller: _artistsScrollController,
                     key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
-                    cacheExtent: 500,
+                    cacheExtent: 1000,
                     addAutomaticKeepAlives: false,
                     addRepaintBoundaries: false,
                     itemCount: sortedArtists.length,
@@ -2359,7 +2359,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 : GridView.builder(
                     controller: _artistsScrollController,
                     key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
-                    cacheExtent: 500,
+                    cacheExtent: 1000,
                     addAutomaticKeepAlives: false,
                     addRepaintBoundaries: false,
                     padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
@@ -2463,11 +2463,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 final size = constraints.maxWidth < constraints.maxHeight
                     ? constraints.maxWidth
                     : constraints.maxHeight;
+                // PERF: Use appropriate cache size based on grid columns
+                final cacheSize = _artistsViewMode == 'grid3' ? 200 : 300;
                 return Center(
                   child: ArtistAvatar(
                     artist: artist,
                     radius: size / 2,
-                    imageSize: 256,
+                    imageSize: cacheSize,
                   ),
                 );
               },
@@ -2539,7 +2541,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 ? ListView.builder(
                     controller: _albumsScrollController,
                     key: PageStorageKey<String>('library_albums_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
-                    cacheExtent: 500,
+                    cacheExtent: 1000,
                     addAutomaticKeepAlives: false,
                     addRepaintBoundaries: false,
                     padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.navBarOnly),
@@ -2552,7 +2554,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 : GridView.builder(
                     controller: _albumsScrollController,
                     key: PageStorageKey<String>('library_albums_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
-                    cacheExtent: 500,
+                    cacheExtent: 1000,
                     addAutomaticKeepAlives: false,
                     addRepaintBoundaries: false,
                     padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
@@ -2565,10 +2567,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                     itemCount: sortedAlbums.length,
                     itemBuilder: (context, index) {
                       final album = sortedAlbums[index];
+                      // PERF: Use appropriate cache size based on grid columns
+                      final cacheSize = _albumsViewMode == 'grid3' ? 200 : 300;
                       return AlbumCard(
                         key: ValueKey(album.uri ?? album.itemId),
                         album: album,
                         heroTagSuffix: 'library_grid',
+                        imageCacheSize: cacheSize,
                       );
                     },
                   ),
@@ -2673,7 +2678,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             ? ListView.builder(
                 controller: _playlistsScrollController,
                 key: PageStorageKey<String>('library_playlists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
-                cacheExtent: 500,
+                cacheExtent: 1000,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: false,
                 itemCount: _sortedPlaylists.length,
@@ -2686,7 +2691,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             : GridView.builder(
                 controller: _playlistsScrollController,
                 key: PageStorageKey<String>('library_playlists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
-                cacheExtent: 500,
+                cacheExtent: 1000,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: false,
                 padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
@@ -2866,7 +2871,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       onRefresh: _loadFavoriteTracks,
       child: ListView.builder(
         key: const PageStorageKey<String>('library_tracks_list'),
-        cacheExtent: 500,
+        cacheExtent: 1000,
         addAutomaticKeepAlives: false, // Tiles don't need individual keep-alive
         addRepaintBoundaries: false, // We add RepaintBoundary manually to tiles
         padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.navBarOnly),

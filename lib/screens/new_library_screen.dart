@@ -720,51 +720,45 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         return Scaffold(
           backgroundColor: colorScheme.background,
           body: SafeArea(
-            child: Stack(
+            child: Column(
               children: [
-                Column(
-                  children: [
-                    // Two-row filter: Row 1 = Media types, Row 2 = Sub-categories
-                    _buildFilterRows(colorScheme, l10n),
-                    // Connecting banner when showing cached data
-                    // Hide when we have cached players - UI is functional during background reconnect
-                    if (!isConnected && syncService.hasCache && !context.read<MusicAssistantProvider>().hasCachedPlayers)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        color: colorScheme.primaryContainer.withOpacity(0.5),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              l10n.connecting,
-                              style: textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
+                // Two-row filter: Row 1 = Media types, Row 2 = Sub-categories + action buttons
+                _buildFilterRows(colorScheme, l10n),
+                // Connecting banner when showing cached data
+                // Hide when we have cached players - UI is functional during background reconnect
+                if (!isConnected && syncService.hasCache && !context.read<MusicAssistantProvider>().hasCachedPlayers)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: colorScheme.primaryContainer.withOpacity(0.5),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
                         ),
-                      ),
-                    Expanded(
-                      child: PageView(
-                        controller: _pageController,
-                        onPageChanged: _onPageChanged,
-                        children: _buildTabViews(context, l10n),
-                      ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.connecting,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    onPageChanged: _onPageChanged,
+                    children: _buildTabViews(context, l10n),
+                  ),
                 ),
-                // Floating action buttons for favorites and view mode
-                _buildFloatingButtons(colorScheme, l10n),
               ],
             ),
           ),
@@ -778,17 +772,12 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Row 1: Media type chips with secondaryContainer background
-        Container(
-          width: double.infinity,
+        // Row 1: Media type chips (no full-width background)
+        Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: colorScheme.secondaryContainer,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: _buildMediaTypeChips(colorScheme, l10n),
-          ),
+          child: _buildMediaTypeChips(colorScheme, l10n),
         ),
-        // Row 2: Sub-category chips
+        // Row 2: Sub-category chips (left) + action buttons (right)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -799,9 +788,18 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               ),
             ),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: _buildCategoryChips(colorScheme, l10n),
+          child: Row(
+            children: [
+              // Left: category chips
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: _buildCategoryChips(colorScheme, l10n),
+                ),
+              ),
+              // Right: action buttons
+              _buildInlineActionButtons(colorScheme),
+            ],
           ),
         ),
       ],
@@ -844,27 +842,24 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           child: FilterChip(
             selected: isSelected,
             showCheckmark: false,
-            avatar: Icon(
-              getMediaTypeIcon(type),
-              size: 18,
-              color: isSelected
-                  ? colorScheme.onSecondaryContainer
-                  : colorScheme.onSurface.withOpacity(0.7),
-            ),
+            // Only show icon when selected
+            avatar: isSelected
+                ? Icon(
+                    getMediaTypeIcon(type),
+                    size: 18,
+                    color: colorScheme.onTertiaryContainer,
+                  )
+                : null,
             label: Text(getMediaTypeLabel(type)),
             labelStyle: TextStyle(
               color: isSelected
-                  ? colorScheme.onSecondaryContainer
+                  ? colorScheme.onTertiaryContainer
                   : colorScheme.onSurface.withOpacity(0.7),
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
             ),
-            backgroundColor: colorScheme.surface.withOpacity(0.5),
-            selectedColor: colorScheme.primary.withOpacity(0.3),
-            side: BorderSide(
-              color: isSelected
-                  ? colorScheme.primary.withOpacity(0.5)
-                  : Colors.transparent,
-            ),
+            backgroundColor: colorScheme.surfaceVariant.withOpacity(0.5),
+            selectedColor: colorScheme.tertiaryContainer,
+            side: BorderSide.none,
             onSelected: (_) => _changeMediaType(type),
           ),
         );
@@ -872,39 +867,57 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
-  // Floating action buttons for favorites and view mode
-  Widget _buildFloatingButtons(ColorScheme colorScheme, S l10n) {
-    return Positioned(
-      right: 16,
-      bottom: BottomSpacing.withMiniPlayer + 16,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Favorites toggle (only for music and books)
-          if (_selectedMediaType == LibraryMediaType.music || _selectedMediaType == LibraryMediaType.books) ...[
-            FloatingActionButton.small(
-              heroTag: 'fab_favorites',
-              onPressed: () => _toggleFavoritesMode(!_showFavoritesOnly),
-              backgroundColor: _showFavoritesOnly ? Colors.red : colorScheme.surface,
-              foregroundColor: _showFavoritesOnly ? Colors.white : colorScheme.onSurface,
-              elevation: 2,
-              child: Icon(
-                _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
+  // Inline action buttons for favorites and view mode (right side of row 2)
+  Widget _buildInlineActionButtons(ColorScheme colorScheme) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(width: 8),
+        // Favorites toggle (only for music and books)
+        if (_selectedMediaType == LibraryMediaType.music || _selectedMediaType == LibraryMediaType.books)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: Material(
+                color: _showFavoritesOnly ? Colors.red : colorScheme.surface,
+                elevation: 2,
+                shadowColor: Colors.black26,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: () => _toggleFavoritesMode(!_showFavoritesOnly),
+                  customBorder: const CircleBorder(),
+                  child: Icon(
+                    _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
+                    size: 18,
+                    color: _showFavoritesOnly ? Colors.white : colorScheme.onSurface,
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-          ],
-          // View mode toggle
-          FloatingActionButton.small(
-            heroTag: 'fab_view_mode',
-            onPressed: _cycleCurrentViewMode,
-            backgroundColor: colorScheme.surface,
-            foregroundColor: colorScheme.onSurface,
-            elevation: 2,
-            child: Icon(_getViewModeIcon(_getCurrentViewMode())),
           ),
-        ],
-      ),
+        // View mode toggle
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: Material(
+            color: colorScheme.surface,
+            elevation: 2,
+            shadowColor: Colors.black26,
+            shape: const CircleBorder(),
+            child: InkWell(
+              onTap: _cycleCurrentViewMode,
+              customBorder: const CircleBorder(),
+              child: Icon(
+                _getViewModeIcon(_getCurrentViewMode()),
+                size: 18,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

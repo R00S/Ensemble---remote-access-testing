@@ -406,6 +406,24 @@ class SearchScreenState extends State<SearchScreen> {
                           ),
                         ),
                       ),
+                      // Library-only toggle
+                      Tooltip(
+                        message: S.of(context)!.libraryOnly,
+                        child: IconButton(
+                          icon: Icon(
+                            _libraryOnly ? Icons.library_music : Icons.library_music_outlined,
+                            color: _libraryOnly ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _libraryOnly = !_libraryOnly;
+                            });
+                            if (_searchController.text.isNotEmpty) {
+                              _performSearch(_searchController.text);
+                            }
+                          },
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -415,34 +433,7 @@ class SearchScreenState extends State<SearchScreen> {
             Expanded(
               child: !isConnected
                   ? DisconnectedState.simple(context)
-                  : Stack(
-                      children: [
-                        _buildSearchContent(),
-                        // Floating library-only toggle
-                        Positioned(
-                          right: 16,
-                          bottom: BottomSpacing.navBarOnly + 16,
-                          child: FloatingActionButton.small(
-                            heroTag: 'fab_library_only',
-                            onPressed: () {
-                              setState(() {
-                                _libraryOnly = !_libraryOnly;
-                              });
-                              if (_searchController.text.isNotEmpty) {
-                                _performSearch(_searchController.text);
-                              }
-                            },
-                            backgroundColor: _libraryOnly ? colorScheme.primary : colorScheme.surface,
-                            foregroundColor: _libraryOnly ? colorScheme.onPrimary : colorScheme.onSurface,
-                            elevation: 2,
-                            tooltip: S.of(context)!.libraryOnly,
-                            child: Icon(
-                              _libraryOnly ? Icons.library_music : Icons.library_music_outlined,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  : _buildSearchContent(),
             ),
           ],
         ),

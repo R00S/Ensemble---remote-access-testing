@@ -1699,7 +1699,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                         maProvider.isPlayingAudiobook
                             ? (maProvider.currentAudiobook?.authorsString ?? S.of(context)!.unknownAuthor)
                             : maProvider.isPlayingPodcast
-                                ? (maProvider.currentPodcastName ?? S.of(context)!.podcast)
+                                ? (maProvider.currentPodcastName ?? S.of(context)!.podcasts)
                                 : currentTrack.artistsString,
                         style: TextStyle(
                           color: textColor.withOpacity(t > 0.5 ? 0.7 : MiniPlayerLayout.secondaryTextOpacity),

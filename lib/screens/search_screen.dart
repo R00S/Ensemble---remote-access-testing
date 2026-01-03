@@ -93,7 +93,8 @@ class SearchScreenState extends State<SearchScreen> {
   };
   bool _isSearching = false;
   bool _hasSearched = false;
-  String _activeFilter = 'all'; // 'all', 'artists', 'albums', 'tracks', 'playlists', 'audiobooks'
+  // PERF: Use ValueNotifier to avoid full screen rebuild on filter change
+  final ValueNotifier<String> _activeFilterNotifier = ValueNotifier('all');
   String? _searchError;
   List<String> _recentSearches = [];
   bool _libraryOnly = false;
@@ -151,9 +152,9 @@ class SearchScreenState extends State<SearchScreen> {
   void _onPageChanged(int pageIndex) {
     final filters = _getAvailableFilters();
     if (pageIndex >= 0 && pageIndex < filters.length) {
-      setState(() {
-        _activeFilter = filters[pageIndex];
-      });
+      // Only update ValueNotifier - no setState needed
+      // ValueListenableBuilder will rebuild only the filter chips
+      _activeFilterNotifier.value = filters[pageIndex];
       _scrollFilterIntoView(pageIndex);
     }
   }
@@ -240,6 +241,7 @@ class SearchScreenState extends State<SearchScreen> {
     _focusNode.dispose();
     _pageController.dispose();
     _filterScrollController.dispose();
+    _activeFilterNotifier.dispose();
     super.dispose();
   }
 
@@ -885,38 +887,43 @@ class SearchScreenState extends State<SearchScreen> {
     }
 
     // No ClipRRect here - parent container handles clipping with rounded corners
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: filters.map((filter) {
-        final isSelected = _activeFilter == filter;
-        return Material(
-          // Use theme-aware colors for light/dark mode support
-          color: isSelected
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceVariant.withOpacity(0.6),
-          child: InkWell(
-            onTap: () {
-              setState(() {
-                _activeFilter = filter;
-              });
-              _animateToFilter(filter);
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              child: Text(
-                getLabel(filter),
-                style: TextStyle(
-                  color: isSelected
-                      ? colorScheme.onPrimaryContainer
-                      : colorScheme.onSurfaceVariant.withOpacity(0.8),
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+    // Wrap in ValueListenableBuilder for efficient rebuilds on filter change
+    return ValueListenableBuilder<String>(
+      valueListenable: _activeFilterNotifier,
+      builder: (context, activeFilter, _) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: filters.map((filter) {
+            final isSelected = activeFilter == filter;
+            return Material(
+              // Use theme-aware colors for light/dark mode support
+              color: isSelected
+                  ? colorScheme.primaryContainer
+                  : colorScheme.surfaceVariant.withOpacity(0.6),
+              child: InkWell(
+                onTap: () {
+                  // Only update ValueNotifier - no setState needed
+                  _activeFilterNotifier.value = filter;
+                  _animateToFilter(filter);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Text(
+                    getLabel(filter),
+                    style: TextStyle(
+                      color: isSelected
+                          ? colorScheme.onPrimaryContainer
+                          : colorScheme.onSurfaceVariant.withOpacity(0.8),
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 

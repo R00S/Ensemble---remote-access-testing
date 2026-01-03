@@ -40,7 +40,6 @@ class NewLibraryScreen extends StatefulWidget {
 class _NewLibraryScreenState extends State<NewLibraryScreen>
     with RestorationMixin {
   late PageController _pageController;
-  int _selectedCategoryIndex = 0;
   List<Playlist> _playlists = [];
   List<Track> _favoriteTracks = [];
   List<Audiobook> _audiobooks = [];
@@ -115,10 +114,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     registerForRestoration(_selectedTabIndex, 'selected_tab_index');
     // Apply restored tab index after PageController is created
     if (_selectedTabIndex.value < _tabCount) {
-      _selectedCategoryIndex = _selectedTabIndex.value;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_pageController.hasClients) {
-          _pageController.jumpToPage(_selectedCategoryIndex);
+          _pageController.jumpToPage(_selectedTabIndex.value);
         }
       });
     }
@@ -269,7 +267,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   String _getCurrentViewMode() {
     // Return the view mode for the currently selected tab
-    final tabIndex = _selectedCategoryIndex;
+    final tabIndex = _selectedTabIndex.value;
 
     // Handle books media type
     if (_selectedMediaType == LibraryMediaType.books) {
@@ -316,7 +314,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   }
 
   void _cycleCurrentViewMode() {
-    final tabIndex = _selectedCategoryIndex;
+    final tabIndex = _selectedTabIndex.value;
 
     // Handle books media type
     if (_selectedMediaType == LibraryMediaType.books) {
@@ -367,13 +365,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   void _resetCategoryIndex() {
     // Reset to first category when media type changes
-    if (_selectedCategoryIndex >= _tabCount) {
-      _selectedCategoryIndex = 0;
+    if (_selectedTabIndex.value >= _tabCount) {
+      _selectedTabIndex.value = 0;
     }
     // Jump to the selected category without animation
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_pageController.hasClients) {
-        _pageController.jumpToPage(_selectedCategoryIndex);
+        _pageController.jumpToPage(_selectedTabIndex.value);
       }
     });
   }
@@ -386,8 +384,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
     setState(() {
       _selectedMediaType = type;
-      _selectedCategoryIndex = 0; // Reset to first category
     });
+    _selectedTabIndex.value = 0; // Reset to first category
     _resetCategoryIndex();
     // Load audiobooks when switching to books tab
     if (type == LibraryMediaType.books) {
@@ -410,10 +408,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   }
 
   void _onPageChanged(int index) {
-    setState(() {
-      _selectedCategoryIndex = index;
-      _selectedTabIndex.value = index;
-    });
+    // Only update ValueNotifier - no setState needed
+    // ValueListenableBuilder will rebuild only the filter chips
+    _selectedTabIndex.value = index;
   }
 
   /// Handle scroll notifications to hide/show filter bars
@@ -463,10 +460,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         curve: Curves.easeOutCubic,
       );
     }
-    setState(() {
-      _selectedCategoryIndex = index;
-      _selectedTabIndex.value = index;
-    });
+    // Only update ValueNotifier - ValueListenableBuilder handles chip rebuild
+    _selectedTabIndex.value = index;
   }
 
   @override
@@ -885,11 +880,16 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Left: category chips
+                // Left: category chips - wrapped in ValueListenableBuilder for efficient rebuilds
                 Expanded(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    child: _buildCategoryChips(colorScheme, l10n),
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: _selectedTabIndex,
+                      builder: (context, selectedIndex, _) {
+                        return _buildCategoryChips(colorScheme, l10n, selectedIndex);
+                      },
+                    ),
                   ),
                 ),
                 // Right: action buttons
@@ -1015,7 +1015,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
-  Widget _buildCategoryChips(ColorScheme colorScheme, S l10n) {
+  Widget _buildCategoryChips(ColorScheme colorScheme, S l10n, int selectedIndex) {
     final categories = _getCategoryLabels(l10n);
 
     return ClipRRect(
@@ -1025,7 +1025,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         children: categories.asMap().entries.map((entry) {
           final index = entry.key;
           final label = entry.value;
-          final isSelected = _selectedCategoryIndex == index;
+          final isSelected = selectedIndex == index;
 
           return Material(
             color: isSelected

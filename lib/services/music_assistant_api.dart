@@ -649,10 +649,45 @@ class MusicAssistantAPI {
       final browseResult = browseResponse['result'] as List<dynamic>?;
       if (browseResult != null && browseResult.isNotEmpty) {
         _logger.log('🎙️ Browse found ${browseResult.length} items');
-        return browseResult
-            .where((item) => item is Map<String, dynamic>)
-            .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
-            .toList();
+
+        // Log first item structure for debugging
+        final firstItem = browseResult.first as Map<String, dynamic>?;
+        if (firstItem != null) {
+          _logger.log('🎙️ Browse item keys: ${firstItem.keys.toList()}');
+          _logger.log('🎙️ Browse item name: ${firstItem['name']}');
+          _logger.log('🎙️ Browse item label: ${firstItem['label']}');
+          _logger.log('🎙️ Browse item uri: ${firstItem['uri']}');
+          _logger.log('🎙️ Browse item path: ${firstItem['path']}');
+          _logger.log('🎙️ Browse item media_type: ${firstItem['media_type']}');
+        }
+
+        // Parse browse items - they may have different structure
+        final episodes = <MediaItem>[];
+        for (final item in browseResult) {
+          if (item is Map<String, dynamic>) {
+            // Browse items might use 'path' as URI and 'label'/'name' for title
+            final name = item['name'] as String? ??
+                        item['label'] as String? ??
+                        'Episode';
+            final uri = item['uri'] as String? ?? item['path'] as String?;
+            final itemId = item['item_id'] as String? ?? uri ?? '';
+            final provider = item['provider'] as String? ?? 'library';
+
+            episodes.add(MediaItem(
+              itemId: itemId,
+              provider: provider,
+              name: name,
+              uri: uri,
+              metadata: item['metadata'] as Map<String, dynamic>?,
+              mediaType: item['media_type'] as String?,
+            ));
+          }
+        }
+
+        if (episodes.isNotEmpty) {
+          _logger.log('🎙️ Parsed ${episodes.length} episodes from browse');
+          return episodes;
+        }
       }
 
       // Method 3: Try podcast_episodes library endpoint
@@ -698,8 +733,18 @@ class MusicAssistantAPI {
   /// Play a podcast episode
   Future<void> playPodcastEpisode(String playerId, MediaItem episode) async {
     try {
-      final uri = episode.uri ?? 'library://podcast_episode/${episode.itemId}';
+      // Try episode.uri first, then construct from itemId
+      String uri;
+      if (episode.uri != null && episode.uri!.isNotEmpty) {
+        uri = episode.uri!;
+      } else {
+        // Construct URI based on media type
+        uri = 'library://podcast_episode/${episode.itemId}';
+      }
+
       _logger.log('🎙️ Playing podcast episode: ${episode.name}');
+      _logger.log('🎙️ Episode URI: $uri');
+      _logger.log('🎙️ Episode itemId: ${episode.itemId}');
 
       await _sendCommand(
         'player_queues/play_media',

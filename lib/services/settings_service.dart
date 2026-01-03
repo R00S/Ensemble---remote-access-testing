@@ -67,6 +67,7 @@ class SettingsService {
   static const String _keySeriesAudiobooksSortOrder = 'series_audiobooks_sort_order'; // 'alpha' or 'year'
   static const String _keySeriesAudiobooksViewMode = 'series_audiobooks_view_mode'; // 'grid2', 'grid3', 'list'
   static const String _keyLibraryRadioViewMode = 'library_radio_view_mode'; // 'grid2', 'grid3', 'list'
+  static const String _keyLibraryPodcastsViewMode = 'library_podcasts_view_mode'; // 'grid2', 'grid3', 'list'
 
   // Audiobookshelf Direct Integration Settings
   static const String _keyAbsServerUrl = 'abs_server_url';
@@ -630,6 +631,16 @@ class SettingsService {
   static Future<void> setLibraryRadioViewMode(String mode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyLibraryRadioViewMode, mode);
+  }
+
+  static Future<String> getLibraryPodcastsViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLibraryPodcastsViewMode) ?? 'grid2';
+  }
+
+  static Future<void> setLibraryPodcastsViewMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLibraryPodcastsViewMode, mode);
   }
 
   // View Mode Settings - Series Audiobooks (series detail screen)

@@ -560,6 +560,102 @@ class MusicAssistantAPI {
     }
   }
 
+  // ============ PODCASTS ============
+
+  /// Get all podcasts from the library
+  Future<List<MediaItem>> getPodcasts({
+    int? limit,
+    int? offset,
+    bool? favoriteOnly,
+  }) async {
+    try {
+      _logger.log('🎙️ Getting podcasts...');
+      final response = await _sendCommand(
+        'music/podcasts/library_items',
+        args: {
+          if (limit != null) 'limit': limit,
+          if (offset != null) 'offset': offset,
+          if (favoriteOnly != null) 'favorite': favoriteOnly,
+        },
+      );
+
+      final items = response['items'] as List<dynamic>? ?? response['result'] as List<dynamic>?;
+      if (items == null) {
+        _logger.log('🎙️ Podcasts: result is null');
+        return [];
+      }
+
+      _logger.log('🎙️ Found ${items.length} podcasts');
+
+      return items
+          .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _logger.log('🎙️ Error getting podcasts: $e');
+      return [];
+    }
+  }
+
+  /// Get episodes for a specific podcast
+  Future<List<MediaItem>> getPodcastEpisodes(String podcastId, {
+    String? provider,
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      _logger.log('🎙️ Getting episodes for podcast: $podcastId');
+
+      // Try to get podcast details which should include episodes
+      final response = await _sendCommand(
+        'music/podcasts/get',
+        args: {
+          'item_id': podcastId,
+          if (provider != null) 'provider_instance_id_or_domain': provider,
+        },
+      );
+
+      final result = response['result'] as Map<String, dynamic>?;
+      if (result == null) {
+        _logger.log('🎙️ Podcast details: result is null');
+        return [];
+      }
+
+      // Episodes might be under different keys
+      final episodes = (result['episodes'] as List<dynamic>?) ??
+                       (result['items'] as List<dynamic>?) ??
+                       [];
+
+      _logger.log('🎙️ Found ${episodes.length} episodes');
+
+      return episodes
+          .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _logger.log('🎙️ Error getting podcast episodes: $e');
+      return [];
+    }
+  }
+
+  /// Play a podcast episode
+  Future<void> playPodcastEpisode(String playerId, MediaItem episode) async {
+    try {
+      final uri = episode.uri ?? 'library://podcast_episode/${episode.itemId}';
+      _logger.log('🎙️ Playing podcast episode: ${episode.name}');
+
+      await _sendCommand(
+        'player_queues/play_media',
+        args: {
+          'queue_id': playerId,
+          'media': [uri],
+          'option': 'replace',
+        },
+      );
+    } catch (e) {
+      _logger.log('🎙️ Error playing podcast episode: $e');
+      rethrow;
+    }
+  }
+
   Future<List<Audiobook>> getAudiobooks({
     int? limit,
     int? offset,

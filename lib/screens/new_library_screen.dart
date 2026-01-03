@@ -71,6 +71,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   String _authorsViewMode = 'list'; // 'grid2', 'grid3', 'list'
   String _seriesViewMode = 'grid2'; // 'grid2', 'grid3'
   String _radioViewMode = 'list'; // 'grid2', 'grid3', 'list'
+  String _podcastsViewMode = 'grid2'; // 'grid2', 'grid3', 'list'
   String _audiobooksSortOrder = 'alpha'; // 'alpha', 'year'
 
   // Author image cache
@@ -159,6 +160,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final audiobooksSortOrder = await SettingsService.getLibraryAudiobooksSortOrder();
     final seriesMode = await SettingsService.getLibrarySeriesViewMode();
     final radioMode = await SettingsService.getLibraryRadioViewMode();
+    final podcastsMode = await SettingsService.getLibraryPodcastsViewMode();
     if (mounted) {
       setState(() {
         _artistsViewMode = artistsMode;
@@ -169,6 +171,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _audiobooksSortOrder = audiobooksSortOrder;
         _seriesViewMode = seriesMode;
         _radioViewMode = radioMode;
+        _podcastsViewMode = podcastsMode;
       });
     }
   }
@@ -308,6 +311,22 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     SettingsService.setLibraryRadioViewMode(newMode);
   }
 
+  void _cyclePodcastsViewMode() {
+    String newMode;
+    switch (_podcastsViewMode) {
+      case 'grid2':
+        newMode = 'grid3';
+        break;
+      case 'grid3':
+        newMode = 'list';
+        break;
+      default:
+        newMode = 'grid2';
+    }
+    setState(() => _podcastsViewMode = newMode);
+    SettingsService.setLibraryPodcastsViewMode(newMode);
+  }
+
   IconData _getViewModeIcon(String mode) {
     switch (mode) {
       case 'list':
@@ -340,6 +359,11 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     // Handle radio media type
     if (_selectedMediaType == LibraryMediaType.radio) {
       return _radioViewMode;
+    }
+
+    // Handle podcasts media type
+    if (_selectedMediaType == LibraryMediaType.podcasts) {
+      return _podcastsViewMode;
     }
 
     // Handle music media type
@@ -394,6 +418,12 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     // Handle radio media type
     if (_selectedMediaType == LibraryMediaType.radio) {
       _cycleRadioViewMode();
+      return;
+    }
+
+    // Handle podcasts media type
+    if (_selectedMediaType == LibraryMediaType.podcasts) {
+      _cyclePodcastsViewMode();
       return;
     }
 
@@ -470,6 +500,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       final maProvider = context.read<MusicAssistantProvider>();
       if (maProvider.radioStations.isEmpty) {
         maProvider.loadRadioStations();
+      }
+    }
+    // Load podcasts when switching to podcasts tab
+    if (type == LibraryMediaType.podcasts) {
+      final maProvider = context.read<MusicAssistantProvider>();
+      if (maProvider.podcasts.isEmpty) {
+        maProvider.loadPodcasts();
       }
     }
   }
@@ -1249,7 +1286,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           default: return const SizedBox();
         }
       case LibraryMediaType.podcasts:
-        return _buildPodcastsComingSoonTab(context, l10n);
+        return _buildPodcastsTab(context, l10n);
       case LibraryMediaType.radio:
         return _buildRadioStationsTab(context, l10n);
     }
@@ -2200,37 +2237,184 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
-  // ============ PODCASTS TAB (Placeholder) ============
-  Widget _buildPodcastsComingSoonTab(BuildContext context, S l10n) {
+  // ============ PODCASTS TAB ============
+  Widget _buildPodcastsTab(BuildContext context, S l10n) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Center(
+    final textTheme = Theme.of(context).textTheme;
+    final maProvider = context.watch<MusicAssistantProvider>();
+    final podcasts = maProvider.podcasts;
+    final isLoading = maProvider.isLoadingPodcasts;
+
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator(color: colorScheme.primary));
+    }
+
+    if (podcasts.isEmpty) {
+      return EmptyState.custom(
+        context: context,
+        icon: MdiIcons.podcast,
+        title: l10n.noPodcasts,
+        subtitle: l10n.addPodcastsHint,
+        onRefresh: () => maProvider.loadPodcasts(),
+      );
+    }
+
+    // PERF: Use appropriate cache size based on view mode
+    final cacheSize = _podcastsViewMode == 'grid3' ? 200 : 256;
+
+    return RefreshIndicator(
+      color: colorScheme.primary,
+      backgroundColor: colorScheme.surface,
+      onRefresh: () => maProvider.loadPodcasts(),
+      child: _podcastsViewMode == 'list'
+          ? ListView.builder(
+              key: const PageStorageKey<String>('podcasts_list'),
+              cacheExtent: 1000,
+              padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.withMiniPlayer),
+              itemCount: podcasts.length,
+              itemBuilder: (context, index) {
+                final podcast = podcasts[index];
+                final imageUrl = maProvider.getImageUrl(podcast, size: cacheSize);
+
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            memCacheWidth: cacheSize,
+                            memCacheHeight: cacheSize,
+                            fadeInDuration: Duration.zero,
+                            fadeOutDuration: Duration.zero,
+                            placeholder: (context, url) => Container(
+                              width: 56,
+                              height: 56,
+                              color: colorScheme.surfaceVariant,
+                              child: Icon(MdiIcons.podcast, color: colorScheme.onSurfaceVariant),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              width: 56,
+                              height: 56,
+                              color: colorScheme.surfaceVariant,
+                              child: Icon(MdiIcons.podcast, color: colorScheme.onSurfaceVariant),
+                            ),
+                          )
+                        : Container(
+                            width: 56,
+                            height: 56,
+                            color: colorScheme.surfaceVariant,
+                            child: Icon(MdiIcons.podcast, color: colorScheme.onSurfaceVariant),
+                          ),
+                  ),
+                  title: Text(
+                    podcast.name,
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: podcast.metadata?['author'] != null
+                      ? Text(
+                          podcast.metadata!['author'] as String,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      : null,
+                  onTap: () => _openPodcastDetails(podcast, maProvider),
+                );
+              },
+            )
+          : GridView.builder(
+              key: PageStorageKey<String>('podcasts_grid_$_podcastsViewMode'),
+              cacheExtent: 1000,
+              padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _podcastsViewMode == 'grid3' ? 3 : 2,
+                childAspectRatio: _podcastsViewMode == 'grid3' ? 0.75 : 0.80,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: podcasts.length,
+              itemBuilder: (context, index) {
+                final podcast = podcasts[index];
+                return _buildPodcastCard(podcast, maProvider, cacheSize);
+              },
+            ),
+    );
+  }
+
+  Widget _buildPodcastCard(MediaItem podcast, MusicAssistantProvider maProvider, int cacheSize) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final imageUrl = maProvider.getImageUrl(podcast, size: cacheSize);
+
+    return GestureDetector(
+      onTap: () => _openPodcastDetails(podcast, maProvider),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(
-            Icons.podcasts_rounded,
-            size: 64,
-            color: colorScheme.primary.withOpacity(0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            l10n.podcasts,
-            style: TextStyle(
-              color: colorScheme.onSurface,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
+          AspectRatio(
+            aspectRatio: 1.0,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                color: colorScheme.surfaceVariant,
+                child: imageUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        memCacheWidth: cacheSize,
+                        memCacheHeight: cacheSize,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholder: (context, url) => const SizedBox(),
+                        errorWidget: (context, url, error) => Center(
+                          child: Icon(
+                            MdiIcons.podcast,
+                            size: 48,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Icon(
+                          MdiIcons.podcast,
+                          size: 48,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+              ),
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            l10n.podcastSupportComingSoon,
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.6),
-              fontSize: 14,
+            podcast.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w500,
+              height: 1.15,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  void _openPodcastDetails(MediaItem podcast, MusicAssistantProvider maProvider) {
+    // For now, just show a snackbar with the podcast name
+    // TODO: Navigate to podcast details screen
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${podcast.name} - ${AppLocalizations.of(context).podcastSupportComingSoon}')),
     );
   }
 

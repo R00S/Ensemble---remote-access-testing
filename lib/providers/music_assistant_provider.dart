@@ -53,8 +53,10 @@ class MusicAssistantProvider with ChangeNotifier {
   List<Track> _tracks = [];
   List<Track> _cachedFavoriteTracks = []; // Cached for instant display before full library loads
   List<MediaItem> _radioStations = [];
+  List<MediaItem> _podcasts = [];
   bool _isLoading = false;
   bool _isLoadingRadio = false;
+  bool _isLoadingPodcasts = false;
 
   // Player state
   Player? _selectedPlayer;
@@ -111,8 +113,10 @@ class MusicAssistantProvider with ChangeNotifier {
   List<Album> get albums => _albums;
   List<Track> get tracks => _tracks;
   List<MediaItem> get radioStations => _radioStations;
+  List<MediaItem> get podcasts => _podcasts;
   bool get isLoading => _isLoading;
   bool get isLoadingRadio => _isLoadingRadio;
+  bool get isLoadingPodcasts => _isLoadingPodcasts;
 
   /// Whether library is syncing in background
   bool get isSyncing => SyncService.instance.isSyncing;
@@ -3621,6 +3625,25 @@ class MusicAssistantProvider with ChangeNotifier {
     } catch (e) {
       _logger.log('⚠️ Failed to load radio stations: $e');
       _isLoadingRadio = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadPodcasts() async {
+    if (!isConnected || _api == null) return;
+
+    try {
+      _isLoadingPodcasts = true;
+      notifyListeners();
+
+      _podcasts = await _api!.getPodcasts(limit: 100);
+
+      _logger.log('🎙️ Loaded ${_podcasts.length} podcasts');
+      _isLoadingPodcasts = false;
+      notifyListeners();
+    } catch (e) {
+      _logger.log('⚠️ Failed to load podcasts: $e');
+      _isLoadingPodcasts = false;
       notifyListeners();
     }
   }

@@ -673,13 +673,23 @@ class MusicAssistantAPI {
             final itemId = item['item_id'] as String? ?? uri ?? '';
             final provider = item['provider'] as String? ?? 'library';
 
+            // Parse media type from string
+            final mediaTypeStr = item['media_type'] as String?;
+            MediaType mediaType = MediaType.track; // default
+            if (mediaTypeStr != null) {
+              mediaType = MediaType.values.firstWhere(
+                (e) => e.name == mediaTypeStr || e.name == mediaTypeStr.toLowerCase(),
+                orElse: () => MediaType.track,
+              );
+            }
+
             episodes.add(MediaItem(
               itemId: itemId,
               provider: provider,
               name: name,
               uri: uri,
               metadata: item['metadata'] as Map<String, dynamic>?,
-              mediaType: item['media_type'] as String?,
+              mediaType: mediaType,
             ));
           }
         }

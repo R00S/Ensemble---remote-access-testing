@@ -56,12 +56,18 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
     final imageUrl = maProvider.getImageUrl(widget.podcast, size: 512) ?? widget.initialImageUrl;
 
     if (imageUrl != null) {
-      final (lightScheme, darkScheme) = await PaletteHelper.extractColorSchemes(imageUrl);
-      if (mounted) {
-        setState(() {
-          _lightColorScheme = lightScheme;
-          _darkColorScheme = darkScheme;
-        });
+      try {
+        final colorSchemes = await PaletteHelper.extractColorSchemes(
+          CachedNetworkImageProvider(imageUrl),
+        );
+        if (mounted && colorSchemes != null) {
+          setState(() {
+            _lightColorScheme = colorSchemes.$1;
+            _darkColorScheme = colorSchemes.$2;
+          });
+        }
+      } catch (e) {
+        _logger.log('🎙️ Error extracting colors: $e');
       }
     }
   }
@@ -146,9 +152,8 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
     });
   }
 
-  String _formatDuration(int? durationMs) {
-    if (durationMs == null || durationMs == 0) return '';
-    final duration = Duration(milliseconds: durationMs);
+  String _formatDuration(Duration? duration) {
+    if (duration == null || duration == Duration.zero) return '';
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
 
@@ -366,7 +371,7 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
                         child: Column(
                           children: [
                             Icon(
-                              MdiIcons.podcastOff,
+                              MdiIcons.microphoneOff,
                               size: 48,
                               color: colorScheme.onSurface.withOpacity(0.3),
                             ),
@@ -426,7 +431,7 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
                                   ),
                                 ),
                               ],
-                              if (duration != null && duration > 0) ...[
+                              if (duration != null && duration > Duration.zero) ...[
                                 const SizedBox(height: 4),
                                 Text(
                                   _formatDuration(duration),

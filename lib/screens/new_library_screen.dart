@@ -2413,7 +2413,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   void _openPodcastDetails(MediaItem podcast, MusicAssistantProvider maProvider) {
     // For now, just show a snackbar with the podcast name
     // TODO: Navigate to podcast details screen
-    final l10n = S.of(context);
+    final l10n = S.of(context)!;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${podcast.name} - ${l10n.podcastSupportComingSoon}')),
     );

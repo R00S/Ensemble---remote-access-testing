@@ -304,18 +304,41 @@ class SearchScreenState extends State<SearchScreen> {
       final provider = context.read<MusicAssistantProvider>();
       final results = await provider.searchWithCache(query, libraryOnly: _libraryOnly);
 
-      // Also filter radio stations from the provider's loaded list
-      // since the search API doesn't include radios
+      // Search for radios: combine library filtering + global search
       final queryLower = query.toLowerCase();
-      final matchingRadios = provider.radioStations
+
+      // 1. Filter from library radio stations
+      final libraryRadios = provider.radioStations
           .where((radio) => radio.name.toLowerCase().contains(queryLower))
           .toList();
+
+      // 2. Also search globally via API (for providers like TuneIn)
+      List<MediaItem> globalRadios = [];
+      if (!_libraryOnly) {
+        try {
+          globalRadios = await provider.api?.searchRadioStations(query) ?? [];
+        } catch (e) {
+          _logger.log('Global radio search failed: $e');
+        }
+      }
+
+      // 3. Combine and deduplicate by name
+      final allRadios = <String, MediaItem>{};
+      for (final radio in libraryRadios) {
+        allRadios[radio.name.toLowerCase()] = radio;
+      }
+      for (final radio in globalRadios) {
+        final key = radio.name.toLowerCase();
+        if (!allRadios.containsKey(key)) {
+          allRadios[key] = radio;
+        }
+      }
 
       if (mounted) {
         setState(() {
           _searchResults = {
             ...results,
-            'radios': matchingRadios,
+            'radios': allRadios.values.toList(),
           };
           _isSearching = false;
           _hasSearched = true;

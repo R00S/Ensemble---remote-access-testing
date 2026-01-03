@@ -525,6 +525,41 @@ class MusicAssistantAPI {
     }
   }
 
+  /// Search for radio stations globally (across all providers like TuneIn)
+  Future<List<MediaItem>> searchRadioStations(String query, {int limit = 25}) async {
+    try {
+      _logger.log('📻 Searching radio stations for: $query');
+      final response = await _sendCommand(
+        'music/search',
+        args: {
+          'search_query': query,
+          'media_types': ['radio'],
+          'limit': limit,
+        },
+      );
+
+      final result = response['result'] as Map<String, dynamic>?;
+      if (result == null) {
+        _logger.log('📻 Radio search: no result');
+        return [];
+      }
+
+      // Radio results might be under 'radios' or 'radio' key
+      final radios = (result['radios'] as List<dynamic>?) ??
+                     (result['radio'] as List<dynamic>?) ??
+                     [];
+
+      _logger.log('📻 Radio search found ${radios.length} results');
+
+      return radios
+          .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _logger.log('📻 Error searching radio stations: $e');
+      return [];
+    }
+  }
+
   Future<List<Audiobook>> getAudiobooks({
     int? limit,
     int? offset,

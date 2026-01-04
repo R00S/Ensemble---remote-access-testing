@@ -227,31 +227,51 @@ class MusicAssistantProvider with ChangeNotifier {
   /// Returns the podcast name from metadata, album name, or artist name
   String? get currentPodcastName {
     if (!isPlayingPodcast || _currentTrack == null) return null;
+
+    // Debug logging to understand podcast data structure
+    _logger.log('🎙️ Getting podcast name for: ${_currentTrack!.name}');
+    _logger.log('🎙️ Track URI: ${_currentTrack!.uri}');
+    _logger.log('🎙️ Album: ${_currentTrack!.album?.name}');
+    _logger.log('🎙️ Artists: ${_currentTrack!.artists?.map((a) => a.name).join(", ")}');
+    _logger.log('🎙️ Metadata keys: ${_currentTrack!.metadata?.keys.toList()}');
+
     // Try metadata first (if episode has parent podcast info)
     final metadata = _currentTrack!.metadata;
     if (metadata != null) {
+      // Log all metadata for debugging
+      _logger.log('🎙️ Full metadata: $metadata');
+
       // Check for podcast_name or podcast.name in metadata
       if (metadata['podcast_name'] != null) {
+        _logger.log('🎙️ Found podcast_name in metadata');
         return metadata['podcast_name'] as String;
       }
       if (metadata['podcast'] is Map) {
         final podcast = metadata['podcast'] as Map;
         if (podcast['name'] != null) {
+          _logger.log('🎙️ Found podcast.name in metadata');
           return podcast['name'] as String;
         }
       }
+      // Check for 'title' in metadata (some providers put podcast name here)
+      if (metadata['title'] != null && metadata['title'] != _currentTrack!.name) {
+        _logger.log('🎙️ Found title in metadata: ${metadata['title']}');
+      }
     }
     // Fall back to album name (often contains podcast name)
-    if (_currentTrack!.album != null) {
+    if (_currentTrack!.album != null && _currentTrack!.album!.name.isNotEmpty) {
+      _logger.log('🎙️ Using album name as podcast name');
       return _currentTrack!.album!.name;
     }
     // Fall back to artist (sometimes the podcast name is set as artist)
     if (_currentTrack!.artists != null && _currentTrack!.artists!.isNotEmpty) {
       final artistName = _currentTrack!.artists!.first.name;
       if (artistName != 'Unknown Artist' && artistName.isNotEmpty) {
+        _logger.log('🎙️ Using artist name as podcast name');
         return artistName;
       }
     }
+    _logger.log('🎙️ No podcast name found, returning null');
     return null;
   }
 

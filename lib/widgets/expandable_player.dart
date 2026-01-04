@@ -1737,7 +1737,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Album name OR Chapter name (expanded only)
                 // GPU PERF: Use color alpha instead of Opacity widget
                 // For audiobooks: show current chapter; for music: show album
-                if (t > 0.3 && (currentTrack.album != null || maProvider.isPlayingAudiobook))
+                // For podcasts: hide album line since podcast name is already shown in artist position
+                if (t > 0.3 && (currentTrack.album != null || maProvider.isPlayingAudiobook) && !maProvider.isPlayingPodcast)
                   Positioned(
                     left: contentPadding,
                     right: contentPadding,

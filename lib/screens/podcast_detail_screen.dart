@@ -54,7 +54,8 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
 
   Future<void> _extractColors() async {
     final maProvider = context.read<MusicAssistantProvider>();
-    final imageUrl = maProvider.getPodcastImageUrl(widget.podcast) ?? widget.initialImageUrl;
+    // Use initialImageUrl first for consistency with hero animation
+    final imageUrl = widget.initialImageUrl ?? maProvider.getPodcastImageUrl(widget.podcast);
 
     if (imageUrl != null) {
       try {
@@ -249,9 +250,10 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final maProvider = context.watch<MusicAssistantProvider>();
-    // Use getPodcastImageUrl for better quality (uses episode covers when available)
-    final providerImageUrl = maProvider.getPodcastImageUrl(widget.podcast);
-    final imageUrl = providerImageUrl ?? widget.initialImageUrl;
+    // CRITICAL: Use initialImageUrl for hero animation consistency
+    // The library passes the same URL it uses for display, ensuring cache hit
+    // Only fall back to provider URL if initialImageUrl is null
+    final imageUrl = widget.initialImageUrl ?? maProvider.getPodcastImageUrl(widget.podcast);
 
     final adaptiveTheme = context.select<ThemeProvider, bool>(
       (provider) => provider.adaptiveTheme,
@@ -312,33 +314,42 @@ class _PodcastDetailScreenState extends State<PodcastDetailScreen> {
                         const SizedBox(height: 60),
                         Hero(
                           tag: HeroTags.podcastCover + (widget.podcast.uri ?? widget.podcast.itemId) + _heroTagSuffix,
-                          child: Container(
-                            width: coverSize,
-                            height: coverSize,
-                            decoration: BoxDecoration(
+                          // Match audiobook pattern: ClipRRect + CachedNetworkImage for smooth hero
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              width: coverSize,
+                              height: coverSize,
                               color: colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
-                              image: imageUrl != null
-                                  ? DecorationImage(
-                                      image: CachedNetworkImageProvider(imageUrl),
+                              child: imageUrl != null
+                                  ? CachedNetworkImage(
+                                      imageUrl: imageUrl,
                                       fit: BoxFit.cover,
+                                      fadeInDuration: Duration.zero,
+                                      fadeOutDuration: Duration.zero,
+                                      placeholder: (_, __) => Center(
+                                        child: Icon(
+                                          MdiIcons.podcast,
+                                          size: coverSize * 0.43,
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                      errorWidget: (_, __, ___) => Center(
+                                        child: Icon(
+                                          MdiIcons.podcast,
+                                          size: coverSize * 0.43,
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
                                     )
-                                  : null,
+                                  : Center(
+                                      child: Icon(
+                                        MdiIcons.podcast,
+                                        size: coverSize * 0.43,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
                             ),
-                            child: imageUrl == null
-                                ? Icon(
-                                    MdiIcons.podcast,
-                                    size: coverSize * 0.43,
-                                    color: colorScheme.onSurfaceVariant,
-                                  )
-                                : null,
                           ),
                         ),
                       ],

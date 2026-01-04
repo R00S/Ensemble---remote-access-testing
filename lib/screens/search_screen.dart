@@ -771,7 +771,7 @@ class SearchScreenState extends State<SearchScreen> {
       score += 5;
     }
 
-    // Secondary field matching (artist name for albums/tracks)
+    // Secondary field matching (artist/author/creator name)
     if (item is Album) {
       final artistLower = item.artistsString.toLowerCase();
       if (artistLower == queryLower) {
@@ -791,6 +791,36 @@ class SearchScreenState extends State<SearchScreen> {
         final albumLower = item.album!.name.toLowerCase();
         if (albumLower.contains(queryLower)) {
           score += 5;
+        }
+      }
+    } else if (item is Audiobook) {
+      // Check audiobook author names
+      final authorLower = item.authorsString.toLowerCase();
+      if (authorLower == queryLower) {
+        score += 15; // Author exact match
+      } else if (authorLower.contains(queryLower)) {
+        score += 8; // Author contains query
+      }
+      // Also check narrator names
+      final narratorLower = item.narratorsString.toLowerCase();
+      if (narratorLower.contains(queryLower)) {
+        score += 5;
+      }
+    } else if (item.mediaType == MediaType.podcast || item.mediaType == MediaType.podcastEpisode) {
+      // Check podcast metadata for author/creator
+      final metadata = item.metadata;
+      if (metadata != null) {
+        final author = (metadata['author'] as String? ?? '').toLowerCase();
+        final publisher = (metadata['publisher'] as String? ?? '').toLowerCase();
+        if (author == queryLower || publisher == queryLower) {
+          score += 15; // Author/publisher exact match
+        } else if (author.contains(queryLower) || publisher.contains(queryLower)) {
+          score += 8; // Author/publisher contains query
+        }
+        // Also check description for keyword matches (lower weight)
+        final description = (metadata['description'] as String? ?? '').toLowerCase();
+        if (description.contains(queryLower)) {
+          score += 3;
         }
       }
     }
@@ -1616,8 +1646,8 @@ class SearchScreenState extends State<SearchScreen> {
                       width: 48,
                       height: 48,
                       fit: BoxFit.cover,
-                      memCacheWidth: 128,
-                      memCacheHeight: 128,
+                      memCacheWidth: 256,
+                      memCacheHeight: 256,
                       fadeInDuration: Duration.zero,
                       fadeOutDuration: Duration.zero,
                       placeholder: (_, __) => Icon(Icons.podcasts_rounded, color: colorScheme.onSurfaceVariant),

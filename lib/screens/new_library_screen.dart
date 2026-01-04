@@ -2261,8 +2261,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
 
     // PERF: Request larger images from API but decode at appropriate size for memory
-    // Use consistent 400 for all views to improve hero animation smoothness (matches detail screen)
-    const cacheSize = 400;
+    // Use consistent 256 for all views to improve hero animation smoothness (matches detail screen)
+    const cacheSize = 256;
 
     return RefreshIndicator(
       color: colorScheme.primary,

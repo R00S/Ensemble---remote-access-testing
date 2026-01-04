@@ -809,18 +809,48 @@ class SearchScreenState extends State<SearchScreen> {
     } else if (item.mediaType == MediaType.podcast || item.mediaType == MediaType.podcastEpisode) {
       // Check podcast metadata for author/creator
       final metadata = item.metadata;
+      bool foundCreatorMatch = false;
       if (metadata != null) {
         final author = (metadata['author'] as String? ?? '').toLowerCase();
         final publisher = (metadata['publisher'] as String? ?? '').toLowerCase();
-        if (author == queryLower || publisher == queryLower) {
-          score += 15; // Author/publisher exact match
-        } else if (author.contains(queryLower) || publisher.contains(queryLower)) {
-          score += 8; // Author/publisher contains query
+        final owner = (metadata['owner'] as String? ?? '').toLowerCase();
+        final creator = (metadata['creator'] as String? ?? '').toLowerCase();
+
+        // Check all possible creator fields
+        final creatorFields = [author, publisher, owner, creator].where((s) => s.isNotEmpty);
+        bool foundExact = false;
+        bool foundContains = false;
+        for (final field in creatorFields) {
+          if (field == queryLower) {
+            foundExact = true;
+            break;
+          } else if (field.contains(queryLower)) {
+            foundContains = true;
+          }
         }
-        // Also check description for keyword matches (lower weight)
+        if (foundExact) {
+          score += 15; // Creator exact match
+          foundCreatorMatch = true;
+        } else if (foundContains) {
+          score += 8; // Creator contains query
+          foundCreatorMatch = true;
+        }
+
+        // Also check description for keyword matches
         final description = (metadata['description'] as String? ?? '').toLowerCase();
         if (description.contains(queryLower)) {
-          score += 3;
+          score += 5; // Increased from 3 to match other media types
+        }
+      }
+
+      // Fallback: If no creator metadata matched, but query matches strongly in name,
+      // give a boost. Podcast names often include the host's name (e.g., "The Louis Theroux Podcast")
+      if (!foundCreatorMatch && nameLower.contains(queryLower)) {
+        // Multi-word query that matches in name suggests creator/host name
+        if (queryLower.contains(' ')) {
+          score += 10; // Strong signal: multi-word query in podcast name
+        } else {
+          score += 5; // Single word match
         }
       }
     }
@@ -829,7 +859,18 @@ class SearchScreenState extends State<SearchScreen> {
   }
 
   /// Check if query matches at a word boundary in text
+  /// Handles both single-word and multi-word queries
   bool _matchesWordBoundary(String text, String query) {
+    // For multi-word queries, check if query appears at start of a word in text
+    // e.g., "The Louis Theroux Podcast" contains "louis theroux" at word boundary
+    if (query.contains(' ')) {
+      // Check if text starts with query or contains query after whitespace
+      if (text.startsWith(query)) return true;
+      if (text.contains(' $query')) return true;
+      return false;
+    }
+
+    // For single-word queries, check individual words
     final words = text.split(RegExp(r'\s+'));
     for (final word in words) {
       if (word.startsWith(query)) return true;

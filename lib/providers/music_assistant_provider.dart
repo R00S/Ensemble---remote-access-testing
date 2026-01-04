@@ -3868,7 +3868,7 @@ class MusicAssistantProvider with ChangeNotifier {
   /// Get best available podcast cover URL
   /// Checks the episode cover cache first (for higher quality covers)
   /// Falls back to the podcast's own image if no cached cover exists
-  String? getPodcastImageUrl(MediaItem podcast, {int size = 1024}) {
+  String? getPodcastImageUrl(MediaItem podcast, {int size = 256}) {
     final cachedUrl = _podcastCoverCache[podcast.itemId];
     if (cachedUrl != null) {
       return cachedUrl;

@@ -90,6 +90,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   // Series book counts cache: seriesId -> number of books
   final Map<String, int> _seriesBookCounts = {};
   bool _seriesLoaded = false;
+  // Pre-cache flag for podcast images (smooth hero animations)
+  bool _hasPrecachedPodcasts = false;
   // PERF: Debounce color extraction to avoid blocking UI during scroll
   Timer? _colorExtractionDebounce;
   final Map<String, List<String>> _pendingColorExtractions = {};
@@ -2260,6 +2262,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       );
     }
 
+    // Pre-cache podcast images for smooth hero animations
+    _precachePodcastImages(podcasts, maProvider);
+
     // PERF: Request larger images from API but decode at appropriate size for memory
     // Use consistent 256 for all views to improve hero animation smoothness (matches detail screen)
     const cacheSize = 256;
@@ -2432,6 +2437,29 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         ),
       ),
     );
+  }
+
+  /// Pre-cache podcast images so hero animations are smooth on first tap
+  void _precachePodcastImages(List<MediaItem> podcasts, MusicAssistantProvider maProvider) {
+    if (!mounted || _hasPrecachedPodcasts) return;
+    _hasPrecachedPodcasts = true;
+
+    // Only precache first ~10 visible items to avoid excessive network/memory use
+    final podcastsToCache = podcasts.take(10);
+
+    for (final podcast in podcastsToCache) {
+      final imageUrl = maProvider.getPodcastImageUrl(podcast, size: 256);
+      if (imageUrl != null) {
+        // Use CachedNetworkImageProvider to warm the cache
+        precacheImage(
+          CachedNetworkImageProvider(imageUrl),
+          context,
+        ).catchError((_) {
+          // Silently ignore precache errors
+          return false;
+        });
+      }
+    }
   }
 
   // ============ RADIO TAB ============

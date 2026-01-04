@@ -907,6 +907,8 @@ class MusicAssistantProvider with ChangeNotifier {
       // Online - execute immediately
       try {
         await _api!.addToFavorites(mediaType, itemId, provider);
+        // Update local cache for instant UI feedback
+        _updateLocalFavoriteStatus(mediaType, itemId, true);
         return true;
       } catch (e) {
         _logger.log('❌ Failed to add to favorites: $e');
@@ -924,6 +926,8 @@ class MusicAssistantProvider with ChangeNotifier {
         },
       );
       _logger.log('📋 Queued add to favorites (offline): $mediaType');
+      // Still update local state for offline support
+      _updateLocalFavoriteStatus(mediaType, itemId, true);
       return true;
     }
   }
@@ -938,6 +942,8 @@ class MusicAssistantProvider with ChangeNotifier {
       // Online - execute immediately
       try {
         await _api!.removeFromFavorites(mediaType, libraryItemId);
+        // Update local cache for instant UI feedback
+        _updateLocalFavoriteStatusByLibraryId(mediaType, libraryItemId, false);
         return true;
       } catch (e) {
         _logger.log('❌ Failed to remove from favorites: $e');
@@ -954,7 +960,153 @@ class MusicAssistantProvider with ChangeNotifier {
         },
       );
       _logger.log('📋 Queued remove from favorites (offline): $mediaType');
+      // Still update local state for offline support
+      _updateLocalFavoriteStatusByLibraryId(mediaType, libraryItemId, false);
       return true;
+    }
+  }
+
+  /// Update favorite status in local cache for instant UI feedback
+  void _updateLocalFavoriteStatus(String mediaType, String itemId, bool isFavorite) {
+    bool updated = false;
+
+    if (mediaType == 'artist') {
+      final index = _artists.indexWhere((a) => a.itemId == itemId);
+      if (index != -1) {
+        final artist = _artists[index];
+        _artists[index] = Artist(
+          itemId: artist.itemId,
+          provider: artist.provider,
+          name: artist.name,
+          sortName: artist.sortName,
+          uri: artist.uri,
+          providerMappings: artist.providerMappings,
+          metadata: artist.metadata,
+          favorite: isFavorite,
+        );
+        updated = true;
+      }
+    } else if (mediaType == 'album') {
+      final index = _albums.indexWhere((a) => a.itemId == itemId);
+      if (index != -1) {
+        final album = _albums[index];
+        _albums[index] = Album(
+          itemId: album.itemId,
+          provider: album.provider,
+          name: album.name,
+          artists: album.artists,
+          albumType: album.albumType,
+          year: album.year,
+          sortName: album.sortName,
+          uri: album.uri,
+          providerMappings: album.providerMappings,
+          metadata: album.metadata,
+          favorite: isFavorite,
+        );
+        updated = true;
+      }
+    } else if (mediaType == 'track') {
+      final index = _tracks.indexWhere((t) => t.itemId == itemId);
+      if (index != -1) {
+        final track = _tracks[index];
+        _tracks[index] = Track(
+          itemId: track.itemId,
+          provider: track.provider,
+          name: track.name,
+          artists: track.artists,
+          album: track.album,
+          duration: track.duration,
+          discNumber: track.discNumber,
+          trackNumber: track.trackNumber,
+          sortName: track.sortName,
+          uri: track.uri,
+          providerMappings: track.providerMappings,
+          metadata: track.metadata,
+          favorite: isFavorite,
+        );
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      notifyListeners();
+    }
+  }
+
+  /// Update favorite status by library item ID (for remove operations)
+  void _updateLocalFavoriteStatusByLibraryId(String mediaType, int libraryItemId, bool isFavorite) {
+    final libraryIdStr = libraryItemId.toString();
+    bool updated = false;
+
+    if (mediaType == 'artist') {
+      final index = _artists.indexWhere((a) =>
+        a.provider == 'library' && a.itemId == libraryIdStr ||
+        a.providerMappings?.any((m) => m.providerInstance == 'library' && m.itemId == libraryIdStr) == true
+      );
+      if (index != -1) {
+        final artist = _artists[index];
+        _artists[index] = Artist(
+          itemId: artist.itemId,
+          provider: artist.provider,
+          name: artist.name,
+          sortName: artist.sortName,
+          uri: artist.uri,
+          providerMappings: artist.providerMappings,
+          metadata: artist.metadata,
+          favorite: isFavorite,
+        );
+        updated = true;
+      }
+    } else if (mediaType == 'album') {
+      final index = _albums.indexWhere((a) =>
+        a.provider == 'library' && a.itemId == libraryIdStr ||
+        a.providerMappings?.any((m) => m.providerInstance == 'library' && m.itemId == libraryIdStr) == true
+      );
+      if (index != -1) {
+        final album = _albums[index];
+        _albums[index] = Album(
+          itemId: album.itemId,
+          provider: album.provider,
+          name: album.name,
+          artists: album.artists,
+          albumType: album.albumType,
+          year: album.year,
+          sortName: album.sortName,
+          uri: album.uri,
+          providerMappings: album.providerMappings,
+          metadata: album.metadata,
+          favorite: isFavorite,
+        );
+        updated = true;
+      }
+    } else if (mediaType == 'track') {
+      final index = _tracks.indexWhere((t) =>
+        t.provider == 'library' && t.itemId == libraryIdStr ||
+        t.providerMappings?.any((m) => m.providerInstance == 'library' && m.itemId == libraryIdStr) == true
+      );
+      if (index != -1) {
+        final track = _tracks[index];
+        _tracks[index] = Track(
+          itemId: track.itemId,
+          provider: track.provider,
+          name: track.name,
+          artists: track.artists,
+          album: track.album,
+          duration: track.duration,
+          discNumber: track.discNumber,
+          trackNumber: track.trackNumber,
+          sortName: track.sortName,
+          uri: track.uri,
+          providerMappings: track.providerMappings,
+          metadata: track.metadata,
+          favorite: isFavorite,
+        );
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      notifyListeners();
     }
   }
 
@@ -972,6 +1124,8 @@ class MusicAssistantProvider with ChangeNotifier {
     if (isConnected && _api != null) {
       try {
         await _api!.addItemToLibrary(mediaType, itemId, provider);
+        // Trigger a background refresh to update library with new item
+        _scheduleLibraryRefresh(mediaType);
         return true;
       } catch (e) {
         _logger.log('❌ Failed to add to library: $e');
@@ -992,6 +1146,8 @@ class MusicAssistantProvider with ChangeNotifier {
     if (isConnected && _api != null) {
       try {
         await _api!.removeItemFromLibrary(mediaType, libraryItemId);
+        // Remove from local cache immediately for instant feedback
+        _removeFromLocalLibrary(mediaType, libraryItemId);
         return true;
       } catch (e) {
         _logger.log('❌ Failed to remove from library: $e');
@@ -1001,6 +1157,81 @@ class MusicAssistantProvider with ChangeNotifier {
       _logger.log('❌ Cannot remove from library while offline');
       return false;
     }
+  }
+
+  /// Remove item from local library cache for instant UI feedback
+  void _removeFromLocalLibrary(String mediaType, int libraryItemId) {
+    final libraryIdStr = libraryItemId.toString();
+    bool updated = false;
+
+    if (mediaType == 'artist') {
+      final before = _artists.length;
+      _artists.removeWhere((a) =>
+        (a.provider == 'library' && a.itemId == libraryIdStr) ||
+        a.providerMappings?.any((m) => m.providerInstance == 'library' && m.itemId == libraryIdStr) == true
+      );
+      updated = _artists.length != before;
+    } else if (mediaType == 'album') {
+      final before = _albums.length;
+      _albums.removeWhere((a) =>
+        (a.provider == 'library' && a.itemId == libraryIdStr) ||
+        a.providerMappings?.any((m) => m.providerInstance == 'library' && m.itemId == libraryIdStr) == true
+      );
+      updated = _albums.length != before;
+    } else if (mediaType == 'track') {
+      final before = _tracks.length;
+      _tracks.removeWhere((t) =>
+        (t.provider == 'library' && t.itemId == libraryIdStr) ||
+        t.providerMappings?.any((m) => m.providerInstance == 'library' && m.itemId == libraryIdStr) == true
+      );
+      updated = _tracks.length != before;
+    } else if (mediaType == 'radio') {
+      final before = _radioStations.length;
+      _radioStations.removeWhere((r) =>
+        (r.provider == 'library' && r.itemId == libraryIdStr) ||
+        r.providerMappings?.any((m) => m.providerInstance == 'library' && m.itemId == libraryIdStr) == true
+      );
+      updated = _radioStations.length != before;
+    } else if (mediaType == 'podcast') {
+      final before = _podcasts.length;
+      _podcasts.removeWhere((p) =>
+        (p.provider == 'library' && p.itemId == libraryIdStr) ||
+        p.providerMappings?.any((m) => m.providerInstance == 'library' && m.itemId == libraryIdStr) == true
+      );
+      updated = _podcasts.length != before;
+    }
+
+    if (updated) {
+      notifyListeners();
+    }
+  }
+
+  /// Schedule a background refresh for a media type after library change
+  void _scheduleLibraryRefresh(String mediaType) {
+    // Use a short delay to batch multiple adds
+    Future.delayed(const Duration(milliseconds: 500), () async {
+      if (!isConnected || _api == null) return;
+
+      try {
+        if (mediaType == 'artist') {
+          _artists = await _api!.getArtists(
+            limit: LibraryConstants.maxLibraryItems,
+            albumArtistsOnly: false,
+          );
+        } else if (mediaType == 'album') {
+          _albums = await _api!.getAlbums(limit: LibraryConstants.maxLibraryItems);
+        } else if (mediaType == 'track') {
+          _tracks = await _api!.getTracks(limit: LibraryConstants.maxLibraryItems);
+        } else if (mediaType == 'radio') {
+          _radioStations = await _api!.getRadioStations(limit: 100);
+        } else if (mediaType == 'podcast') {
+          _podcasts = await _api!.getPodcasts(limit: 100);
+        }
+        notifyListeners();
+      } catch (e) {
+        _logger.log('⚠️ Background library refresh failed: $e');
+      }
+    });
   }
 
   Future<void> disconnect() async {

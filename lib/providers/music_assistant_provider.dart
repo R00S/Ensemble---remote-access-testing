@@ -1806,6 +1806,12 @@ class MusicAssistantProvider with ChangeNotifier {
         final mediaType = currentMedia['media_type'] as String?;
         final uri = currentMedia['uri'] as String?;
 
+        // Debug: Log all currentMedia fields for podcast episodes
+        if (uri != null && (uri.contains('podcast_episode') || uri.contains('podcast/'))) {
+          _logger.log('🎙️ Podcast currentMedia keys: ${currentMedia.keys.toList()}');
+          _logger.log('🎙️ Podcast currentMedia: $currentMedia');
+        }
+
         // Check for external source (optical, Spotify, etc.) - skip caching stale metadata
         bool isExternalSource = false;
         if (uri != null) {
@@ -1871,6 +1877,14 @@ class MusicAssistantProvider with ChangeNotifier {
                 {'path': finalImageUrl, 'provider': 'direct'}
               ]
             };
+          }
+
+          // Extract podcast info if available (for podcast episodes)
+          final podcastData = currentMedia['podcast'];
+          if (podcastData != null) {
+            metadata ??= {};
+            metadata['podcast'] = podcastData;
+            _logger.log('🎙️ Found podcast in currentMedia: $podcastData');
           }
 
           // Parse artist from title if artist is missing but title contains " - "

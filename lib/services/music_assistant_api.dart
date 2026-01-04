@@ -633,6 +633,43 @@ class MusicAssistantAPI {
     }
   }
 
+  /// Get best available image URL for a podcast
+  /// Falls back to first episode's image if podcast image is unavailable or low quality
+  Future<String?> getPodcastCoverUrl(MediaItem podcast, {int size = 1024}) async {
+    // First try the podcast's own image
+    final podcastImage = getImageUrl(podcast, size: size);
+
+    // Check if podcast has images in metadata
+    final images = podcast.metadata?['images'] as List<dynamic>?;
+    if (images != null && images.isNotEmpty) {
+      // Podcast has images, use them
+      return podcastImage;
+    }
+
+    // No podcast image, try to get first episode's image
+    try {
+      _logger.log('🎙️ No podcast cover, fetching episode cover for: ${podcast.name}');
+      final episodes = await getPodcastEpisodes(
+        podcast.itemId,
+        provider: podcast.provider,
+      );
+
+      if (episodes.isNotEmpty) {
+        final firstEpisode = episodes.first;
+        final episodeImage = getImageUrl(firstEpisode, size: size);
+        if (episodeImage != null) {
+          _logger.log('🎙️ Using episode cover for podcast: ${podcast.name}');
+          return episodeImage;
+        }
+      }
+    } catch (e) {
+      _logger.log('🎙️ Error fetching episode cover: $e');
+    }
+
+    // Fall back to podcast image even if it might be low quality
+    return podcastImage;
+  }
+
   /// Parse browse results into MediaItem episodes
   List<MediaItem> _parseBrowseEpisodes(List<dynamic> items) {
     final episodes = <MediaItem>[];

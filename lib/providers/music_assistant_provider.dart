@@ -99,6 +99,10 @@ class MusicAssistantProvider with ChangeNotifier {
     'tracks': [],
   };
 
+  // Podcast cover cache: podcastId -> best available cover URL
+  // This is populated with episode covers when podcast covers are low-res
+  final Map<String, String> _podcastCoverCache = {};
+
   // ============================================================================
   // GETTERS
   // ============================================================================
@@ -3741,10 +3745,45 @@ class MusicAssistantProvider with ChangeNotifier {
       _logger.log('🎙️ Loaded ${_podcasts.length} podcasts');
       _isLoadingPodcasts = false;
       notifyListeners();
+
+      // Fetch episode covers in background for podcasts with low-res images
+      _loadPodcastCoversInBackground();
     } catch (e) {
       _logger.log('⚠️ Failed to load podcasts: $e');
       _isLoadingPodcasts = false;
       notifyListeners();
+    }
+  }
+
+  /// Load higher-quality podcast covers from episodes in background
+  /// This runs after initial podcast load to avoid blocking the UI
+  Future<void> _loadPodcastCoversInBackground() async {
+    if (_api == null) return;
+
+    for (final podcast in _podcasts) {
+      try {
+        // Skip if already cached
+        if (_podcastCoverCache.containsKey(podcast.itemId)) continue;
+
+        // Get episodes for this podcast (just first one is enough)
+        final episodes = await _api!.getPodcastEpisodes(
+          podcast.itemId,
+          provider: podcast.provider,
+        );
+
+        if (episodes.isNotEmpty) {
+          final firstEpisode = episodes.first;
+          final episodeImage = _api!.getImageUrl(firstEpisode, size: 1024);
+
+          if (episodeImage != null) {
+            _podcastCoverCache[podcast.itemId] = episodeImage;
+            _logger.log('🎙️ Cached episode cover for ${podcast.name}');
+            notifyListeners(); // Update UI with new cover
+          }
+        }
+      } catch (e) {
+        _logger.log('⚠️ Failed to load cover for ${podcast.name}: $e');
+      }
     }
   }
 
@@ -3832,6 +3871,17 @@ class MusicAssistantProvider with ChangeNotifier {
 
   String? getImageUrl(MediaItem item, {int size = 256}) {
     return _api?.getImageUrl(item, size: size);
+  }
+
+  /// Get best available podcast cover URL
+  /// Checks the episode cover cache first (for higher quality covers)
+  /// Falls back to the podcast's own image if no cached cover exists
+  String? getPodcastImageUrl(MediaItem podcast, {int size = 1024}) {
+    final cachedUrl = _podcastCoverCache[podcast.itemId];
+    if (cachedUrl != null) {
+      return cachedUrl;
+    }
+    return _api?.getImageUrl(podcast, size: size);
   }
 
   /// Get artist image URL with fallback to external sources (Deezer, Fanart.tv)

@@ -2261,7 +2261,6 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
 
     // PERF: Request larger images from API but decode at appropriate size for memory
-    final apiImageSize = 1024; // Request higher quality from API
     final cacheSize = _podcastsViewMode == 'grid3' ? 300 : 400; // Memory decode size
 
     return RefreshIndicator(
@@ -2276,7 +2275,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               itemCount: podcasts.length,
               itemBuilder: (context, index) {
                 final podcast = podcasts[index];
-                final imageUrl = maProvider.getImageUrl(podcast, size: apiImageSize);
+                // Use getPodcastImageUrl for better quality (uses episode covers)
+                final imageUrl = maProvider.getPodcastImageUrl(podcast);
 
                 return ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -2350,16 +2350,17 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               itemCount: podcasts.length,
               itemBuilder: (context, index) {
                 final podcast = podcasts[index];
-                return _buildPodcastCard(podcast, maProvider, apiImageSize, cacheSize);
+                return _buildPodcastCard(podcast, maProvider, cacheSize);
               },
             ),
     );
   }
 
-  Widget _buildPodcastCard(MediaItem podcast, MusicAssistantProvider maProvider, int apiImageSize, int cacheSize) {
+  Widget _buildPodcastCard(MediaItem podcast, MusicAssistantProvider maProvider, int cacheSize) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final imageUrl = maProvider.getImageUrl(podcast, size: apiImageSize);
+    // Use getPodcastImageUrl for better quality (uses episode covers)
+    final imageUrl = maProvider.getPodcastImageUrl(podcast);
 
     return GestureDetector(
       onTap: () => _openPodcastDetails(podcast, maProvider, imageUrl),

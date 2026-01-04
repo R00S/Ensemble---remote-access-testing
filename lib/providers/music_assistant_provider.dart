@@ -3756,7 +3756,7 @@ class MusicAssistantProvider with ChangeNotifier {
   }
 
   /// Load higher-quality podcast covers from episodes in background
-  /// Only used as fallback when podcast itself has no cover image
+  /// Uses episode cover if: podcast has no cover, OR episode has same image at higher quality
   Future<void> _loadPodcastCoversInBackground() async {
     if (_api == null) return;
 
@@ -3765,34 +3765,61 @@ class MusicAssistantProvider with ChangeNotifier {
         // Skip if already cached
         if (_podcastCoverCache.containsKey(podcast.itemId)) continue;
 
-        // Check if podcast already has its own cover - if so, don't override
         final podcastOwnImage = _api!.getImageUrl(podcast, size: 1024);
-        if (podcastOwnImage != null) {
-          // Podcast has its own cover, no need to fetch from episodes
-          continue;
-        }
-
-        // Podcast has no cover - try to get one from the first episode
-        _logger.log('🎙️ Podcast "${podcast.name}" has no cover, fetching from episodes...');
 
         final episodes = await _api!.getPodcastEpisodes(
           podcast.itemId,
           provider: podcast.provider,
         );
 
-        if (episodes.isNotEmpty) {
-          final firstEpisode = episodes.first;
-          final episodeImage = _api!.getImageUrl(firstEpisode, size: 1024);
+        if (episodes.isEmpty) continue;
 
-          if (episodeImage != null) {
-            _podcastCoverCache[podcast.itemId] = episodeImage;
-            _logger.log('🎙️ Using episode cover for ${podcast.name} (podcast had no cover)');
-            notifyListeners(); // Update UI with new cover
-          }
+        final firstEpisode = episodes.first;
+        final episodeImage = _api!.getImageUrl(firstEpisode, size: 1024);
+
+        if (episodeImage == null) continue;
+
+        if (podcastOwnImage == null) {
+          // Podcast has no cover - use episode cover
+          _podcastCoverCache[podcast.itemId] = episodeImage;
+          _logger.log('🎙️ Using episode cover for ${podcast.name} (podcast had no cover)');
+          notifyListeners();
+        } else if (_isSameImageSource(podcastOwnImage, episodeImage)) {
+          // Same image source - use episode version (likely higher quality)
+          _podcastCoverCache[podcast.itemId] = episodeImage;
+          _logger.log('🎙️ Using episode cover for ${podcast.name} (same image, better quality)');
+          notifyListeners();
+        } else {
+          // Different images - podcast has unique episodes, keep podcast cover
+          _logger.log('🎙️ Keeping podcast cover for ${podcast.name} (episodes have different covers)');
         }
       } catch (e) {
         _logger.log('⚠️ Failed to load cover for ${podcast.name}: $e');
       }
+    }
+  }
+
+  /// Check if two image URLs point to the same source image (ignoring size params)
+  bool _isSameImageSource(String url1, String url2) {
+    try {
+      final uri1 = Uri.parse(url1);
+      final uri2 = Uri.parse(url2);
+
+      // Extract the 'path' query parameter which identifies the actual image
+      final path1 = uri1.queryParameters['path'];
+      final path2 = uri2.queryParameters['path'];
+
+      if (path1 != null && path2 != null) {
+        return path1 == path2;
+      }
+
+      // Fallback: compare URLs without size parameter
+      final params1 = Map<String, String>.from(uri1.queryParameters)..remove('size');
+      final params2 = Map<String, String>.from(uri2.queryParameters)..remove('size');
+
+      return params1.toString() == params2.toString();
+    } catch (e) {
+      return false;
     }
   }
 

@@ -227,55 +227,56 @@ class MusicAssistantProvider with ChangeNotifier {
     return uri.contains('podcast_episode') || uri.contains('podcast/');
   }
 
+  /// Whether we're currently playing a radio station
+  /// Detected by checking if the current track's URI contains 'radio/' or media_type is 'radio'
+  bool get isPlayingRadio {
+    final uri = _currentTrack?.uri;
+    if (uri == null) return false;
+    return uri.contains('library://radio/') || uri.contains('/radio/');
+  }
+
+  /// Get the radio station name when playing a radio stream
+  /// Returns the station name from album (where MA puts it for radio streams)
+  String? get currentRadioStationName {
+    if (!isPlayingRadio || _currentTrack == null) return null;
+
+    // For radio, the station name is typically in the album field
+    if (_currentTrack!.album != null && _currentTrack!.album!.name.isNotEmpty) {
+      return _currentTrack!.album!.name;
+    }
+    return null;
+  }
+
   /// Get the podcast name when playing a podcast episode
   /// Returns the podcast name from metadata, album name, or artist name
   String? get currentPodcastName {
     if (!isPlayingPodcast || _currentTrack == null) return null;
 
-    // Debug logging to understand podcast data structure
-    _logger.log('🎙️ Getting podcast name for: ${_currentTrack!.name}');
-    _logger.log('🎙️ Track URI: ${_currentTrack!.uri}');
-    _logger.log('🎙️ Album: ${_currentTrack!.album?.name}');
-    _logger.log('🎙️ Artists: ${_currentTrack!.artists?.map((a) => a.name).join(", ")}');
-    _logger.log('🎙️ Metadata keys: ${_currentTrack!.metadata?.keys.toList()}');
-
     // Try metadata first (if episode has parent podcast info)
     final metadata = _currentTrack!.metadata;
     if (metadata != null) {
-      // Log all metadata for debugging
-      _logger.log('🎙️ Full metadata: $metadata');
-
       // Check for podcast_name or podcast.name in metadata
       if (metadata['podcast_name'] != null) {
-        _logger.log('🎙️ Found podcast_name in metadata');
         return metadata['podcast_name'] as String;
       }
       if (metadata['podcast'] is Map) {
         final podcast = metadata['podcast'] as Map;
         if (podcast['name'] != null) {
-          _logger.log('🎙️ Found podcast.name in metadata');
           return podcast['name'] as String;
         }
-      }
-      // Check for 'title' in metadata (some providers put podcast name here)
-      if (metadata['title'] != null && metadata['title'] != _currentTrack!.name) {
-        _logger.log('🎙️ Found title in metadata: ${metadata['title']}');
       }
     }
     // Fall back to album name (often contains podcast name)
     if (_currentTrack!.album != null && _currentTrack!.album!.name.isNotEmpty) {
-      _logger.log('🎙️ Using album name as podcast name');
       return _currentTrack!.album!.name;
     }
     // Fall back to artist (sometimes the podcast name is set as artist)
     if (_currentTrack!.artists != null && _currentTrack!.artists!.isNotEmpty) {
       final artistName = _currentTrack!.artists!.first.name;
       if (artistName != 'Unknown Artist' && artistName.isNotEmpty) {
-        _logger.log('🎙️ Using artist name as podcast name');
         return artistName;
       }
     }
-    _logger.log('🎙️ No podcast name found, returning null');
     return null;
   }
 
@@ -1911,6 +1912,44 @@ class MusicAssistantProvider with ChangeNotifier {
           var trackTitle = currentMedia['title'] as String? ?? 'Unknown Track';
           var artistName = currentMedia['artist'] as String?;
 
+          // Check if this is a radio stream
+          final isRadioStream = uri != null && (uri.contains('library://radio/') || uri.contains('/radio/'));
+
+          // For radio streams, log the currentMedia to debug metadata structure
+          if (isRadioStream) {
+            _logger.log('📻 Radio currentMedia keys: ${currentMedia.keys.toList()}');
+            _logger.log('📻 Radio currentMedia: $currentMedia');
+          }
+
+          // For radio streams, try additional artist sources if primary is missing
+          if (isRadioStream && (artistName == null || artistName.isEmpty)) {
+            // Check for artists array (like in Track.fromJson)
+            final artistsData = currentMedia['artists'];
+            if (artistsData is List && artistsData.isNotEmpty) {
+              final firstArtist = artistsData.first;
+              if (firstArtist is Map<String, dynamic>) {
+                artistName = firstArtist['name'] as String?;
+              } else if (firstArtist is String) {
+                artistName = firstArtist;
+              }
+              _logger.log('📻 Found artist from artists array: $artistName');
+            }
+
+            // Check for stream_title which might contain "Artist - Title" format
+            final streamTitle = currentMedia['stream_title'] as String?;
+            if (streamTitle != null && streamTitle.contains(' - ') && artistName == null) {
+              final parts = streamTitle.split(' - ');
+              if (parts.length >= 2) {
+                artistName = parts[0].trim();
+                // If trackTitle is still the default or matches the stream_title, update it too
+                if (trackTitle == 'Unknown Track' || trackTitle == streamTitle) {
+                  trackTitle = parts.sublist(1).join(' - ').trim();
+                }
+                _logger.log('📻 Parsed artist from stream_title: $artistName, title: $trackTitle');
+              }
+            }
+          }
+
           if ((artistName == null || artistName == 'Unknown Artist') && trackTitle.contains(' - ')) {
             final parts = trackTitle.split(' - ');
             if (parts.length >= 2) {
@@ -1940,15 +1979,22 @@ class MusicAssistantProvider with ChangeNotifier {
           final newHasImage = metadata != null;
           final newHasAlbum = albumName != null;
           final existingHasAlbum = existingTrack?.album != null;
+          final newHasProperArtist = artistName != 'Unknown Artist';
 
           // For podcasts, album info is crucial (it's the podcast name)
           // If new track has album but existing doesn't, prefer new or merge
           final isPodcastUri = uri != null && (uri.contains('podcast_episode') || uri.contains('podcast/'));
 
+          // For radio streams, always update when we have new metadata (song changes frequently)
+          // This ensures radio artist/title changes are reflected immediately
+          final isRadioUri = uri != null && (uri.contains('library://radio/') || uri.contains('/radio/'));
+
           // Keep existing if it has proper artist OR has image that new one lacks
           // BUT for podcasts, if new has album and existing doesn't, we need that album data
+          // AND for radio, always update when new track has proper artist (song changed)
           final keepExisting = (existingHasProperArtist || (existingHasImage && !newHasImage))
-              && !(isPodcastUri && newHasAlbum && !existingHasAlbum);
+              && !(isPodcastUri && newHasAlbum && !existingHasAlbum)
+              && !(isRadioUri && newHasProperArtist);
 
           if (!keepExisting) {
             _cacheService.setCachedTrackForPlayer(playerId, trackFromEvent);
@@ -2005,11 +2051,50 @@ class MusicAssistantProvider with ChangeNotifier {
 
       if (currentMedia == null) return;
 
-      final title = currentMedia['title'] as String? ?? 'Unknown Track';
-      final artist = currentMedia['artist'] as String? ?? 'Unknown Artist';
+      var title = currentMedia['title'] as String? ?? 'Unknown Track';
+      var artist = currentMedia['artist'] as String?;
       final album = currentMedia['album'] as String?;
       var imageUrl = currentMedia['image_url'] as String?;
       final durationSecs = (currentMedia['duration'] as num?)?.toInt();
+      final notificationUri = currentMedia['uri'] as String?;
+      final isRadioNotification = notificationUri != null &&
+          (notificationUri.contains('library://radio/') || notificationUri.contains('/radio/'));
+
+      // For radio streams, try to extract artist from various sources
+      if (isRadioNotification && (artist == null || artist.isEmpty)) {
+        // Check for artists array
+        final artistsData = currentMedia['artists'];
+        if (artistsData is List && artistsData.isNotEmpty) {
+          final firstArtist = artistsData.first;
+          if (firstArtist is Map<String, dynamic>) {
+            artist = firstArtist['name'] as String?;
+          } else if (firstArtist is String) {
+            artist = firstArtist;
+          }
+        }
+
+        // Check for stream_title with "Artist - Title" format
+        final streamTitle = currentMedia['stream_title'] as String?;
+        if (streamTitle != null && streamTitle.contains(' - ') && artist == null) {
+          final parts = streamTitle.split(' - ');
+          if (parts.length >= 2) {
+            artist = parts[0].trim();
+            if (title == 'Unknown Track' || title == streamTitle) {
+              title = parts.sublist(1).join(' - ').trim();
+            }
+          }
+        }
+      }
+
+      // Parse artist from title if still missing
+      if ((artist == null || artist == 'Unknown Artist') && title.contains(' - ')) {
+        final parts = title.split(' - ');
+        if (parts.length >= 2) {
+          artist = parts[0].trim();
+          title = parts.sublist(1).join(' - ').trim();
+        }
+      }
+      artist ??= 'Unknown Artist';
 
       if (imageUrl != null && _serverUrl != null) {
         try {

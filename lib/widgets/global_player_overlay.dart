@@ -643,7 +643,8 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
             left: 24,
             right: 24,
             // Position so skip button is ~32px above mini player, matching skip-to-miniplayer gap
-            bottom: BottomSpacing.navBarHeight + BottomSpacing.miniPlayerHeight + MediaQuery.of(context).padding.bottom + 32,
+            // Use viewPadding to match BottomNavigationBar's height calculation
+            bottom: BottomSpacing.navBarHeight + BottomSpacing.miniPlayerHeight + MediaQuery.of(context).viewPadding.bottom + 32,
             child: FadeTransition(
               opacity: CurvedAnimation(
                 parent: _welcomeFadeController,
@@ -684,7 +685,8 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
           PlayerRevealOverlay(
             key: _revealKey,
             onDismiss: _hidePlayerReveal,
-            miniPlayerBottom: BottomSpacing.navBarHeight + MediaQuery.of(context).padding.bottom + 12,
+            // Use viewPadding to match BottomNavigationBar's height calculation
+            miniPlayerBottom: BottomSpacing.navBarHeight + MediaQuery.of(context).viewPadding.bottom + 12,
             miniPlayerHeight: 64,
             showOnboardingHints: _isOnboardingReveal,
           ),

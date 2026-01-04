@@ -1068,7 +1068,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     ThemeProvider themeProvider,
   ) {
     final screenSize = MediaQuery.of(context).size;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    // Use viewPadding to match BottomNavigationBar's height calculation
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -1158,7 +1159,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     ThemeProvider themeProvider,
   ) {
     final screenSize = MediaQuery.of(context).size;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    // Use viewPadding (not padding) to match BottomNavigationBar's height calculation
+    // viewPadding represents permanent system UI, padding can change (e.g., keyboard)
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
     final topPadding = MediaQuery.of(context).padding.top;
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1197,10 +1200,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final primaryColor = adaptiveScheme?.primary ?? Colors.white;
 
     // Always position above bottom nav bar
+    // Overlap by 2px when expanded to eliminate any subpixel rendering gaps
     final bottomNavSpace = _bottomNavHeight + bottomPadding;
     final collapsedBottomOffset = bottomNavSpace + _collapsedMargin;
-    final expandedBottomOffset = bottomNavSpace;
-    final expandedHeight = screenSize.height - bottomNavSpace;
+    final expandedBottomOffset = bottomNavSpace - 2;
+    final expandedHeight = screenSize.height - bottomNavSpace + 2;
 
     // Apply slide offset to hide mini player (slides down off-screen)
     // Apply bounce offset for reveal animation (small downward movement)
@@ -1302,7 +1306,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     // - Progress bar + times: ~70px
     // Total from bottom edge: ~48 + 40 + 70 + 64 = 222, plus safe area padding
     // Position progress bar so controls section is anchored at bottom
-    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+    // Use viewPadding for consistency with player height calculation
+    final bottomSafeArea = MediaQuery.of(context).viewPadding.bottom;
     final controlsSectionHeight = 222.0; // Total height of progress + controls + volume
     final playButtonHalfHeight = 36.0; // Half of the 72px play button container
     final expandedProgressTop = screenSize.height - bottomSafeArea - controlsSectionHeight - 24 - playButtonHalfHeight;
@@ -1501,7 +1506,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             borderRadius: BorderRadius.circular(borderRadius),
             elevation: _lerpDouble(4, 0, t),
             shadowColor: Colors.black.withOpacity(0.3),
-            clipBehavior: Clip.antiAlias,
+            // Use hardEdge when fully expanded (no border radius) to avoid anti-alias artifacts
+            // Use antiAlias when collapsed/animating to smooth rounded corners
+            clipBehavior: borderRadius > 0.5 ? Clip.antiAlias : Clip.hardEdge,
             child: SizedBox(
             width: width,
             height: height,
@@ -1764,7 +1771,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   Positioned(
                     left: contentPadding,
                     right: contentPadding,
-                    top: expandedAlbumTop + (currentTrack.album != null ? 24 : 0),
+                    top: expandedAlbumTop + (maProvider.isPlayingAudiobook ? 24 : (currentTrack.album != null ? 24 : 0)),
                     child: FadeTransition(
                       opacity: _expandAnimation.drive(
                         Tween(begin: 0.0, end: 1.0).chain(
@@ -1893,18 +1900,70 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   right: t > 0.5 ? 0 : collapsedControlsRight - miniPlayerSlideOffset,
                   top: controlsTop,
                   child: (maProvider.isPlayingAudiobook || maProvider.isPlayingPodcast)
-                      ? _buildAudiobookControls(
-                          maProvider: maProvider,
-                          selectedPlayer: selectedPlayer,
-                          textColor: textColor,
-                          primaryColor: primaryColor,
-                          backgroundColor: backgroundColor,
-                          skipButtonSize: skipButtonSize,
-                          playButtonSize: playButtonSize,
-                          playButtonContainerSize: playButtonContainerSize,
-                          t: t,
-                          expandedElementsOpacity: expandedElementsOpacity,
-                        )
+                      // When device reveal is visible (player list shown), use compact controls
+                      // for audiobooks/podcasts: Play, Forward 30, Power
+                      ? widget.isDeviceRevealVisible && t < 0.5
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                // Play/Pause - compact like PlayerCard
+                                Transform.translate(
+                                  offset: const Offset(3, 0),
+                                  child: SizedBox(
+                                    width: 44,
+                                    height: 44,
+                                    child: IconButton(
+                                      icon: Icon(
+                                        selectedPlayer.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                        color: textColor,
+                                        size: 28,
+                                      ),
+                                      onPressed: () => maProvider.playPauseSelectedPlayer(),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ),
+                                // Forward 30 seconds
+                                Transform.translate(
+                                  offset: const Offset(6, 0),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      Icons.forward_30_rounded,
+                                      color: textColor,
+                                      size: 28,
+                                    ),
+                                    onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, 30),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ),
+                                // Power button
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.power_settings_new_rounded,
+                                    color: selectedPlayer.powered ? textColor : textColor.withOpacity(0.5),
+                                    size: 20,
+                                  ),
+                                  onPressed: () => maProvider.togglePower(selectedPlayer.playerId),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                            )
+                          : _buildAudiobookControls(
+                              maProvider: maProvider,
+                              selectedPlayer: selectedPlayer,
+                              textColor: textColor,
+                              primaryColor: primaryColor,
+                              backgroundColor: backgroundColor,
+                              skipButtonSize: skipButtonSize,
+                              playButtonSize: playButtonSize,
+                              playButtonContainerSize: playButtonContainerSize,
+                              t: t,
+                              expandedElementsOpacity: expandedElementsOpacity,
+                            )
                       // When device reveal is visible (player list shown), use compact controls
                       // like PlayerCard: Play, Next, Power - matching other players in the list
                       : widget.isDeviceRevealVisible && t < 0.5
@@ -2335,7 +2394,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   }
 
   /// Build audiobook-specific playback controls
-  /// Layout: [Prev Chapter] [-30s] [Play/Pause] [+30s] [Next Chapter]
+  /// Collapsed: [-30s] [Play/Pause] [+30s]
+  /// Expanded: [Prev Chapter] [-30s] [-10s] [Play/Pause] [+10s] [+30s] [Next Chapter]
   Widget _buildAudiobookControls({
     required MusicAssistantProvider maProvider,
     required dynamic selectedPlayer,
@@ -2349,19 +2409,20 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     required double expandedElementsOpacity,
   }) {
     final hasChapters = maProvider.currentAudiobook?.chapters?.isNotEmpty ?? false;
+    final isExpanded = t > 0.5;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: t > 0.5 ? MainAxisAlignment.center : MainAxisAlignment.end,
+      mainAxisAlignment: isExpanded ? MainAxisAlignment.center : MainAxisAlignment.end,
       children: [
         // Previous Chapter (expanded only, if chapters available)
-        if (t > 0.5 && expandedElementsOpacity > 0.1 && hasChapters)
+        if (isExpanded && expandedElementsOpacity > 0.1 && hasChapters)
           _buildSecondaryButton(
             icon: Icons.skip_previous_rounded,
             color: textColor.withOpacity(expandedElementsOpacity),
             onPressed: () => maProvider.seekToPreviousChapter(selectedPlayer.playerId),
           ),
-        if (t > 0.5 && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
+        if (isExpanded && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
 
         // Rewind 30 seconds
         _buildControlButton(
@@ -2369,9 +2430,21 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           color: textColor,
           size: skipButtonSize,
           onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, -30),
-          useAnimation: t > 0.5,
+          useAnimation: isExpanded,
         ),
-        SizedBox(width: _lerpDouble(0, 20, t)),
+
+        // Rewind 10 seconds (expanded only, same size as 30s)
+        if (isExpanded) ...[
+          SizedBox(width: _lerpDouble(0, 8, t)),
+          _buildControlButton(
+            icon: Icons.replay_10_rounded,
+            color: textColor,
+            size: skipButtonSize,
+            onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, -10),
+            useAnimation: true,
+          ),
+        ],
+        SizedBox(width: _lerpDouble(0, 12, t)),
 
         // Play/Pause
         _buildPlayButton(
@@ -2385,7 +2458,19 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           onPressed: () => maProvider.playPauseSelectedPlayer(),
           onLongPress: () => maProvider.stopPlayer(selectedPlayer.playerId),
         ),
-        SizedBox(width: _lerpDouble(0, 20, t)),
+        SizedBox(width: _lerpDouble(0, 12, t)),
+
+        // Forward 10 seconds (expanded only, same size as 30s)
+        if (isExpanded) ...[
+          _buildControlButton(
+            icon: Icons.forward_10_rounded,
+            color: textColor,
+            size: skipButtonSize,
+            onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, 10),
+            useAnimation: true,
+          ),
+          SizedBox(width: _lerpDouble(0, 8, t)),
+        ],
 
         // Forward 30 seconds
         _buildControlButton(
@@ -2393,12 +2478,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           color: textColor,
           size: skipButtonSize,
           onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, 30),
-          useAnimation: t > 0.5,
+          useAnimation: isExpanded,
         ),
 
         // Next Chapter (expanded only, if chapters available)
-        if (t > 0.5 && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
-        if (t > 0.5 && expandedElementsOpacity > 0.1 && hasChapters)
+        if (isExpanded && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
+        if (isExpanded && expandedElementsOpacity > 0.1 && hasChapters)
           _buildSecondaryButton(
             icon: Icons.skip_next_rounded,
             color: textColor.withOpacity(expandedElementsOpacity),

@@ -114,6 +114,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   final ScrollController _authorsScrollController = ScrollController();
   final ScrollController _audiobooksScrollController = ScrollController();
   final ScrollController _seriesScrollController = ScrollController();
+  final ScrollController _podcastsScrollController = ScrollController();
+  final ScrollController _radioScrollController = ScrollController();
 
   int get _tabCount {
     switch (_selectedMediaType) {
@@ -585,6 +587,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     _authorsScrollController.dispose();
     _audiobooksScrollController.dispose();
     _seriesScrollController.dispose();
+    _podcastsScrollController.dispose();
+    _radioScrollController.dispose();
     super.dispose();
   }
 
@@ -2269,12 +2273,20 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     // Use consistent 256 for all views to improve hero animation smoothness (matches detail screen)
     const cacheSize = 256;
 
+    // Generate podcast names for letter scrollbar
+    final podcastNames = podcasts.map((p) => p.name).toList();
+
     return RefreshIndicator(
       color: colorScheme.primary,
       backgroundColor: colorScheme.surface,
       onRefresh: () => maProvider.loadPodcasts(),
-      child: _podcastsViewMode == 'list'
+      child: LetterScrollbar(
+        controller: _podcastsScrollController,
+        items: podcastNames,
+        onDragStateChanged: _onLetterScrollbarDragChanged,
+        child: _podcastsViewMode == 'list'
           ? ListView.builder(
+              controller: _podcastsScrollController,
               key: const PageStorageKey<String>('podcasts_list'),
               cacheExtent: 1000,
               padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.withMiniPlayer),
@@ -2340,6 +2352,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               },
             )
           : GridView.builder(
+              controller: _podcastsScrollController,
               key: PageStorageKey<String>('podcasts_grid_$_podcastsViewMode'),
               cacheExtent: 1000,
               padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
@@ -2355,6 +2368,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 return _buildPodcastCard(podcast, maProvider, cacheSize);
               },
             ),
+      ),
     );
   }
 
@@ -2484,12 +2498,20 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     // PERF: Use appropriate cache size based on view mode
     final cacheSize = _radioViewMode == 'grid3' ? 200 : 256;
 
+    // Generate radio station names for letter scrollbar
+    final radioNames = radioStations.map((s) => s.name).toList();
+
     return RefreshIndicator(
       color: colorScheme.primary,
       backgroundColor: colorScheme.surface,
       onRefresh: () => maProvider.loadRadioStations(),
-      child: _radioViewMode == 'list'
+      child: LetterScrollbar(
+        controller: _radioScrollController,
+        items: radioNames,
+        onDragStateChanged: _onLetterScrollbarDragChanged,
+        child: _radioViewMode == 'list'
           ? ListView.builder(
+              controller: _radioScrollController,
               key: const PageStorageKey<String>('radio_stations_list'),
               cacheExtent: 1000,
               padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.withMiniPlayer),
@@ -2555,6 +2577,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               },
             )
           : GridView.builder(
+              controller: _radioScrollController,
               key: PageStorageKey<String>('radio_stations_grid_$_radioViewMode'),
               cacheExtent: 1000,
               padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
@@ -2570,6 +2593,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 return _buildRadioCard(station, maProvider, cacheSize);
               },
             ),
+      ),
     );
   }
 

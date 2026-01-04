@@ -2288,37 +2288,34 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   leading: Hero(
                     tag: HeroTags.podcastCover + (podcast.uri ?? podcast.itemId) + '_library',
+                    // Match detail screen: ClipRRect(16) → Container → CachedNetworkImage
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: imageUrl != null
-                          ? CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.cover,
-                              memCacheWidth: cacheSize,
-                              memCacheHeight: cacheSize,
-                              fadeInDuration: Duration.zero,
-                              fadeOutDuration: Duration.zero,
-                              placeholder: (context, url) => Container(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        color: colorScheme.surfaceContainerHighest,
+                        child: imageUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: imageUrl,
                                 width: 56,
                                 height: 56,
-                                color: colorScheme.surfaceVariant,
-                                child: Icon(MdiIcons.podcast, color: colorScheme.onSurfaceVariant),
+                                fit: BoxFit.cover,
+                                memCacheWidth: cacheSize,
+                                memCacheHeight: cacheSize,
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
+                                placeholder: (_, __) => const SizedBox(),
+                                errorWidget: (_, __, ___) => Icon(
+                                  MdiIcons.podcast,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              )
+                            : Icon(
+                                MdiIcons.podcast,
+                                color: colorScheme.onSurfaceVariant,
                               ),
-                              errorWidget: (context, url, error) => Container(
-                                width: 56,
-                                height: 56,
-                                color: colorScheme.surfaceVariant,
-                                child: Icon(MdiIcons.podcast, color: colorScheme.onSurfaceVariant),
-                              ),
-                            )
-                          : Container(
-                              width: 56,
-                              height: 56,
-                              color: colorScheme.surfaceVariant,
-                              child: Icon(MdiIcons.podcast, color: colorScheme.onSurfaceVariant),
-                            ),
+                      ),
                     ),
                   ),
                   title: Text(
@@ -2379,8 +2376,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               tag: HeroTags.podcastCover + (podcast.uri ?? podcast.itemId) + '_library',
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
+                // Match detail screen structure exactly
                 child: Container(
-                  color: colorScheme.surfaceVariant,
+                  color: colorScheme.surfaceContainerHighest,
                   child: imageUrl != null
                       ? CachedNetworkImage(
                           imageUrl: imageUrl,
@@ -2389,8 +2387,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                           memCacheHeight: cacheSize,
                           fadeInDuration: Duration.zero,
                           fadeOutDuration: Duration.zero,
-                          placeholder: (context, url) => const SizedBox(),
-                          errorWidget: (context, url, error) => Center(
+                          placeholder: (_, __) => const SizedBox(),
+                          errorWidget: (_, __, ___) => Center(
                             child: Icon(
                               MdiIcons.podcast,
                               size: 48,

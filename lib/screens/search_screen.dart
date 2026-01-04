@@ -1633,7 +1633,7 @@ class SearchScreenState extends State<SearchScreen> {
         subtitle: showType
             ? _buildTypePill('podcast', colorScheme)
             : Text(
-                S.of(context)!.podcast,
+                S.of(context)!.podcasts,
                 style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1930,7 +1930,7 @@ class SearchScreenState extends State<SearchScreen> {
       case 'podcast':
         backgroundColor = Colors.green.shade100;
         textColor = Colors.green.shade800;
-        label = S.of(context)!.podcast;
+        label = S.of(context)!.podcasts;
         break;
       default:
         backgroundColor = colorScheme.surfaceVariant;

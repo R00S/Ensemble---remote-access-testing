@@ -120,6 +120,22 @@ class CacheService {
     _logger.log('🗑️ Home screen cache invalidated');
   }
 
+  /// Invalidate home album caches (call when albums are added/removed from library)
+  void invalidateHomeAlbumCaches() {
+    _cachedRecentAlbums = null;
+    _recentAlbumsLastFetched = null;
+    _cachedDiscoverAlbums = null;
+    _discoverAlbumsLastFetched = null;
+    _logger.log('🗑️ Home album caches invalidated');
+  }
+
+  /// Invalidate home artist caches (call when artists are added/removed from library)
+  void invalidateHomeArtistCaches() {
+    _cachedDiscoverArtists = null;
+    _discoverArtistsLastFetched = null;
+    _logger.log('🗑️ Home artist caches invalidated');
+  }
+
   // ============================================================================
   // DETAIL SCREEN CACHING
   // ============================================================================
@@ -145,10 +161,17 @@ class CacheService {
     _logger.log('✅ Cached ${tracks.length} tracks for album $cacheKey');
   }
 
-  /// Invalidate album tracks cache
+  /// Invalidate album tracks cache for a specific album
   void invalidateAlbumTracksCache(String albumId) {
     _albumTracksCache.remove(albumId);
     _albumTracksCacheTime.remove(albumId);
+  }
+
+  /// Invalidate all album tracks caches (call when tracks are added/removed from library)
+  void invalidateAllAlbumTracksCaches() {
+    _albumTracksCache.clear();
+    _albumTracksCacheTime.clear();
+    _logger.log('🗑️ All album tracks caches invalidated');
   }
 
   /// Check if playlist tracks cache is valid
@@ -172,10 +195,17 @@ class CacheService {
     _logger.log('✅ Cached ${tracks.length} tracks for playlist $cacheKey');
   }
 
-  /// Invalidate playlist tracks cache
+  /// Invalidate playlist tracks cache for a specific playlist
   void invalidatePlaylistTracksCache(String playlistId) {
     _playlistTracksCache.remove(playlistId);
     _playlistTracksCacheTime.remove(playlistId);
+  }
+
+  /// Invalidate all playlist tracks caches (call when tracks are added/removed from library)
+  void invalidateAllPlaylistTracksCaches() {
+    _playlistTracksCache.clear();
+    _playlistTracksCacheTime.clear();
+    _logger.log('🗑️ All playlist tracks caches invalidated');
   }
 
   /// Check if artist albums cache is valid
@@ -197,6 +227,13 @@ class CacheService {
     _artistAlbumsCacheTime[cacheKey] = DateTime.now();
     _evictOldestEntries(_artistAlbumsCache, _artistAlbumsCacheTime, _maxDetailCacheSize);
     _logger.log('✅ Cached ${albums.length} albums for artist $cacheKey');
+  }
+
+  /// Invalidate all artist albums caches (call when albums are added/removed from library)
+  void invalidateArtistAlbumsCache() {
+    _artistAlbumsCache.clear();
+    _artistAlbumsCacheTime.clear();
+    _logger.log('🗑️ Artist albums cache invalidated');
   }
 
   // ============================================================================

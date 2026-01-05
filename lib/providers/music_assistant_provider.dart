@@ -1137,8 +1137,17 @@ class MusicAssistantProvider with ChangeNotifier {
         await _api!.addItemToLibrary(mediaType, itemId, provider);
         // Trigger a background refresh to update library with new item
         _scheduleLibraryRefresh(mediaType);
-        // Invalidate search cache so next search shows updated library status
+        // Invalidate caches that could show stale inLibrary status
         _cacheService.invalidateSearchCache();
+        if (mediaType == 'album') {
+          _cacheService.invalidateArtistAlbumsCache();
+          _cacheService.invalidateHomeAlbumCaches();
+        } else if (mediaType == 'track') {
+          _cacheService.invalidateAllAlbumTracksCaches();
+          _cacheService.invalidateAllPlaylistTracksCaches();
+        } else if (mediaType == 'artist') {
+          _cacheService.invalidateHomeArtistCaches();
+        }
         return true;
       } catch (e) {
         _logger.log('❌ Failed to add to library: $e');
@@ -1161,7 +1170,19 @@ class MusicAssistantProvider with ChangeNotifier {
       // OPTIMISTIC UPDATE: Update local cache immediately for instant UI feedback
       // This ensures library screens show the change even before API completes
       _removeFromLocalLibrary(mediaType, libraryItemId);
+      // Also mark as deleted in database cache so it doesn't reappear on next load
+      DatabaseService.instance.markCachedItemDeleted(mediaType, libraryItemId.toString());
+      // Invalidate caches that could show stale inLibrary status
       _cacheService.invalidateSearchCache();
+      if (mediaType == 'album') {
+        _cacheService.invalidateArtistAlbumsCache();
+        _cacheService.invalidateHomeAlbumCaches();
+      } else if (mediaType == 'track') {
+        _cacheService.invalidateAllAlbumTracksCaches();
+        _cacheService.invalidateAllPlaylistTracksCaches();
+      } else if (mediaType == 'artist') {
+        _cacheService.invalidateHomeArtistCaches();
+      }
 
       try {
         await _api!.removeItemFromLibrary(mediaType, libraryItemId);

@@ -171,6 +171,12 @@ class SyncService with ChangeNotifier {
       _logger.log('📥 Fetched ${albums.length} albums, ${artists.length} artists, '
                   '${audiobooks.length} audiobooks, ${playlists.length} playlists from MA');
 
+      // Clear old cache before saving fresh data (removes stale items)
+      await _db.clearCacheForType('album');
+      await _db.clearCacheForType('artist');
+      await _db.clearCacheForType('audiobook');
+      await _db.clearCacheForType('playlist');
+
       // Save to database cache
       await _saveAlbumsToCache(albums);
       await _saveArtistsToCache(artists);

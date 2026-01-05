@@ -157,6 +157,16 @@ class DatabaseService {
   /// Clear all cached data (useful for logout)
   Future<void> clearAllCache() => db.clearAllCache();
 
+  /// Clear cached items of a specific type (e.g., 'album', 'artist')
+  /// Used before re-syncing to remove stale items
+  Future<void> clearCacheForType(String itemType) => db.clearCache(itemType);
+
+  /// Mark a specific cached item as deleted
+  /// Used when removing items from library for immediate database update
+  Future<void> markCachedItemDeleted(String itemType, String itemId) {
+    return db.markItemsDeleted(itemType, [itemId]);
+  }
+
   // ============================================
   // Player Cache Convenience Methods
   // ============================================

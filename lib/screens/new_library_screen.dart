@@ -542,6 +542,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     // No setState needed - ValueListenableBuilder will rebuild only the filter chips
     _selectedTabIndex.value = index;
     _tabIndexNotifier.value = index;
+
+    // Reload artist filter setting when switching tabs (catches changes from settings screen)
+    _reloadArtistFilterSetting();
   }
 
   /// Handle scroll notifications to hide/show filter bars
@@ -2700,16 +2703,10 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   // ============ ARTISTS TAB ============
   Widget _buildArtistsTab(BuildContext context, S l10n) {
-    // Use FutureBuilder to read setting fresh each time (catches changes from settings screen)
-    return FutureBuilder<bool>(
-      future: SettingsService.getShowOnlyArtistsWithAlbums(),
-      builder: (context, settingSnapshot) {
-        final showOnlyWithAlbums = settingSnapshot.data ?? false;
-
-        // Use Selector for targeted rebuilds - only rebuild when artists, albums, or loading state changes
-        return Selector<MusicAssistantProvider, (List<Artist>, List<Album>, bool)>(
-          selector: (_, provider) => (provider.artists, provider.albums, provider.isLoading),
-          builder: (context, data, _) {
+    // Use Selector for targeted rebuilds - only rebuild when artists, albums, or loading state changes
+    return Selector<MusicAssistantProvider, (List<Artist>, List<Album>, bool)>(
+      selector: (_, provider) => (provider.artists, provider.albums, provider.isLoading),
+      builder: (context, data, _) {
             final (allArtists, allAlbums, isLoading) = data;
             final colorScheme = Theme.of(context).colorScheme;
 
@@ -2723,7 +2720,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 : allArtists.toList();
 
             // Filter to only show artists that have albums in library
-            if (showOnlyWithAlbums) {
+            if (_showOnlyArtistsWithAlbums) {
               final artistNamesWithAlbums = <String>{};
               for (final album in allAlbums) {
                 if (album.artists != null && album.artists!.isNotEmpty) {
@@ -2772,7 +2769,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 child: _artistsViewMode == 'list'
                     ? ListView.builder(
                         controller: _artistsScrollController,
-                        key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_${showOnlyWithAlbums ? 'albums' : 'all'}_$_artistsViewMode'),
+                        key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_${_showOnlyArtistsWithAlbums ? 'albums' : 'all'}_$_artistsViewMode'),
                         cacheExtent: 1000,
                         addAutomaticKeepAlives: false,
                         addRepaintBoundaries: false,
@@ -2789,7 +2786,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                       )
                     : GridView.builder(
                         controller: _artistsScrollController,
-                        key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_${showOnlyWithAlbums ? 'albums' : 'all'}_$_artistsViewMode'),
+                        key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_${_showOnlyArtistsWithAlbums ? 'albums' : 'all'}_$_artistsViewMode'),
                         cacheExtent: 1000,
                         addAutomaticKeepAlives: false,
                         addRepaintBoundaries: false,
@@ -2809,8 +2806,6 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               ),
             );
           },
-        );
-      },
     );
   }
 

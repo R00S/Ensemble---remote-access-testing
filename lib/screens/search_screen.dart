@@ -15,6 +15,7 @@ import '../widgets/artist_avatar.dart';
 import '../constants/hero_tags.dart';
 import '../theme/theme_provider.dart';
 import '../utils/page_transitions.dart';
+import '../utils/search/search_scoring.dart';
 import 'album_details_screen.dart';
 import 'artist_details_screen.dart';
 import 'playlist_details_screen.dart';
@@ -127,6 +128,9 @@ class SearchScreenState extends State<SearchScreen> {
   Map<String, List<_ListItem>> _cachedListItems = {};
   // PERF: Cache available filters to avoid recalculating during build
   List<String>? _cachedAvailableFilters;
+
+  // Advanced search scorer with fuzzy matching, stopword removal, etc.
+  final SearchScorer _searchScorer = SearchScorer();
 
   // Scroll-to-hide search bar (vertical scroll only)
   bool _isSearchBarVisible = true;
@@ -750,151 +754,15 @@ class SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// Calculate relevance score for a media item based on query match
+  /// Calculate relevance score for a media item based on query match.
+  ///
+  /// Uses advanced scoring with:
+  /// - Stopword removal ("the Ramones" finds "Ramones")
+  /// - Fuzzy matching (typo tolerance via Jaro-Winkler)
+  /// - N-gram matching (partial matches)
+  /// - Reverse matching (query contains result name)
   double _calculateRelevanceScore(MediaItem item, String query) {
-    final queryLower = query.toLowerCase().trim();
-    if (queryLower.isEmpty) return 0;
-
-    double score = 0;
-    final nameLower = item.name.toLowerCase();
-
-    // Primary name matching
-    if (nameLower == queryLower) {
-      score = 100; // Exact match
-    } else if (nameLower.startsWith(queryLower)) {
-      score = 80; // Starts with query
-    } else if (_matchesWordBoundary(nameLower, queryLower)) {
-      score = 60; // Contains query at word boundary
-    } else if (nameLower.contains(queryLower)) {
-      score = 40; // Contains query anywhere
-    } else {
-      score = 20; // Fuzzy/partial match (MA returned it, so some relevance)
-    }
-
-    // Bonus for library items (Album has inLibrary property)
-    if (item is Album && item.inLibrary) {
-      score += 10;
-    }
-
-    // Bonus for favorites
-    if (item.favorite == true) {
-      score += 5;
-    }
-
-    // Secondary field matching (artist/author/creator name)
-    if (item is Album) {
-      final artistLower = item.artistsString.toLowerCase();
-      if (artistLower == queryLower) {
-        score += 15; // Artist exact match
-      } else if (artistLower.contains(queryLower)) {
-        score += 8; // Artist contains query
-      }
-    } else if (item is Track) {
-      final artistLower = item.artistsString.toLowerCase();
-      if (artistLower == queryLower) {
-        score += 15;
-      } else if (artistLower.contains(queryLower)) {
-        score += 8;
-      }
-      // Also check album name for tracks
-      if (item.album?.name != null) {
-        final albumLower = item.album!.name.toLowerCase();
-        if (albumLower.contains(queryLower)) {
-          score += 5;
-        }
-      }
-    } else if (item is Audiobook) {
-      // Check audiobook author names
-      final authorLower = item.authorsString.toLowerCase();
-      if (authorLower == queryLower) {
-        score += 15; // Author exact match
-      } else if (authorLower.contains(queryLower)) {
-        score += 8; // Author contains query
-      }
-      // Also check narrator names
-      final narratorLower = item.narratorsString.toLowerCase();
-      if (narratorLower.contains(queryLower)) {
-        score += 5;
-      }
-    } else if (item.mediaType == MediaType.podcast || item.mediaType == MediaType.podcastEpisode) {
-      // Check podcast metadata for author/creator
-      final metadata = item.metadata;
-      bool foundCreatorMatch = false;
-      if (metadata != null) {
-        final author = (metadata['author'] as String? ?? '').toLowerCase();
-        final publisher = (metadata['publisher'] as String? ?? '').toLowerCase();
-        final owner = (metadata['owner'] as String? ?? '').toLowerCase();
-        final creator = (metadata['creator'] as String? ?? '').toLowerCase();
-
-        // Check all possible creator fields
-        final creatorFields = [author, publisher, owner, creator].where((s) => s.isNotEmpty);
-        bool foundExact = false;
-        bool foundContains = false;
-        for (final field in creatorFields) {
-          if (field == queryLower) {
-            foundExact = true;
-            break;
-          } else if (field.contains(queryLower)) {
-            foundContains = true;
-          }
-        }
-        if (foundExact) {
-          score += 15; // Creator exact match
-          foundCreatorMatch = true;
-        } else if (foundContains) {
-          score += 8; // Creator contains query
-          foundCreatorMatch = true;
-        }
-
-        // Also check description for keyword matches
-        final description = (metadata['description'] as String? ?? '').toLowerCase();
-        if (description.contains(queryLower)) {
-          score += 5; // Increased from 3 to match other media types
-        }
-      }
-
-      // Fallback: If no creator metadata matched, but query matches strongly in name,
-      // give a boost. Podcast names often include the host's name (e.g., "The Louis Theroux Podcast")
-      if (!foundCreatorMatch && nameLower.contains(queryLower)) {
-        // Multi-word query that matches in name suggests creator/host name
-        if (queryLower.contains(' ')) {
-          // Calculate how prominent the query is in the name
-          // e.g., "Louis Theroux Interviews" with query "Louis Theroux" = 14/23 = ~60%
-          final prominence = queryLower.length / nameLower.length;
-          if (prominence >= 0.5) {
-            score += 15; // Query is >50% of name - very strong signal
-          } else if (prominence >= 0.3) {
-            score += 12; // Query is 30-50% of name - strong signal
-          } else {
-            score += 8; // Query in name but less prominent
-          }
-        } else {
-          score += 5; // Single word match
-        }
-      }
-    }
-
-    return score;
-  }
-
-  /// Check if query matches at a word boundary in text
-  /// Handles both single-word and multi-word queries
-  bool _matchesWordBoundary(String text, String query) {
-    // For multi-word queries, check if query appears at start of a word in text
-    // e.g., "The Louis Theroux Podcast" contains "louis theroux" at word boundary
-    if (query.contains(' ')) {
-      // Check if text starts with query or contains query after whitespace
-      if (text.startsWith(query)) return true;
-      if (text.contains(' $query')) return true;
-      return false;
-    }
-
-    // For single-word queries, check individual words
-    final words = text.split(RegExp(r'\s+'));
-    for (final word in words) {
-      if (word.startsWith(query)) return true;
-    }
-    return false;
+    return _searchScorer.scoreItem(item, query);
   }
 
   /// Extract artists from tracks/albums that match the query but aren't in direct results
@@ -907,8 +775,10 @@ class SearchScreenState extends State<SearchScreen> {
   ) {
     if (query.isEmpty) return [];
 
-    final queryLower = query.toLowerCase();
-    final queryWords = queryLower.split(RegExp(r'\s+'));
+    // Use normalizer to get tokens with stopwords removed
+    // This way "the Beatles" becomes ["beatles"] for better matching
+    final normalizedQuery = _searchScorer.normalizer.normalizeQuery(query);
+    final queryWords = normalizedQuery.tokensNoStop;
 
     // Create a set of existing artist identifiers to avoid duplicates
     final existingArtistKeys = <String>{};
@@ -942,6 +812,7 @@ class SearchScreenState extends State<SearchScreen> {
     }
 
     // Filter candidates: only include if artist name contains any query word
+    // (stopwords already removed from queryWords)
     final crossRefArtists = <Artist>[];
     for (final artist in candidateArtists.values) {
       final artistLower = artist.name.toLowerCase();

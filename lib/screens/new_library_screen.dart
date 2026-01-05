@@ -2700,113 +2700,115 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   // ============ ARTISTS TAB ============
   Widget _buildArtistsTab(BuildContext context, S l10n) {
-    DebugLogger().log('🎨 _buildArtistsTab called, _showOnlyArtistsWithAlbums=$_showOnlyArtistsWithAlbums');
-    // Use Selector for targeted rebuilds - only rebuild when artists, albums, or loading state changes
-    return Selector<MusicAssistantProvider, (List<Artist>, List<Album>, bool)>(
-      selector: (_, provider) => (provider.artists, provider.albums, provider.isLoading),
-      builder: (context, data, _) {
-        final (allArtists, allAlbums, isLoading) = data;
-        final colorScheme = Theme.of(context).colorScheme;
+    // Use FutureBuilder to read setting fresh each time (catches changes from settings screen)
+    return FutureBuilder<bool>(
+      future: SettingsService.getShowOnlyArtistsWithAlbums(),
+      builder: (context, settingSnapshot) {
+        final showOnlyWithAlbums = settingSnapshot.data ?? false;
 
-        if (isLoading) {
-          return Center(child: CircularProgressIndicator(color: colorScheme.primary));
-        }
+        // Use Selector for targeted rebuilds - only rebuild when artists, albums, or loading state changes
+        return Selector<MusicAssistantProvider, (List<Artist>, List<Album>, bool)>(
+          selector: (_, provider) => (provider.artists, provider.albums, provider.isLoading),
+          builder: (context, data, _) {
+            final (allArtists, allAlbums, isLoading) = data;
+            final colorScheme = Theme.of(context).colorScheme;
 
-        // Filter by favorites if enabled
-        var artists = _showFavoritesOnly
-            ? allArtists.where((a) => a.favorite == true).toList()
-            : allArtists.toList();
-
-        // Filter to only show artists that have albums in library
-        if (_showOnlyArtistsWithAlbums) {
-          final artistNamesWithAlbums = <String>{};
-          int albumsWithArtists = 0;
-          int albumsWithoutArtists = 0;
-          for (final album in allAlbums) {
-            if (album.artists != null && album.artists!.isNotEmpty) {
-              albumsWithArtists++;
-              for (final artist in album.artists!) {
-                artistNamesWithAlbums.add(artist.name.toLowerCase());
-              }
-            } else {
-              albumsWithoutArtists++;
+            if (isLoading) {
+              return Center(child: CircularProgressIndicator(color: colorScheme.primary));
             }
-          }
-          final beforeCount = artists.length;
-          artists = artists.where((a) =>
-            artistNamesWithAlbums.contains(a.name.toLowerCase())
-          ).toList();
-          DebugLogger().log('🎨 Artist filter: $beforeCount artists, ${allAlbums.length} albums, $albumsWithArtists with artists, $albumsWithoutArtists without');
-          DebugLogger().log('🎨 Found ${artistNamesWithAlbums.length} unique artist names, filtered to ${artists.length} artists');
-          DebugLogger().log('🎨 First 10 artist names from albums: ${artistNamesWithAlbums.take(10).join(', ')}');
-        }
 
-        if (artists.isEmpty) {
-          if (_showFavoritesOnly) {
-            return EmptyState.custom(
-              context: context,
-              icon: Icons.favorite_border,
-              title: l10n.noFavoriteArtists,
-              subtitle: l10n.tapHeartArtist,
+            // Filter by favorites if enabled
+            var artists = _showFavoritesOnly
+                ? allArtists.where((a) => a.favorite == true).toList()
+                : allArtists.toList();
+
+            // Filter to only show artists that have albums in library
+            if (showOnlyWithAlbums) {
+              final artistNamesWithAlbums = <String>{};
+              for (final album in allAlbums) {
+                if (album.artists != null && album.artists!.isNotEmpty) {
+                  for (final artist in album.artists!) {
+                    artistNamesWithAlbums.add(artist.name.toLowerCase());
+                  }
+                }
+              }
+              final beforeCount = artists.length;
+              artists = artists.where((a) =>
+                artistNamesWithAlbums.contains(a.name.toLowerCase())
+              ).toList();
+              DebugLogger().log('🎨 Artist filter ON: $beforeCount → ${artists.length} artists (${artistNamesWithAlbums.length} with albums)');
+            } else {
+              DebugLogger().log('🎨 Artist filter OFF: showing all ${artists.length} artists');
+            }
+
+            if (artists.isEmpty) {
+              if (_showFavoritesOnly) {
+                return EmptyState.custom(
+                  context: context,
+                  icon: Icons.favorite_border,
+                  title: l10n.noFavoriteArtists,
+                  subtitle: l10n.tapHeartArtist,
+                );
+              }
+              return EmptyState.artists(
+                context: context,
+                onRefresh: () => context.read<MusicAssistantProvider>().loadLibrary(),
+              );
+            }
+
+            // Sort artists alphabetically for letter scrollbar
+            final sortedArtists = List<Artist>.from(artists)
+              ..sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+            final artistNames = sortedArtists.map((a) => a.name ?? '').toList();
+
+            return RefreshIndicator(
+              color: colorScheme.primary,
+              backgroundColor: colorScheme.background,
+              onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
+              child: LetterScrollbar(
+                controller: _artistsScrollController,
+                items: artistNames,
+                onDragStateChanged: _onLetterScrollbarDragChanged,
+                child: _artistsViewMode == 'list'
+                    ? ListView.builder(
+                        controller: _artistsScrollController,
+                        key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_${showOnlyWithAlbums ? 'albums' : 'all'}_$_artistsViewMode'),
+                        cacheExtent: 1000,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: false,
+                        itemCount: sortedArtists.length,
+                        padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.navBarOnly),
+                        itemBuilder: (context, index) {
+                          final artist = sortedArtists[index];
+                          return _buildArtistTile(
+                            context,
+                            artist,
+                            key: ValueKey(artist.uri ?? artist.itemId),
+                          );
+                        },
+                      )
+                    : GridView.builder(
+                        controller: _artistsScrollController,
+                        key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_${showOnlyWithAlbums ? 'albums' : 'all'}_$_artistsViewMode'),
+                        cacheExtent: 1000,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: false,
+                        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: _artistsViewMode == 'grid3' ? 3 : 2,
+                          childAspectRatio: _artistsViewMode == 'grid3' ? 0.75 : 0.80,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: sortedArtists.length,
+                        itemBuilder: (context, index) {
+                          final artist = sortedArtists[index];
+                          return _buildArtistGridCard(context, artist);
+                        },
+                      ),
+              ),
             );
-          }
-          return EmptyState.artists(
-            context: context,
-            onRefresh: () => context.read<MusicAssistantProvider>().loadLibrary(),
-          );
-        }
-
-        // Sort artists alphabetically for letter scrollbar
-        final sortedArtists = List<Artist>.from(artists)
-          ..sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
-        final artistNames = sortedArtists.map((a) => a.name ?? '').toList();
-
-        return RefreshIndicator(
-          color: colorScheme.primary,
-          backgroundColor: colorScheme.background,
-          onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
-          child: LetterScrollbar(
-            controller: _artistsScrollController,
-            items: artistNames,
-            onDragStateChanged: _onLetterScrollbarDragChanged,
-            child: _artistsViewMode == 'list'
-                ? ListView.builder(
-                    controller: _artistsScrollController,
-                    key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
-                    cacheExtent: 1000,
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: false,
-                    itemCount: sortedArtists.length,
-                    padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.navBarOnly),
-                    itemBuilder: (context, index) {
-                      final artist = sortedArtists[index];
-                      return _buildArtistTile(
-                        context,
-                        artist,
-                        key: ValueKey(artist.uri ?? artist.itemId),
-                      );
-                    },
-                  )
-                : GridView.builder(
-                    controller: _artistsScrollController,
-                    key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
-                    cacheExtent: 1000,
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: false,
-                    padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: _artistsViewMode == 'grid3' ? 3 : 2,
-                      childAspectRatio: _artistsViewMode == 'grid3' ? 0.75 : 0.80,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    itemCount: sortedArtists.length,
-                    itemBuilder: (context, index) {
-                      final artist = sortedArtists[index];
-                      return _buildArtistGridCard(context, artist);
-                    },
-                  ),
-          ),
+          },
         );
       },
     );

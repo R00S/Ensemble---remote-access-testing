@@ -2516,13 +2516,20 @@ class MusicAssistantProvider with ChangeNotifier {
           }
 
           // For selected player, _updatePlayerState() is already called above which fetches queue data
-          // Only update _currentTrack here if we don't have it yet OR if we have better album data for podcasts
+          // Update _currentTrack if:
+          // - We don't have it yet
+          // - Podcast with new album data
+          // - Radio with new stream metadata (artist changed from Unknown)
+          final currentHasUnknownArtist = _currentTrack?.artistsString == 'Unknown Artist' ||
+              _currentTrack?.artistsString == null;
           final shouldUpdateCurrentTrack = _selectedPlayer != null &&
               playerId == _selectedPlayer!.playerId &&
-              (_currentTrack == null || (isPodcastUri && newHasAlbum && _currentTrack?.album == null));
+              (_currentTrack == null ||
+               (isPodcastUri && newHasAlbum && _currentTrack?.album == null) ||
+               (isRadioUri && newHasProperArtist && currentHasUnknownArtist));
           if (shouldUpdateCurrentTrack) {
             _currentTrack = _cacheService.getCachedTrackForPlayer(playerId) ?? trackFromEvent;
-            _logger.log('📋 Updated _currentTrack for podcast with album: ${_currentTrack?.album?.name}');
+            _logger.log('📋 Updated _currentTrack: ${_currentTrack?.name} by ${_currentTrack?.artistsString}');
           }
 
           notifyListeners();

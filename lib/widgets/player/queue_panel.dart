@@ -37,13 +37,12 @@ class QueuePanel extends StatefulWidget {
 }
 
 class _QueuePanelState extends State<QueuePanel> {
-  late AnimatedListController _listController;
+  final AnimatedListController _listController = AnimatedListController();
   List<QueueItem> _items = [];
 
   @override
   void initState() {
     super.initState();
-    _listController = AnimatedListController();
     _items = widget.queue?.items ?? [];
   }
 
@@ -57,34 +56,29 @@ class _QueuePanelState extends State<QueuePanel> {
     }
   }
 
-  @override
-  void dispose() {
-    _listController.dispose();
-    super.dispose();
-  }
-
-  String _formatDuration(int? durationSeconds) {
-    if (durationSeconds == null) return '';
-    final minutes = durationSeconds ~/ 60;
-    final seconds = durationSeconds % 60;
+  String _formatDuration(Duration? duration) {
+    if (duration == null) return '';
+    final totalSeconds = duration.inSeconds;
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
   void _handleDelete(QueueItem item, int index) async {
-    // Remove from queue via API
-    final queueId = widget.queue?.queueId;
-    if (queueId != null) {
-      await widget.maProvider.api?.queueCommandDeleteItem(queueId, item.queueItemId);
+    // Remove from queue via API - use playerId as queue ID
+    final playerId = widget.queue?.playerId;
+    if (playerId != null) {
+      await widget.maProvider.api?.queueCommandDeleteItem(playerId, item.queueItemId);
       widget.onRefresh();
     }
   }
 
   void _handleReorder(int oldIndex, int newIndex) async {
-    // Reorder via API
-    final queueId = widget.queue?.queueId;
-    if (queueId != null && oldIndex != newIndex) {
+    // Reorder via API - use playerId as queue ID
+    final playerId = widget.queue?.playerId;
+    if (playerId != null && oldIndex != newIndex) {
       final item = _items[oldIndex];
-      await widget.maProvider.api?.queueCommandMoveItem(queueId, item.queueItemId, newIndex);
+      await widget.maProvider.api?.queueCommandMoveItem(playerId, item.queueItemId, newIndex);
       widget.onRefresh();
     }
   }
@@ -171,18 +165,6 @@ class _QueuePanelState extends State<QueuePanel> {
         },
       ),
       addLongPressReorderable: true,
-      reorderableOptions: const AutomaticAnimatedListReorderableOptions(
-        allowedFeedbackYShift: AutomaticAnimatedListAllowedFeedbackYShift.none,
-        feedbackDecoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 10,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

@@ -65,15 +65,11 @@ class _QueuePanelState extends State<QueuePanel> {
   }
 
   void _handleDelete(QueueItem item) async {
-    // Remove from local list immediately by ID (not index) to prevent double animation
-    // and avoid index mismatch issues
-    setState(() {
-      _items = List.from(_items)..removeWhere((i) => i.queueItemId == item.queueItemId);
-    });
+    // DON'T update _items - let Dismissible handle the visual removal
+    // Updating _items causes AutomaticAnimatedListView to also animate,
+    // creating a double-animation bug
 
-    // Remove from queue via API - fire and forget
-    // Don't call onRefresh() - it can bring back stale data before API completes
-    // causing the "ghost item" double animation bug
+    // Just call the API - fire and forget
     final playerId = widget.queue?.playerId;
     if (playerId != null) {
       widget.maProvider.api?.queueCommandDeleteItem(playerId, item.queueItemId);

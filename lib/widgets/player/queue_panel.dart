@@ -64,11 +64,11 @@ class _QueuePanelState extends State<QueuePanel> {
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
-  void _handleDelete(QueueItem item, int index) async {
-    // Remove from local list immediately to prevent double animation
-    // (Dismissible already animated it out, don't let AutomaticAnimatedListView do it again)
+  void _handleDelete(QueueItem item) async {
+    // Remove from local list immediately by ID (not index) to prevent double animation
+    // and avoid index mismatch issues
     setState(() {
-      _items = List.from(_items)..removeAt(index);
+      _items = List.from(_items)..removeWhere((i) => i.queueItemId == item.queueItemId);
     });
 
     // Remove from queue via API - use playerId as queue ID
@@ -192,7 +192,7 @@ class _QueuePanelState extends State<QueuePanel> {
         return !isCurrentItem;
       },
       onDismissed: (direction) {
-        _handleDelete(item, index);
+        _handleDelete(item);
       },
       child: _buildQueueItem(item, index, isCurrentItem, isPastItem),
     );

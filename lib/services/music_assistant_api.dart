@@ -2453,6 +2453,39 @@ class MusicAssistantAPI {
     }
   }
 
+  /// Delete an item from the queue
+  Future<void> queueCommandDeleteItem(String queueId, String itemId) async {
+    try {
+      await _sendCommand(
+        'player_queues/delete_item',
+        args: {
+          'queue_id': queueId,
+          'item_id_or_index': itemId,
+        },
+      );
+    } catch (e) {
+      _logger.log('Error deleting queue item: $e');
+      rethrow;
+    }
+  }
+
+  /// Move an item to a new position in the queue
+  Future<void> queueCommandMoveItem(String queueId, String itemId, int newIndex) async {
+    try {
+      await _sendCommand(
+        'player_queues/move_item',
+        args: {
+          'queue_id': queueId,
+          'item_id_or_index': itemId,
+          'new_index': newIndex,
+        },
+      );
+    } catch (e) {
+      _logger.log('Error moving queue item: $e');
+      rethrow;
+    }
+  }
+
   // ============================================================================
   // BUILT-IN PLAYER MANAGEMENT
   // ============================================================================

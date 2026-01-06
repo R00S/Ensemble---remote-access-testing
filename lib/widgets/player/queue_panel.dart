@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:great_list_view/great_list_view.dart';
 import '../../providers/music_assistant_provider.dart';
 import '../../models/player.dart';
 import '../../theme/design_tokens.dart';
 import '../common/empty_state.dart';
 
-/// Panel that displays the current playback queue
-class QueuePanel extends StatelessWidget {
+/// Panel that displays the current playback queue with drag-to-reorder
+/// and swipe-left-to-delete functionality
+class QueuePanel extends StatefulWidget {
   final MusicAssistantProvider maProvider;
   final PlayerQueue? queue;
   final bool isLoading;
@@ -31,34 +33,91 @@ class QueuePanel extends StatelessWidget {
   });
 
   @override
+  State<QueuePanel> createState() => _QueuePanelState();
+}
+
+class _QueuePanelState extends State<QueuePanel> {
+  late AnimatedListController _listController;
+  List<QueueItem> _items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _listController = AnimatedListController();
+    _items = widget.queue?.items ?? [];
+  }
+
+  @override
+  void didUpdateWidget(QueuePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update items when queue changes
+    final newItems = widget.queue?.items ?? [];
+    if (newItems != _items) {
+      _items = newItems;
+    }
+  }
+
+  @override
+  void dispose() {
+    _listController.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(int? durationSeconds) {
+    if (durationSeconds == null) return '';
+    final minutes = durationSeconds ~/ 60;
+    final seconds = durationSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  void _handleDelete(QueueItem item, int index) async {
+    // Remove from queue via API
+    final queueId = widget.queue?.queueId;
+    if (queueId != null) {
+      await widget.maProvider.api?.queueCommandDeleteItem(queueId, item.queueItemId);
+      widget.onRefresh();
+    }
+  }
+
+  void _handleReorder(int oldIndex, int newIndex) async {
+    // Reorder via API
+    final queueId = widget.queue?.queueId;
+    if (queueId != null && oldIndex != newIndex) {
+      final item = _items[oldIndex];
+      await widget.maProvider.api?.queueCommandMoveItem(queueId, item.queueItemId, newIndex);
+      widget.onRefresh();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
-      color: backgroundColor,
+      color: widget.backgroundColor,
       child: Column(
         children: [
           // Header
           Container(
-            padding: EdgeInsets.only(top: topPadding + 4, left: 4, right: 16),
+            padding: EdgeInsets.only(top: widget.topPadding + 4, left: 4, right: 16),
             child: Row(
               children: [
                 IconButton(
-                  icon: Icon(Icons.arrow_back_rounded, color: textColor, size: IconSizes.md),
-                  onPressed: onClose,
+                  icon: Icon(Icons.arrow_back_rounded, color: widget.textColor, size: IconSizes.md),
+                  onPressed: widget.onClose,
                   padding: Spacing.paddingAll12,
                 ),
                 const Spacer(),
                 Text(
                   'Queue',
                   style: TextStyle(
-                    color: textColor,
+                    color: widget.textColor,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const Spacer(),
                 IconButton(
-                  icon: Icon(Icons.refresh_rounded, color: textColor.withOpacity(0.7), size: IconSizes.sm),
-                  onPressed: onRefresh,
+                  icon: Icon(Icons.refresh_rounded, color: widget.textColor.withOpacity(0.7), size: IconSizes.sm),
+                  onPressed: widget.onRefresh,
                   padding: Spacing.paddingAll12,
                 ),
               ],
@@ -67,9 +126,9 @@ class QueuePanel extends StatelessWidget {
 
           // Queue content
           Expanded(
-            child: isLoading
-                ? Center(child: CircularProgressIndicator(color: primaryColor))
-                : queue == null || queue!.items.isEmpty
+            child: widget.isLoading
+                ? Center(child: CircularProgressIndicator(color: widget.primaryColor))
+                : widget.queue == null || _items.isEmpty
                     ? _buildEmptyState(context)
                     : _buildQueueList(),
           ),
@@ -83,96 +142,165 @@ class QueuePanel extends StatelessWidget {
   }
 
   Widget _buildQueueList() {
-    final currentIndex = queue!.currentIndex ?? 0;
-    final items = queue!.items;
+    final currentIndex = widget.queue!.currentIndex ?? 0;
 
-    return ListView.builder(
+    return AutomaticAnimatedListView<QueueItem>(
+      list: _items,
       padding: Spacing.paddingH8,
-      cacheExtent: 500,
-      addAutomaticKeepAlives: false, // Items don't need individual keep-alive
-      addRepaintBoundaries: false, // We add RepaintBoundary manually
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
+      comparator: AnimatedListDiffListComparator<QueueItem>(
+        sameItem: (a, b) => a.queueItemId == b.queueItemId,
+        sameContent: (a, b) => a.track.name == b.track.name && a.track.duration == b.track.duration,
+      ),
+      itemBuilder: (context, item, data) {
+        final index = _items.indexOf(item);
         final isCurrentItem = index == currentIndex;
         final isPastItem = index < currentIndex;
-        final imageUrl = maProvider.api?.getImageUrl(item.track, size: 80);
 
-        return RepaintBoundary(
-          child: Opacity(
-          opacity: isPastItem ? 0.5 : 1.0,
-          child: Container(
-            margin: EdgeInsets.symmetric(vertical: Spacing.xxs),
-            decoration: BoxDecoration(
-              color: isCurrentItem ? primaryColor.withOpacity(0.15) : Colors.transparent,
-              borderRadius: BorderRadius.circular(Radii.md),
+        return data.measuring
+            ? _buildQueueItem(item, index, isCurrentItem, isPastItem, measuring: true)
+            : _buildDismissibleQueueItem(item, index, isCurrentItem, isPastItem);
+      },
+      listController: _listController,
+      reorderModel: AnimatedListReorderModel(
+        onReorderStart: (index, dx, dy) => true,
+        onReorderFeedback: (index, dropIndex, offset, dx, dy) => null,
+        onReorderMove: (index, dropIndex) => true,
+        onReorderComplete: (index, dropIndex, slot) {
+          _handleReorder(index, dropIndex);
+          return true;
+        },
+      ),
+      addLongPressReorderable: true,
+      reorderableOptions: const AutomaticAnimatedListReorderableOptions(
+        allowedFeedbackYShift: AutomaticAnimatedListAllowedFeedbackYShift.none,
+        feedbackDecoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 10,
+              offset: Offset(0, 4),
             ),
-            child: ListTile(
-              dense: true,
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(Radii.sm),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: imageUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          fit: BoxFit.cover,
-                          // PERF: 4x cache size for 44x44 display, zero fade for scrolling
-                          memCacheWidth: 176,
-                          memCacheHeight: 176,
-                          fadeInDuration: Duration.zero,
-                          fadeOutDuration: Duration.zero,
-                          placeholder: (context, url) => Container(
-                            color: textColor.withOpacity(0.1),
-                            child: Icon(Icons.music_note, color: textColor.withOpacity(0.3), size: 20),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: textColor.withOpacity(0.1),
-                            child: Icon(Icons.music_note, color: textColor.withOpacity(0.3), size: 20),
-                          ),
-                        )
-                      : Container(
-                          color: textColor.withOpacity(0.1),
-                          child: Icon(Icons.music_note, color: textColor.withOpacity(0.3), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDismissibleQueueItem(QueueItem item, int index, bool isCurrentItem, bool isPastItem) {
+    return Dismissible(
+      key: ValueKey(item.queueItemId),
+      direction: DismissDirection.endToStart, // Swipe left to delete only
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: EdgeInsets.symmetric(vertical: Spacing.xxs),
+        decoration: BoxDecoration(
+          color: Colors.red.shade700,
+          borderRadius: BorderRadius.circular(Radii.md),
+        ),
+        child: const Icon(Icons.delete_outline, color: Colors.white, size: 24),
+      ),
+      confirmDismiss: (direction) async {
+        // Don't allow deleting currently playing track
+        return !isCurrentItem;
+      },
+      onDismissed: (direction) {
+        _handleDelete(item, index);
+      },
+      child: _buildQueueItem(item, index, isCurrentItem, isPastItem),
+    );
+  }
+
+  Widget _buildQueueItem(QueueItem item, int index, bool isCurrentItem, bool isPastItem, {bool measuring = false}) {
+    final imageUrl = widget.maProvider.api?.getImageUrl(item.track, size: 80);
+    final duration = _formatDuration(item.track.duration);
+
+    return RepaintBoundary(
+      child: Opacity(
+        opacity: isPastItem ? 0.5 : 1.0,
+        child: Container(
+          margin: EdgeInsets.symmetric(vertical: Spacing.xxs),
+          decoration: BoxDecoration(
+            color: isCurrentItem ? widget.primaryColor.withOpacity(0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(Radii.md),
+          ),
+          child: ListTile(
+            dense: true,
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(Radii.sm),
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: imageUrl != null && !measuring
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        memCacheWidth: 176,
+                        memCacheHeight: 176,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholder: (context, url) => Container(
+                          color: widget.textColor.withOpacity(0.1),
+                          child: Icon(Icons.music_note, color: widget.textColor.withOpacity(0.3), size: 20),
                         ),
-                ),
+                        errorWidget: (context, url, error) => Container(
+                          color: widget.textColor.withOpacity(0.1),
+                          child: Icon(Icons.music_note, color: widget.textColor.withOpacity(0.3), size: 20),
+                        ),
+                      )
+                    : Container(
+                        color: widget.textColor.withOpacity(0.1),
+                        child: Icon(Icons.music_note, color: widget.textColor.withOpacity(0.3), size: 20),
+                      ),
               ),
-              title: Text(
-                item.track.name,
-                style: TextStyle(
-                  color: isCurrentItem ? primaryColor : textColor,
-                  fontSize: 14,
-                  fontWeight: isCurrentItem ? FontWeight.w600 : FontWeight.normal,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            ),
+            title: Text(
+              item.track.name,
+              style: TextStyle(
+                color: isCurrentItem ? widget.primaryColor : widget.textColor,
+                fontSize: 14,
+                fontWeight: isCurrentItem ? FontWeight.w600 : FontWeight.normal,
               ),
-              subtitle: item.track.artists != null && item.track.artists!.isNotEmpty
-                  ? Text(
-                      item.track.artists!.first.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: item.track.artists != null && item.track.artists!.isNotEmpty
+                ? Text(
+                    item.track.artists!.first.name,
+                    style: TextStyle(
+                      color: widget.textColor.withOpacity(0.6),
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : null,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (duration.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(
+                      duration,
                       style: TextStyle(
-                        color: textColor.withOpacity(0.6),
+                        color: widget.textColor.withOpacity(0.5),
                         fontSize: 12,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  : null,
-              trailing: isCurrentItem
-                  ? Icon(Icons.play_arrow_rounded, color: primaryColor, size: 20)
-                  : null,
-              onTap: () {
-                // TODO: Jump to this track in queue
-                // Music Assistant API doesn't currently expose a skip_to_index or play_queue_item endpoint
-                // Would need to add API method like skipToQueueIndex(queueId, index) if MA supports it
-                // Alternative: Could use multiple next() calls but that's inefficient and unreliable
-              },
+                    ),
+                  ),
+                if (isCurrentItem)
+                  Icon(Icons.play_arrow_rounded, color: widget.primaryColor, size: 20)
+                else
+                  Icon(Icons.drag_handle, color: widget.textColor.withOpacity(0.3), size: 20),
+              ],
             ),
+            onTap: () {
+              // TODO: Jump to this track in queue if MA API supports it
+            },
           ),
-          ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

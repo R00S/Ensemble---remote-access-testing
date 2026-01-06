@@ -68,6 +68,12 @@ class _HomeScreenState extends State<HomeScreen> {
               return;
             }
 
+            // If queue panel is open, close it first (before collapsing player)
+            if (GlobalPlayerOverlay.isQueuePanelOpen) {
+              GlobalPlayerOverlay.closeQueuePanel();
+              return;
+            }
+
             // If global player is expanded, collapse it first
             if (GlobalPlayerOverlay.isPlayerExpanded) {
               GlobalPlayerOverlay.collapsePlayer();

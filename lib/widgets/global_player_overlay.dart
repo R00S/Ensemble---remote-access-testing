@@ -99,6 +99,15 @@ class GlobalPlayerOverlay extends StatefulWidget {
   static bool get isPlayerExpanded =>
       globalPlayerKey.currentState?.isExpanded ?? false;
 
+  /// Check if the queue panel is currently open
+  static bool get isQueuePanelOpen =>
+      globalPlayerKey.currentState?.isQueuePanelOpen ?? false;
+
+  /// Close the queue panel if open
+  static void closeQueuePanel() {
+    globalPlayerKey.currentState?.closeQueuePanel();
+  }
+
   /// Get the current expansion progress (0.0 to 1.0)
   static double get expansionProgress =>
       globalPlayerKey.currentState?.expansionProgress ?? 0.0;

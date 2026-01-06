@@ -522,6 +522,13 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
   bool get isQueuePanelOpen => _queuePanelController.value > 0.5;
 
+  /// Close queue panel if open (for external access via GlobalPlayerOverlay)
+  void closeQueuePanel() {
+    if (isQueuePanelOpen && !_queuePanelController.isAnimating) {
+      _queuePanelController.reverse();
+    }
+  }
+
   /// Update favorite status when track changes
   void _updateFavoriteStatus(dynamic currentTrack) {
     if (currentTrack == null) {
@@ -1041,10 +1048,14 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         }
 
         // Handle Android back button - close queue panel first, then collapse player
+        // Guard against re-entry during animations to prevent double-close
         return PopScope(
           canPop: !isQueuePanelOpen && !isExpanded,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) {
+              // Ignore if already animating (prevents double-processing)
+              if (_queuePanelController.isAnimating || _controller.isAnimating) return;
+
               if (isQueuePanelOpen) {
                 _toggleQueuePanel();
               } else if (isExpanded) {

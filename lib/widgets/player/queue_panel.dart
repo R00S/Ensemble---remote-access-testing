@@ -88,48 +88,56 @@ class _QueuePanelState extends State<QueuePanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: widget.backgroundColor,
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: EdgeInsets.only(top: widget.topPadding + 4, left: 4, right: 16),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(Icons.arrow_back_rounded, color: widget.textColor, size: IconSizes.md),
-                  onPressed: widget.onClose,
-                  padding: Spacing.paddingAll12,
-                ),
-                const Spacer(),
-                Text(
-                  'Queue',
-                  style: TextStyle(
-                    color: widget.textColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+    return GestureDetector(
+      // Swipe right to close queue panel and return to expanded player
+      onHorizontalDragEnd: (details) {
+        if (details.primaryVelocity != null && details.primaryVelocity! > 300) {
+          widget.onClose();
+        }
+      },
+      child: Container(
+        color: widget.backgroundColor,
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: EdgeInsets.only(top: widget.topPadding + 4, left: 4, right: 16),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back_rounded, color: widget.textColor, size: IconSizes.md),
+                    onPressed: widget.onClose,
+                    padding: Spacing.paddingAll12,
                   ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(Icons.refresh_rounded, color: widget.textColor.withOpacity(0.7), size: IconSizes.sm),
-                  onPressed: widget.onRefresh,
-                  padding: Spacing.paddingAll12,
-                ),
-              ],
+                  const Spacer(),
+                  Text(
+                    'Queue',
+                    style: TextStyle(
+                      color: widget.textColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(Icons.refresh_rounded, color: widget.textColor.withOpacity(0.7), size: IconSizes.sm),
+                    onPressed: widget.onRefresh,
+                    padding: Spacing.paddingAll12,
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Queue content
-          Expanded(
-            child: widget.isLoading
-                ? Center(child: CircularProgressIndicator(color: widget.primaryColor))
-                : widget.queue == null || _items.isEmpty
-                    ? _buildEmptyState(context)
-                    : _buildQueueList(),
-          ),
-        ],
+            // Queue content
+            Expanded(
+              child: widget.isLoading
+                  ? Center(child: CircularProgressIndicator(color: widget.primaryColor))
+                  : widget.queue == null || _items.isEmpty
+                      ? _buildEmptyState(context)
+                      : _buildQueueList(),
+            ),
+          ],
+        ),
       ),
     );
   }

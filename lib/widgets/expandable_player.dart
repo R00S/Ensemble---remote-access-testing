@@ -1040,22 +1040,31 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           });
         }
 
-        return AnimatedBuilder(
-          animation: Listenable.merge([_expandAnimation, _queuePanelAnimation]),
-          builder: (context, _) {
-            // If no track is playing, show device selector bar
-            if (currentTrack == null) {
-              return _buildDeviceSelectorBar(context, maProvider, selectedPlayer, themeProvider);
+        // Handle Android back button - close queue panel first if open
+        return PopScope(
+          canPop: !isQueuePanelOpen,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && isQueuePanelOpen) {
+              _toggleQueuePanel();
             }
-            return _buildMorphingPlayer(
-              context,
-              maProvider,
-              selectedPlayer,
-              currentTrack,
-              imageUrl,
-              themeProvider,
-            );
           },
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_expandAnimation, _queuePanelAnimation]),
+            builder: (context, _) {
+              // If no track is playing, show device selector bar
+              if (currentTrack == null) {
+                return _buildDeviceSelectorBar(context, maProvider, selectedPlayer, themeProvider);
+              }
+              return _buildMorphingPlayer(
+                context,
+                maProvider,
+                selectedPlayer,
+                currentTrack,
+                imageUrl,
+                themeProvider,
+              );
+            },
+          ),
         );
       },
     );

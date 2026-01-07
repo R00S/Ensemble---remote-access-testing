@@ -166,6 +166,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   // State for player reveal overlay
   bool _isRevealVisible = false;
 
+  // Track mini player precision mode for darkening player cards
+  bool _miniPlayerInPrecisionMode = false;
+
   // State for interactive hint mode (blur backdrop + wait for user action)
   bool _isHintModeActive = false;
   Timer? _hintBounceTimer;
@@ -700,6 +703,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
             miniPlayerBottom: BottomSpacing.navBarHeight + MediaQuery.of(context).viewPadding.bottom + 12,
             miniPlayerHeight: 64,
             showOnboardingHints: _isOnboardingReveal,
+            miniPlayerInPrecisionMode: _miniPlayerInPrecisionMode,
           ),
 
         // Global player overlay - renders ON TOP so cards slide behind it
@@ -734,6 +738,11 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                           onRevealPlayers: _showPlayerReveal,
                           isDeviceRevealVisible: _isRevealVisible,
                           isHintVisible: hintOpacity > 0,
+                          onVolumePrecisionModeChanged: (isActive) {
+                            setState(() {
+                              _miniPlayerInPrecisionMode = isActive;
+                            });
+                          },
                         );
                       },
                     );

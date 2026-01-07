@@ -41,6 +41,9 @@ class ExpandablePlayer extends StatefulWidget {
   /// When true, shows "Pull to select players" instead of track info
   final bool isHintVisible;
 
+  /// Callback when volume precision mode changes
+  final ValueChanged<bool>? onVolumePrecisionModeChanged;
+
   const ExpandablePlayer({
     super.key,
     this.slideOffset = 0.0,
@@ -48,6 +51,7 @@ class ExpandablePlayer extends StatefulWidget {
     this.onRevealPlayers,
     this.isDeviceRevealVisible = false,
     this.isHintVisible = false,
+    this.onVolumePrecisionModeChanged,
   });
 
   @override
@@ -124,10 +128,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   bool _inVolumePrecisionMode = false;
   Timer? _volumePrecisionTimer;
   Offset? _lastVolumeDragPosition;
+  double _lastVolumeLocalX = 0.0; // Last local X position during drag
   bool _volumePrecisionModeEnabled = true; // From settings
+  double _volumePrecisionZoomCenter = 0.0; // Volume level when precision mode started
   static const int _precisionTriggerMs = 800; // Hold still for 800ms to enter precision mode
   static const double _precisionStillnessThreshold = 5.0; // Max pixels of movement considered "still"
-  static const double _precisionSensitivity = 0.1; // 10x more precise (full swipe = 10% change)
+  static const double _precisionSensitivity = 0.1; // Zoomed range (10% = left edge to right edge)
 
   // Track favorite state for current track
   bool _isCurrentTrackFavorite = false;
@@ -227,7 +233,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     if (_inVolumePrecisionMode) return;
     setState(() {
       _inVolumePrecisionMode = true;
+      _volumePrecisionZoomCenter = _dragVolumeLevel; // Capture current volume as zoom center
     });
+    widget.onVolumePrecisionModeChanged?.call(true);
   }
 
   void _exitVolumePrecisionMode() {
@@ -237,6 +245,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     setState(() {
       _inVolumePrecisionMode = false;
     });
+    widget.onVolumePrecisionModeChanged?.call(false);
   }
 
   Timer? _queueRefreshTimer;
@@ -1549,16 +1558,28 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
               }
             }
             _lastVolumeDragPosition = currentPosition;
+            _lastVolumeLocalX = details.localPosition.dx;
 
-            // Directional volume: drag right = increase, drag left = decrease
-            // Multiple swipes accumulate - each starts from current volume
-            final dragDelta = details.delta.dx;
+            double newVolume;
 
-            // Apply precision sensitivity when in precision mode
-            final sensitivity = _inVolumePrecisionMode ? _precisionSensitivity : 1.0;
-            final volumeDelta = (dragDelta / collapsedWidth) * sensitivity;
+            if (_inVolumePrecisionMode) {
+              // PRECISION MODE: Map full width to zoomed range around center
+              // e.g., at 40% center with 10% range: left edge = 35%, right edge = 45%
+              final halfRange = _precisionSensitivity / 2; // 0.05 (5%)
+              final minVolume = (_volumePrecisionZoomCenter - halfRange).clamp(0.0, 1.0);
+              final maxVolume = (_volumePrecisionZoomCenter + halfRange).clamp(0.0, 1.0);
+              final actualRange = maxVolume - minVolume;
 
-            final newVolume = (_dragVolumeLevel + volumeDelta).clamp(0.0, 1.0);
+              // Map local X position (0 to collapsedWidth) to volume range
+              final relativeX = (details.localPosition.dx / collapsedWidth).clamp(0.0, 1.0);
+              newVolume = minVolume + (relativeX * actualRange);
+            } else {
+              // NORMAL MODE: Delta-based movement (full width = 100%)
+              final dragDelta = details.delta.dx;
+              final volumeDelta = dragDelta / collapsedWidth;
+              newVolume = (_dragVolumeLevel + volumeDelta).clamp(0.0, 1.0);
+            }
+
             if ((newVolume - _dragVolumeLevel).abs() > 0.001) {
               setState(() {
                 _dragVolumeLevel = newVolume;

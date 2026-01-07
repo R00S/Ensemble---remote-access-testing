@@ -75,7 +75,9 @@ class _PlayerCardState extends State<PlayerCard> {
   bool _inPrecisionMode = false;
   Timer? _precisionTimer;
   Offset? _lastDragPosition;
+  double _lastLocalX = 0.0; // Last local X position during drag (for precision mode)
   bool _precisionModeEnabled = true; // From settings
+  double _precisionZoomCenter = 0.0; // Volume level when precision mode started
 
   @override
   void initState() {
@@ -102,10 +104,11 @@ class _PlayerCardState extends State<PlayerCard> {
     if (_inPrecisionMode) return;
     setState(() {
       _inPrecisionMode = true;
+      _precisionZoomCenter = _dragVolumeLevel; // Capture current volume as zoom center
     });
     widget.onPrecisionModeChanged?.call(true);
     _volumeLogger.debug(
-      'PRECISION_MODE [${widget.player.name}]: ENTERED',
+      'PRECISION_MODE [${widget.player.name}]: ENTERED at ${(_precisionZoomCenter * 100).round()}%',
       context: 'Volume',
     );
   }
@@ -391,6 +394,9 @@ class _PlayerCardState extends State<PlayerCard> {
   void _onDragUpdate(DragUpdateDetails details) {
     if (!_isDraggingVolume || _cardWidth <= 0) return;
 
+    // Track local X position for precision mode
+    _lastLocalX = details.localPosition.dx;
+
     // Check for stillness to trigger precision mode (only if enabled in settings)
     final currentPosition = details.globalPosition;
     if (_precisionModeEnabled && _lastDragPosition != null) {
@@ -412,16 +418,25 @@ class _PlayerCardState extends State<PlayerCard> {
     }
     _lastDragPosition = currentPosition;
 
-    // Directional volume: drag right = increase, drag left = decrease
-    // Distance determines amount of change (full card width = 100%)
-    // Multiple swipes accumulate - each starts from current volume
-    final dragDelta = details.delta.dx;
+    double newVolume;
 
-    // Apply precision sensitivity when in precision mode
-    final sensitivity = _inPrecisionMode ? PlayerCard.precisionSensitivity : 1.0;
-    final volumeDelta = (dragDelta / _cardWidth) * sensitivity;
+    if (_inPrecisionMode) {
+      // PRECISION MODE: Map full card width to zoomed range around center
+      // e.g., at 40% center with 10% range: left edge = 35%, right edge = 45%
+      final halfRange = PlayerCard.precisionSensitivity / 2; // 0.05 (5%)
+      final minVolume = (_precisionZoomCenter - halfRange).clamp(0.0, 1.0);
+      final maxVolume = (_precisionZoomCenter + halfRange).clamp(0.0, 1.0);
+      final actualRange = maxVolume - minVolume;
 
-    final newVolume = (_dragVolumeLevel + volumeDelta).clamp(0.0, 1.0);
+      // Map local X position (0 to cardWidth) to volume range
+      final relativeX = (details.localPosition.dx / _cardWidth).clamp(0.0, 1.0);
+      newVolume = minVolume + (relativeX * actualRange);
+    } else {
+      // NORMAL MODE: Delta-based movement (full card width = 100%)
+      final dragDelta = details.delta.dx;
+      final volumeDelta = dragDelta / _cardWidth;
+      newVolume = (_dragVolumeLevel + volumeDelta).clamp(0.0, 1.0);
+    }
 
     // Always update visual
     if ((newVolume - _dragVolumeLevel).abs() > 0.001) {

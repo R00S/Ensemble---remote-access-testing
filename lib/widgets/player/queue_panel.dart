@@ -195,10 +195,12 @@ class _QueuePanelState extends State<QueuePanel> {
     // Call API if position changed
     if (positionChanged) {
       final playerId = widget.queue?.playerId;
-      debugPrint('QueuePanel: Moving ${item.track.name} from $originalIndex to $newIndex (queueItemId: ${item.queueItemId})');
+      // API uses relative shift: positive = down, negative = up
+      final posShift = newIndex - originalIndex;
+      debugPrint('QueuePanel: Moving ${item.track.name} from $originalIndex to $newIndex (shift: $posShift, queueItemId: ${item.queueItemId})');
       if (playerId != null) {
         try {
-          await widget.maProvider.api?.queueCommandMoveItem(playerId, item.queueItemId, newIndex);
+          await widget.maProvider.api?.queueCommandMoveItem(playerId, item.queueItemId, posShift);
           debugPrint('QueuePanel: Move API call completed');
         } catch (e) {
           debugPrint('QueuePanel: Move API error: $e');

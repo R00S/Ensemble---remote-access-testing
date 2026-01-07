@@ -2469,15 +2469,16 @@ class MusicAssistantAPI {
     }
   }
 
-  /// Move an item to a new position in the queue
-  Future<void> queueCommandMoveItem(String queueId, String itemId, int newIndex) async {
+  /// Move an item in the queue by a relative position shift
+  /// pos_shift > 0: move down, pos_shift < 0: move up, pos_shift = 0: move to next
+  Future<void> queueCommandMoveItem(String queueId, String itemId, int posShift) async {
     try {
       await _sendCommand(
         'player_queues/move_item',
         args: {
           'queue_id': queueId,
           'queue_item_id': itemId,
-          'new_index': newIndex,
+          'pos_shift': posShift,
         },
       );
     } catch (e) {

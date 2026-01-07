@@ -78,6 +78,7 @@ class _PlayerCardState extends State<PlayerCard> {
   double _lastLocalX = 0.0; // Last local X position during drag (for precision mode)
   bool _precisionModeEnabled = true; // From settings
   double _precisionZoomCenter = 0.0; // Volume level when precision mode started
+  double _precisionStartX = 0.0; // Finger X position when precision mode started
 
   @override
   void initState() {
@@ -105,6 +106,7 @@ class _PlayerCardState extends State<PlayerCard> {
     setState(() {
       _inPrecisionMode = true;
       _precisionZoomCenter = _dragVolumeLevel; // Capture current volume as zoom center
+      _precisionStartX = _lastLocalX; // Capture finger position at entry
     });
     widget.onPrecisionModeChanged?.call(true);
     _volumeLogger.debug(
@@ -421,16 +423,13 @@ class _PlayerCardState extends State<PlayerCard> {
     double newVolume;
 
     if (_inPrecisionMode) {
-      // PRECISION MODE: Map full card width to zoomed range around center
-      // e.g., at 40% center with 10% range: left edge = 35%, right edge = 45%
-      final halfRange = PlayerCard.precisionSensitivity / 2; // 0.05 (5%)
-      final minVolume = (_precisionZoomCenter - halfRange).clamp(0.0, 1.0);
-      final maxVolume = (_precisionZoomCenter + halfRange).clamp(0.0, 1.0);
-      final actualRange = maxVolume - minVolume;
-
-      // Map local X position (0 to cardWidth) to volume range
-      final relativeX = (details.localPosition.dx / _cardWidth).clamp(0.0, 1.0);
-      newVolume = minVolume + (relativeX * actualRange);
+      // PRECISION MODE: Movement from entry point maps to zoomed range
+      // Full card width of movement = precisionSensitivity (10%) change
+      // e.g., at 40% center: moving full card right = 50%, full card left = 30%
+      final offsetX = details.localPosition.dx - _precisionStartX;
+      final normalizedOffset = offsetX / _cardWidth; // -1.0 to +1.0 range
+      final volumeChange = normalizedOffset * PlayerCard.precisionSensitivity;
+      newVolume = (_precisionZoomCenter + volumeChange).clamp(0.0, 1.0);
     } else {
       // NORMAL MODE: Delta-based movement (full card width = 100%)
       final dragDelta = details.delta.dx;

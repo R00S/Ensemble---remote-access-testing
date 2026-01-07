@@ -131,6 +131,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   double _lastVolumeLocalX = 0.0; // Last local X position during drag
   bool _volumePrecisionModeEnabled = true; // From settings
   double _volumePrecisionZoomCenter = 0.0; // Volume level when precision mode started
+  double _volumePrecisionStartX = 0.0; // Finger X position when precision mode started
   static const int _precisionTriggerMs = 800; // Hold still for 800ms to enter precision mode
   static const double _precisionStillnessThreshold = 5.0; // Max pixels of movement considered "still"
   static const double _precisionSensitivity = 0.1; // Zoomed range (10% = left edge to right edge)
@@ -234,6 +235,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     setState(() {
       _inVolumePrecisionMode = true;
       _volumePrecisionZoomCenter = _dragVolumeLevel; // Capture current volume as zoom center
+      _volumePrecisionStartX = _lastVolumeLocalX; // Capture finger position at entry
     });
     widget.onVolumePrecisionModeChanged?.call(true);
   }
@@ -1563,16 +1565,13 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             double newVolume;
 
             if (_inVolumePrecisionMode) {
-              // PRECISION MODE: Map full width to zoomed range around center
-              // e.g., at 40% center with 10% range: left edge = 35%, right edge = 45%
-              final halfRange = _precisionSensitivity / 2; // 0.05 (5%)
-              final minVolume = (_volumePrecisionZoomCenter - halfRange).clamp(0.0, 1.0);
-              final maxVolume = (_volumePrecisionZoomCenter + halfRange).clamp(0.0, 1.0);
-              final actualRange = maxVolume - minVolume;
-
-              // Map local X position (0 to collapsedWidth) to volume range
-              final relativeX = (details.localPosition.dx / collapsedWidth).clamp(0.0, 1.0);
-              newVolume = minVolume + (relativeX * actualRange);
+              // PRECISION MODE: Movement from entry point maps to zoomed range
+              // Full width of movement = precisionSensitivity (10%) change
+              // e.g., at 40% center: moving full width right = 50%, full width left = 30%
+              final offsetX = details.localPosition.dx - _volumePrecisionStartX;
+              final normalizedOffset = offsetX / collapsedWidth; // -1.0 to +1.0 range
+              final volumeChange = normalizedOffset * _precisionSensitivity;
+              newVolume = (_volumePrecisionZoomCenter + volumeChange).clamp(0.0, 1.0);
             } else {
               // NORMAL MODE: Delta-based movement (full width = 100%)
               final dragDelta = details.delta.dx;

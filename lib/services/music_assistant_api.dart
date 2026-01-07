@@ -2487,6 +2487,22 @@ class MusicAssistantAPI {
     }
   }
 
+  /// Play a specific item in the queue by its queue_item_id
+  Future<void> queueCommandPlayIndex(String queueId, String queueItemId) async {
+    try {
+      await _sendCommand(
+        'player_queues/play_index',
+        args: {
+          'queue_id': queueId,
+          'index': queueItemId,
+        },
+      );
+    } catch (e) {
+      _logger.log('Error playing queue item: $e');
+      rethrow;
+    }
+  }
+
   // ============================================================================
   // BUILT-IN PLAYER MANAGEMENT
   // ============================================================================

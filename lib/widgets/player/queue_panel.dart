@@ -489,7 +489,11 @@ class _QueuePanelState extends State<QueuePanel> {
               ],
             ),
             onTap: () {
-              // TODO: Jump to this track in queue if MA API supports it
+              // Skip to this track in the queue
+              final playerId = widget.queue?.playerId;
+              if (playerId != null && !isCurrentItem) {
+                widget.maProvider.api?.queueCommandPlayIndex(playerId, item.queueItemId);
+              }
             },
           ),
         ),

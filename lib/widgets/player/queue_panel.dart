@@ -122,14 +122,14 @@ class _QueuePanelState extends State<QueuePanel> {
     }
   }
 
-  void _startDrag(int index, BuildContext itemContext, DragStartDetails details) {
+  void _startDrag(int index, BuildContext itemContext, Offset globalPosition) {
     if (_dragIndex != null) return;
 
     final RenderBox box = itemContext.findRenderObject() as RenderBox;
     final Offset globalPos = box.localToGlobal(Offset.zero);
     _itemHeight = box.size.height;
     _itemStartY = globalPos.dy;
-    _dragStartY = details.globalPosition.dy;
+    _dragStartY = globalPosition.dy;
     _dragY = globalPos.dy;
 
     // Find the stack's position to calculate relative offset
@@ -143,14 +143,14 @@ class _QueuePanelState extends State<QueuePanel> {
     });
   }
 
-  void _updateDrag(DragUpdateDetails details) {
+  void _updateDragPointer(Offset globalPosition) {
     if (_dragIndex == null) return;
 
     // Move overlay to follow finger
-    _dragY = _itemStartY + (details.globalPosition.dy - _dragStartY);
+    _dragY = _itemStartY + (globalPosition.dy - _dragStartY);
 
     // Calculate which index we're hovering over based on movement
-    final totalOffset = details.globalPosition.dy - _dragStartY;
+    final totalOffset = globalPosition.dy - _dragStartY;
     final indexOffset = (totalOffset / _itemHeight).round();
     final targetIndex = (_dragStartIndex! + indexOffset).clamp(0, _items.length - 1);
 
@@ -264,22 +264,40 @@ class _QueuePanelState extends State<QueuePanel> {
                   ? Center(child: CircularProgressIndicator(color: widget.primaryColor))
                   : widget.queue == null || _items.isEmpty
                       ? EmptyState.queue(context: context)
-                      : Stack(
-                          children: [
-                            _buildQueueList(),
-                            // Dragged item overlay
-                            if (_dragIndex != null && _dragItem != null)
-                              Positioned(
-                                left: 8,
-                                right: 8,
-                                top: _dragY - _listTopOffset,
-                                child: Material(
-                                  elevation: 8,
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: _buildQueueItemContent(_dragItem!, _dragIndex!, false, false),
+                      : Listener(
+                          // Capture pointer events anywhere while dragging
+                          onPointerMove: (event) {
+                            if (_dragIndex != null) {
+                              _updateDragPointer(event.position);
+                            }
+                          },
+                          onPointerUp: (event) {
+                            if (_dragIndex != null) {
+                              _endDrag();
+                            }
+                          },
+                          onPointerCancel: (event) {
+                            if (_dragIndex != null) {
+                              _cancelDrag();
+                            }
+                          },
+                          child: Stack(
+                            children: [
+                              _buildQueueList(),
+                              // Dragged item overlay
+                              if (_dragIndex != null && _dragItem != null)
+                                Positioned(
+                                  left: 8,
+                                  right: 8,
+                                  top: _dragY - _listTopOffset,
+                                  child: Material(
+                                    elevation: 8,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: _buildQueueItemContent(_dragItem!, _dragIndex!, false, false),
+                                  ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
             ),
           ],
@@ -341,19 +359,11 @@ class _QueuePanelState extends State<QueuePanel> {
         isPastItem,
         dragHandle: isCurrentItem
             ? Icon(Icons.play_arrow_rounded, color: widget.primaryColor, size: 20)
-            : GestureDetector(
-                onVerticalDragStart: (details) {
-                  _startDrag(index, itemContext, details);
+            : Listener(
+                onPointerDown: (event) {
+                  _startDrag(index, itemContext, event.position);
                 },
-                onVerticalDragUpdate: (details) {
-                  _updateDrag(details);
-                },
-                onVerticalDragEnd: (details) {
-                  _endDrag();
-                },
-                onVerticalDragCancel: () {
-                  _cancelDrag();
-                },
+                // Move/up/cancel handled by parent Listener on Stack
                 child: Icon(Icons.drag_handle, color: widget.textColor.withOpacity(0.3), size: 20),
               ),
       ),

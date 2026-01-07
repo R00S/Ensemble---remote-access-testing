@@ -409,11 +409,6 @@ class _QueuePanelState extends State<QueuePanel> {
                     padding: Spacing.paddingAll12,
                     tooltip: 'Clear queue',
                   ),
-                  IconButton(
-                    icon: Icon(Icons.refresh_rounded, color: widget.textColor.withOpacity(0.7), size: IconSizes.sm),
-                    onPressed: widget.onRefresh,
-                    padding: Spacing.paddingAll12,
-                  ),
                 ],
               ),
             ),
@@ -521,12 +516,24 @@ class _QueuePanelState extends State<QueuePanel> {
         isPastItem,
         dragHandle: isCurrentItem
             ? Icon(Icons.play_arrow_rounded, color: widget.primaryColor, size: 20)
-            : Listener(
-                onPointerDown: (event) {
-                  _startDrag(index, itemContext, event.position);
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (details) {
+                  _startDrag(index, itemContext, details.globalPosition);
                 },
-                // Move/up/cancel handled by parent Listener on Stack
-                child: Icon(Icons.drag_handle, color: widget.textColor.withOpacity(0.3), size: 20),
+                onPanUpdate: (details) {
+                  _updateDragPointer(details.globalPosition);
+                },
+                onPanEnd: (details) {
+                  _endDrag();
+                },
+                onPanCancel: () {
+                  _cancelDrag();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                  child: Icon(Icons.drag_handle, color: widget.textColor.withOpacity(0.3), size: 20),
+                ),
               ),
       ),
     );

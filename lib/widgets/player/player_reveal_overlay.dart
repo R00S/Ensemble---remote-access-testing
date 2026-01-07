@@ -20,6 +20,7 @@ class PlayerRevealOverlay extends StatefulWidget {
   final double miniPlayerHeight;
   final bool showOnboardingHints; // Show additional hints for first-time users
   final bool miniPlayerInPrecisionMode; // When true, darken all cards
+  final ValueChanged<bool>? onPlayerListPrecisionModeChanged; // Callback when any card enters/exits precision mode
 
   const PlayerRevealOverlay({
     super.key,
@@ -28,6 +29,7 @@ class PlayerRevealOverlay extends StatefulWidget {
     required this.miniPlayerHeight,
     this.showOnboardingHints = false,
     this.miniPlayerInPrecisionMode = false,
+    this.onPlayerListPrecisionModeChanged,
   });
 
   @override
@@ -63,6 +65,20 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
     setState(() {
       _precisionModePlayerId = isActive ? playerId : null;
     });
+    // Notify parent so mini player can also darken
+    widget.onPlayerListPrecisionModeChanged?.call(isActive);
+  }
+
+  /// Create a saturation matrix for ColorFilter
+  /// saturation: 1.0 = normal, 0.0 = grayscale
+  List<double> _saturationMatrix(double saturation) {
+    final s = saturation;
+    return [
+      0.2126 + 0.7874 * s, 0.7152 - 0.7152 * s, 0.0722 - 0.0722 * s, 0, 0,
+      0.2126 - 0.2126 * s, 0.7152 + 0.2848 * s, 0.0722 - 0.0722 * s, 0, 0,
+      0.2126 - 0.2126 * s, 0.7152 - 0.7152 * s, 0.0722 + 0.9278 * s, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
   }
 
   @override
@@ -404,54 +420,64 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                                   offset: Offset(0, slideOffset),
                                   child: Padding(
                                     padding: const EdgeInsets.only(bottom: cardSpacing),
-                                    child: Stack(
-                                      children: [
-                                        PlayerCard(
-                                          player: player,
-                                          trackInfo: playerTrack,
-                                          albumArtUrl: albumArtUrl,
-                                          isSelected: false,
-                                          isPlaying: isPlaying,
-                                          isGrouped: maProvider.isPlayerManuallySynced(player.playerId),
-                                          backgroundColor: cardBgColor,
-                                          textColor: cardTextColor,
-                                          onTap: () {
-                                            HapticFeedback.mediumImpact();
-                                            maProvider.selectPlayer(player);
-                                            dismiss();
-                                          },
-                                          onLongPress: () {
-                                            HapticFeedback.mediumImpact();
-                                            maProvider.togglePlayerSync(player.playerId);
-                                          },
-                                          onPlayPause: () {
-                                            if (isPlaying) {
-                                              maProvider.pausePlayer(player.playerId);
-                                            } else {
-                                              maProvider.resumePlayer(player.playerId);
-                                            }
-                                          },
-                                          onSkipNext: () => maProvider.nextTrack(player.playerId),
-                                          onPower: () => maProvider.togglePower(player.playerId),
-                                          onVolumeChange: (volume) => maProvider.setVolume(player.playerId, (volume * 100).round()),
-                                          onPrecisionModeChanged: (isActive) => _onPrecisionModeChanged(player.playerId, isActive),
-                                        ),
-                                        // Dark overlay when another card is in precision mode
-                                        Positioned.fill(
-                                          child: IgnorePointer(
-                                            child: AnimatedOpacity(
-                                              opacity: shouldDarken ? 1.0 : 0.0,
-                                              duration: const Duration(milliseconds: 200),
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black.withOpacity(0.6),
-                                                  borderRadius: BorderRadius.circular(16), // Match card radius
+                                    child: TweenAnimationBuilder<double>(
+                                      tween: Tween(begin: 1.0, end: shouldDarken ? 0.0 : 1.0),
+                                      duration: const Duration(milliseconds: 200),
+                                      builder: (context, saturation, child) {
+                                        return ColorFiltered(
+                                          colorFilter: ColorFilter.matrix(_saturationMatrix(saturation)),
+                                          child: child,
+                                        );
+                                      },
+                                      child: Stack(
+                                        children: [
+                                          PlayerCard(
+                                            player: player,
+                                            trackInfo: playerTrack,
+                                            albumArtUrl: albumArtUrl,
+                                            isSelected: false,
+                                            isPlaying: isPlaying,
+                                            isGrouped: maProvider.isPlayerManuallySynced(player.playerId),
+                                            backgroundColor: cardBgColor,
+                                            textColor: cardTextColor,
+                                            onTap: () {
+                                              HapticFeedback.mediumImpact();
+                                              maProvider.selectPlayer(player);
+                                              dismiss();
+                                            },
+                                            onLongPress: () {
+                                              HapticFeedback.mediumImpact();
+                                              maProvider.togglePlayerSync(player.playerId);
+                                            },
+                                            onPlayPause: () {
+                                              if (isPlaying) {
+                                                maProvider.pausePlayer(player.playerId);
+                                              } else {
+                                                maProvider.resumePlayer(player.playerId);
+                                              }
+                                            },
+                                            onSkipNext: () => maProvider.nextTrack(player.playerId),
+                                            onPower: () => maProvider.togglePower(player.playerId),
+                                            onVolumeChange: (volume) => maProvider.setVolume(player.playerId, (volume * 100).round()),
+                                            onPrecisionModeChanged: (isActive) => _onPrecisionModeChanged(player.playerId, isActive),
+                                          ),
+                                          // Dark overlay when another card is in precision mode
+                                          Positioned.fill(
+                                            child: IgnorePointer(
+                                              child: AnimatedOpacity(
+                                                opacity: shouldDarken ? 1.0 : 0.0,
+                                                duration: const Duration(milliseconds: 200),
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black.withOpacity(0.6),
+                                                    borderRadius: BorderRadius.circular(16), // Match card radius
+                                                  ),
                                                 ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );
@@ -498,65 +524,75 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                             offset: Offset(0, slideOffset),
                             child: Padding(
                               padding: const EdgeInsets.only(bottom: 12),
-                              child: Stack(
-                                children: [
-                                  PlayerCard(
-                                    player: player,
-                                    trackInfo: playerTrack,
-                                    albumArtUrl: albumArtUrl,
-                                    isSelected: false,
-                                    isPlaying: isPlaying,
-                                    isGrouped: maProvider.isPlayerManuallySynced(player.playerId),
-                                    backgroundColor: cardBgColor,
-                                    textColor: cardTextColor,
-                                    onTap: () {
-                                      HapticFeedback.mediumImpact();
-                                      maProvider.selectPlayer(player);
-                                      dismiss();
-                                    },
-                                    onLongPress: () {
-                                      HapticFeedback.mediumImpact();
-                                      debugPrint('🔗 Long-press on ${player.name} (${player.playerId})');
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Syncing ${player.name}...'),
-                                          duration: const Duration(seconds: 2),
-                                        ),
-                                      );
-                                      maProvider.togglePlayerSync(player.playerId);
-                                    },
-                                    onPlayPause: () {
-                                      if (isPlaying) {
-                                        maProvider.pausePlayer(player.playerId);
-                                      } else {
-                                        maProvider.resumePlayer(player.playerId);
-                                      }
-                                    },
-                                    onSkipNext: () {
-                                      maProvider.nextTrack(player.playerId);
-                                    },
-                                    onPower: () {
-                                      maProvider.togglePower(player.playerId);
-                                    },
-                                    onVolumeChange: (volume) => maProvider.setVolume(player.playerId, (volume * 100).round()),
-                                    onPrecisionModeChanged: (isActive) => _onPrecisionModeChanged(player.playerId, isActive),
-                                  ),
-                                  // Dark overlay when another card is in precision mode
-                                  Positioned.fill(
-                                    child: IgnorePointer(
-                                      child: AnimatedOpacity(
-                                        opacity: shouldDarken ? 1.0 : 0.0,
-                                        duration: const Duration(milliseconds: 200),
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withOpacity(0.6),
-                                            borderRadius: BorderRadius.circular(16), // Match card radius
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(begin: 1.0, end: shouldDarken ? 0.0 : 1.0),
+                                duration: const Duration(milliseconds: 200),
+                                builder: (context, saturation, child) {
+                                  return ColorFiltered(
+                                    colorFilter: ColorFilter.matrix(_saturationMatrix(saturation)),
+                                    child: child,
+                                  );
+                                },
+                                child: Stack(
+                                  children: [
+                                    PlayerCard(
+                                      player: player,
+                                      trackInfo: playerTrack,
+                                      albumArtUrl: albumArtUrl,
+                                      isSelected: false,
+                                      isPlaying: isPlaying,
+                                      isGrouped: maProvider.isPlayerManuallySynced(player.playerId),
+                                      backgroundColor: cardBgColor,
+                                      textColor: cardTextColor,
+                                      onTap: () {
+                                        HapticFeedback.mediumImpact();
+                                        maProvider.selectPlayer(player);
+                                        dismiss();
+                                      },
+                                      onLongPress: () {
+                                        HapticFeedback.mediumImpact();
+                                        debugPrint('🔗 Long-press on ${player.name} (${player.playerId})');
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Syncing ${player.name}...'),
+                                            duration: const Duration(seconds: 2),
+                                          ),
+                                        );
+                                        maProvider.togglePlayerSync(player.playerId);
+                                      },
+                                      onPlayPause: () {
+                                        if (isPlaying) {
+                                          maProvider.pausePlayer(player.playerId);
+                                        } else {
+                                          maProvider.resumePlayer(player.playerId);
+                                        }
+                                      },
+                                      onSkipNext: () {
+                                        maProvider.nextTrack(player.playerId);
+                                      },
+                                      onPower: () {
+                                        maProvider.togglePower(player.playerId);
+                                      },
+                                      onVolumeChange: (volume) => maProvider.setVolume(player.playerId, (volume * 100).round()),
+                                      onPrecisionModeChanged: (isActive) => _onPrecisionModeChanged(player.playerId, isActive),
+                                    ),
+                                    // Dark overlay when another card is in precision mode
+                                    Positioned.fill(
+                                      child: IgnorePointer(
+                                        child: AnimatedOpacity(
+                                          opacity: shouldDarken ? 1.0 : 0.0,
+                                          duration: const Duration(milliseconds: 200),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(0.6),
+                                              borderRadius: BorderRadius.circular(16), // Match card radius
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           );

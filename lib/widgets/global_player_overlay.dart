@@ -169,6 +169,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   // Track mini player precision mode for darkening player cards
   bool _miniPlayerInPrecisionMode = false;
 
+  // Track player list precision mode for darkening mini player
+  bool _playerListInPrecisionMode = false;
+
   // State for interactive hint mode (blur backdrop + wait for user action)
   bool _isHintModeActive = false;
   Timer? _hintBounceTimer;
@@ -471,6 +474,20 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
           padding: const EdgeInsets.only(bottom: 0), // Content manages its own padding
           child: widget.child,
         ),
+        // Dark overlay for precision mode - covers entire screen behind UI elements
+        // Shows when mini player or player list card is in precision mode
+        if (_isRevealVisible && (_miniPlayerInPrecisionMode || _playerListInPrecisionMode))
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: 1.0,
+                duration: const Duration(milliseconds: 200),
+                child: Container(
+                  color: Colors.black.withOpacity(0.4),
+                ),
+              ),
+            ),
+          ),
         // Global persistent bottom navigation bar - positioned at bottom
         // Hide when: not connected, no player selected, OR showing welcome screen
         // For first-time users, selectedPlayer becomes non-null at the same time
@@ -704,6 +721,11 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
             miniPlayerHeight: 64,
             showOnboardingHints: _isOnboardingReveal,
             miniPlayerInPrecisionMode: _miniPlayerInPrecisionMode,
+            onPlayerListPrecisionModeChanged: (isActive) {
+              setState(() {
+                _playerListInPrecisionMode = isActive;
+              });
+            },
           ),
 
         // Global player overlay - renders ON TOP so cards slide behind it
@@ -743,6 +765,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                               _miniPlayerInPrecisionMode = isActive;
                             });
                           },
+                          shouldDarken: _playerListInPrecisionMode,
                         );
                       },
                     );

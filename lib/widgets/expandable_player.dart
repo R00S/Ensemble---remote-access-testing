@@ -44,6 +44,9 @@ class ExpandablePlayer extends StatefulWidget {
   /// Callback when volume precision mode changes
   final ValueChanged<bool>? onVolumePrecisionModeChanged;
 
+  /// Whether to show dark overlay (when player list card is in precision mode)
+  final bool shouldDarken;
+
   const ExpandablePlayer({
     super.key,
     this.slideOffset = 0.0,
@@ -52,6 +55,7 @@ class ExpandablePlayer extends StatefulWidget {
     this.isDeviceRevealVisible = false,
     this.isHintVisible = false,
     this.onVolumePrecisionModeChanged,
+    this.shouldDarken = false,
   });
 
   @override
@@ -2427,6 +2431,30 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     ),
                   ),
 
+                // Dark + desaturated overlay when player list card is in precision mode
+                // Only show when collapsed (mini player visible)
+                if (t < 0.5 && widget.shouldDarken)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 1.0, end: 0.0),
+                        duration: const Duration(milliseconds: 200),
+                        builder: (context, saturation, child) {
+                          return ColorFiltered(
+                            colorFilter: ColorFilter.matrix(_saturationMatrix(saturation)),
+                            child: child,
+                          );
+                        },
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(borderRadius),
+                          child: Container(
+                            color: Colors.black.withOpacity(0.6),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
               ],
             ),
           ),
@@ -2434,6 +2462,18 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         ),
       ),
     );
+  }
+
+  /// Create a saturation matrix for ColorFilter
+  /// saturation: 1.0 = normal, 0.0 = grayscale
+  List<double> _saturationMatrix(double saturation) {
+    final s = saturation;
+    return [
+      0.2126 + 0.7874 * s, 0.7152 - 0.7152 * s, 0.0722 - 0.0722 * s, 0, 0,
+      0.2126 - 0.2126 * s, 0.7152 + 0.2848 * s, 0.0722 - 0.0722 * s, 0, 0,
+      0.2126 - 0.2126 * s, 0.7152 - 0.7152 * s, 0.0722 + 0.9278 * s, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
   }
 
   /// Build the peek player content that slides in from the edge during drag

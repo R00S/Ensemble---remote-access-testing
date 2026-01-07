@@ -70,7 +70,7 @@ class ThemeProvider extends ChangeNotifier {
   }
 
   /// Get adaptive surface color for the given brightness (light/dark mode aware)
-  /// Returns a very subtle tinted background for the nav bar (more neutral than player card)
+  /// Returns the same color as the expanded player background (scheme.surface)
   Color? getAdaptiveSurfaceColorFor(Brightness brightness) {
     // Pick scheme based on current mode
     final scheme = brightness == Brightness.dark
@@ -79,16 +79,8 @@ class ThemeProvider extends ChangeNotifier {
 
     if (scheme == null) return null;
 
-    // Use primary color's hue for tinting, but force very subtle appearance
-    // Nav bar needs to be more neutral than the player card
-    final hsl = HSLColor.fromColor(scheme.primary);
-    if (brightness == Brightness.dark) {
-      // Dark mode: very dark with subtle color tint
-      return hsl.withSaturation(0.12).withLightness(0.10).toColor();
-    } else {
-      // Light mode: nearly white with very subtle tint
-      return hsl.withSaturation(0.04).withLightness(0.98).toColor();
-    }
+    // Use surface - same as expanded player background (line 1234 in expandable_player.dart)
+    return scheme.surface;
   }
 
   Future<void> _loadSettings() async {

@@ -45,14 +45,12 @@ class _QueuePanelState extends State<QueuePanel> {
   // Drag state
   int? _dragIndex;
   int? _dragStartIndex;
-  double _dragY = 0; // Absolute Y position of dragged item
+  double _dragY = 0; // Y position of dragged item relative to screen
   double _dragStartY = 0; // Y position when drag started
   double _itemStartY = 0; // Initial Y of the item being dragged
-  OverlayEntry? _dragOverlay;
   QueueItem? _dragItem;
   double _itemHeight = 64.0;
-  double _itemWidth = 0;
-  double _itemX = 0;
+  double _listTopOffset = 0; // Offset of the list from top of stack
 
   // Track pointer for right-swipe-to-close
   Offset? _pointerStart;
@@ -87,7 +85,6 @@ class _QueuePanelState extends State<QueuePanel> {
 
   @override
   void dispose() {
-    _removeDragOverlay();
     super.dispose();
   }
 
@@ -131,39 +128,26 @@ class _QueuePanelState extends State<QueuePanel> {
     final RenderBox box = itemContext.findRenderObject() as RenderBox;
     final Offset globalPos = box.localToGlobal(Offset.zero);
     _itemHeight = box.size.height;
-    _itemWidth = box.size.width;
-    _itemX = globalPos.dx;
     _itemStartY = globalPos.dy;
     _dragStartY = details.globalPosition.dy;
     _dragY = globalPos.dy;
+
+    // Find the stack's position to calculate relative offset
+    // The stack is the Expanded widget's child, we need its global offset
+    _listTopOffset = globalPos.dy - (index * _itemHeight);
 
     setState(() {
       _dragIndex = index;
       _dragStartIndex = index;
       _dragItem = _items[index];
     });
-
-    _dragOverlay = OverlayEntry(
-      builder: (context) => Positioned(
-        left: _itemX,
-        top: _dragY,
-        width: _itemWidth,
-        child: Material(
-          elevation: 8,
-          borderRadius: BorderRadius.circular(8),
-          child: _buildQueueItemContent(_dragItem!, _dragIndex!, false, false),
-        ),
-      ),
-    );
-    Overlay.of(context).insert(_dragOverlay!);
   }
 
   void _updateDrag(DragUpdateDetails details) {
-    if (_dragIndex == null || _dragOverlay == null) return;
+    if (_dragIndex == null) return;
 
     // Move overlay to follow finger
     _dragY = _itemStartY + (details.globalPosition.dy - _dragStartY);
-    _dragOverlay!.markNeedsBuild();
 
     // Calculate which index we're hovering over based on movement
     final totalOffset = details.globalPosition.dy - _dragStartY;
@@ -177,6 +161,9 @@ class _QueuePanelState extends State<QueuePanel> {
         _items.insert(targetIndex, item);
         _dragIndex = targetIndex;
       });
+    } else {
+      // Just update position
+      setState(() {});
     }
   }
 
@@ -186,8 +173,6 @@ class _QueuePanelState extends State<QueuePanel> {
     final newIndex = _dragIndex!;
     final originalIndex = _dragStartIndex!;
     final item = _items[newIndex];
-
-    _removeDragOverlay();
 
     setState(() {
       _dragIndex = null;
@@ -215,17 +200,11 @@ class _QueuePanelState extends State<QueuePanel> {
       });
     }
 
-    _removeDragOverlay();
     setState(() {
       _dragIndex = null;
       _dragStartIndex = null;
       _dragItem = null;
     });
-  }
-
-  void _removeDragOverlay() {
-    _dragOverlay?.remove();
-    _dragOverlay = null;
   }
 
   @override
@@ -285,7 +264,23 @@ class _QueuePanelState extends State<QueuePanel> {
                   ? Center(child: CircularProgressIndicator(color: widget.primaryColor))
                   : widget.queue == null || _items.isEmpty
                       ? EmptyState.queue(context: context)
-                      : _buildQueueList(),
+                      : Stack(
+                          children: [
+                            _buildQueueList(),
+                            // Dragged item overlay
+                            if (_dragIndex != null && _dragItem != null)
+                              Positioned(
+                                left: 8,
+                                right: 8,
+                                top: _dragY - _listTopOffset,
+                                child: Material(
+                                  elevation: 8,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: _buildQueueItemContent(_dragItem!, _dragIndex!, false, false),
+                                ),
+                              ),
+                          ],
+                        ),
             ),
           ],
         ),

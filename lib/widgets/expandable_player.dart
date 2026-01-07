@@ -2487,6 +2487,18 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                                   onDraggingChanged: (isDragging) {
                                     _isQueueDragging = isDragging;
                                   },
+                                  onSwipeStart: () {
+                                    _handleQueuePanelDragStart(0); // Start position doesn't matter for delta-based
+                                  },
+                                  onSwipeUpdate: (dx) {
+                                    // dx is distance from swipe start, convert to controller value
+                                    final screenWidth = MediaQuery.of(context).size.width;
+                                    final newValue = (1.0 - dx / screenWidth).clamp(0.0, 1.0);
+                                    _queuePanelController.value = newValue;
+                                  },
+                                  onSwipeEnd: (velocity) {
+                                    _handleQueuePanelDragEnd(velocity);
+                                  },
                                 ),
                         ),
                       ),

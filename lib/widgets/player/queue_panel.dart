@@ -21,6 +21,9 @@ class QueuePanel extends StatefulWidget {
   final VoidCallback onClose;
   final VoidCallback onRefresh;
   final ValueChanged<bool>? onDraggingChanged;
+  final VoidCallback? onSwipeStart;
+  final ValueChanged<double>? onSwipeUpdate; // dx delta from start
+  final ValueChanged<double>? onSwipeEnd; // velocity
 
   const QueuePanel({
     super.key,
@@ -34,6 +37,9 @@ class QueuePanel extends StatefulWidget {
     required this.onClose,
     required this.onRefresh,
     this.onDraggingChanged,
+    this.onSwipeStart,
+    this.onSwipeUpdate,
+    this.onSwipeEnd,
   });
 
   @override
@@ -57,6 +63,12 @@ class _QueuePanelState extends State<QueuePanel> {
 
   // Optimistic update for tap-to-skip
   int? _optimisticCurrentIndex;
+
+  // Swipe-to-close tracking (raw pointer events to bypass gesture arena)
+  Offset? _swipeStart;
+  DateTime? _swipeStartTime;
+  bool _isSwiping = false;
+  static const _swipeMinDistance = 10.0; // Min distance to start tracking
 
 
   @override
@@ -279,8 +291,53 @@ class _QueuePanelState extends State<QueuePanel> {
 
   @override
   Widget build(BuildContext context) {
-    // Swipe-to-close is now handled by expandable_player's gesture-driven close
-    return Container(
+    // Use Listener for raw pointer events to bypass gesture arena
+    // This allows swipe-to-close to work even over ListView/Dismissible
+    return Listener(
+      onPointerDown: (event) {
+        // Don't track swipe while dragging a queue item
+        if (_dragIndex == null) {
+          _swipeStart = event.position;
+          _swipeStartTime = DateTime.now();
+          _isSwiping = false;
+        }
+      },
+      onPointerMove: (event) {
+        if (_swipeStart == null || _dragIndex != null) return;
+
+        final dx = event.position.dx - _swipeStart!.dx;
+        final dy = (event.position.dy - _swipeStart!.dy).abs();
+
+        // Only track horizontal swipes (dx > dy * 2 means mostly horizontal)
+        if (dx > _swipeMinDistance && dx > dy * 2) {
+          if (!_isSwiping) {
+            _isSwiping = true;
+            widget.onSwipeStart?.call();
+          }
+          widget.onSwipeUpdate?.call(dx);
+        }
+      },
+      onPointerUp: (event) {
+        if (_isSwiping && _swipeStart != null && _swipeStartTime != null) {
+          // Calculate velocity
+          final elapsed = DateTime.now().difference(_swipeStartTime!).inMilliseconds;
+          final dx = event.position.dx - _swipeStart!.dx;
+          final velocity = elapsed > 0 ? (dx / elapsed) * 1000 : 0.0; // px/s
+          widget.onSwipeEnd?.call(velocity);
+        }
+        _swipeStart = null;
+        _swipeStartTime = null;
+        _isSwiping = false;
+      },
+      onPointerCancel: (_) {
+        if (_isSwiping) {
+          widget.onSwipeEnd?.call(0); // Cancel with zero velocity
+        }
+        _swipeStart = null;
+        _swipeStartTime = null;
+        _isSwiping = false;
+      },
+      child: Container(
         color: widget.backgroundColor,
         child: Column(
           children: [
@@ -357,6 +414,7 @@ class _QueuePanelState extends State<QueuePanel> {
             ),
           ],
         ),
+      ),
     );
   }
 

@@ -103,6 +103,7 @@ class _PlayerCardState extends State<PlayerCard> {
 
   void _enterPrecisionMode() {
     if (_inPrecisionMode) return;
+    HapticFeedback.mediumImpact(); // Vibrate to indicate precision mode
     setState(() {
       _inPrecisionMode = true;
       _precisionZoomCenter = _dragVolumeLevel; // Capture current volume as zoom center

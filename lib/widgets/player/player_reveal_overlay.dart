@@ -54,6 +54,15 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
   // Hint system
   bool _showHints = true;
 
+  // Precision mode - track which player card is in precision mode (null = none)
+  String? _precisionModePlayerId;
+
+  void _onPrecisionModeChanged(String playerId, bool isActive) {
+    setState(() {
+      _precisionModePlayerId = isActive ? playerId : null;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -382,38 +391,47 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                                 final distanceToTravel = baseOffset + (reverseIndex * (cardHeight + cardSpacing));
                                 final slideOffset = distanceToTravel * (1.0 - t);
 
+                                // Dim other cards when one is in precision mode
+                                final isInPrecisionMode = _precisionModePlayerId == player.playerId;
+                                final shouldDim = _precisionModePlayerId != null && !isInPrecisionMode;
+
                                 return Transform.translate(
                                   offset: Offset(0, slideOffset),
                                   child: Padding(
                                     padding: const EdgeInsets.only(bottom: cardSpacing),
-                                    child: PlayerCard(
-                                      player: player,
-                                      trackInfo: playerTrack,
-                                      albumArtUrl: albumArtUrl,
-                                      isSelected: false,
-                                      isPlaying: isPlaying,
-                                      isGrouped: maProvider.isPlayerManuallySynced(player.playerId),
-                                      backgroundColor: cardBgColor,
-                                      textColor: cardTextColor,
-                                      onTap: () {
-                                        HapticFeedback.mediumImpact();
-                                        maProvider.selectPlayer(player);
-                                        dismiss();
-                                      },
-                                      onLongPress: () {
-                                        HapticFeedback.mediumImpact();
-                                        maProvider.togglePlayerSync(player.playerId);
-                                      },
-                                      onPlayPause: () {
-                                        if (isPlaying) {
-                                          maProvider.pausePlayer(player.playerId);
-                                        } else {
-                                          maProvider.resumePlayer(player.playerId);
-                                        }
-                                      },
-                                      onSkipNext: () => maProvider.nextTrack(player.playerId),
-                                      onPower: () => maProvider.togglePower(player.playerId),
-                                      onVolumeChange: (volume) => maProvider.setVolume(player.playerId, (volume * 100).round()),
+                                    child: AnimatedOpacity(
+                                      opacity: shouldDim ? 0.3 : 1.0,
+                                      duration: const Duration(milliseconds: 200),
+                                      child: PlayerCard(
+                                        player: player,
+                                        trackInfo: playerTrack,
+                                        albumArtUrl: albumArtUrl,
+                                        isSelected: false,
+                                        isPlaying: isPlaying,
+                                        isGrouped: maProvider.isPlayerManuallySynced(player.playerId),
+                                        backgroundColor: cardBgColor,
+                                        textColor: cardTextColor,
+                                        onTap: () {
+                                          HapticFeedback.mediumImpact();
+                                          maProvider.selectPlayer(player);
+                                          dismiss();
+                                        },
+                                        onLongPress: () {
+                                          HapticFeedback.mediumImpact();
+                                          maProvider.togglePlayerSync(player.playerId);
+                                        },
+                                        onPlayPause: () {
+                                          if (isPlaying) {
+                                            maProvider.pausePlayer(player.playerId);
+                                          } else {
+                                            maProvider.resumePlayer(player.playerId);
+                                          }
+                                        },
+                                        onSkipNext: () => maProvider.nextTrack(player.playerId),
+                                        onPower: () => maProvider.togglePower(player.playerId),
+                                        onVolumeChange: (volume) => maProvider.setVolume(player.playerId, (volume * 100).round()),
+                                        onPrecisionModeChanged: (isActive) => _onPrecisionModeChanged(player.playerId, isActive),
+                                      ),
                                     ),
                                   ),
                                 );
@@ -449,49 +467,58 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                           // Use the elastic animation value directly (already has bounce)
                           final slideOffset = distanceToTravel * (1.0 - t);
 
+                          // Dim other cards when one is in precision mode
+                          final isInPrecisionMode = _precisionModePlayerId == player.playerId;
+                          final shouldDim = _precisionModePlayerId != null && !isInPrecisionMode;
+
                           return Transform.translate(
                             offset: Offset(0, slideOffset),
                             child: Padding(
                               padding: const EdgeInsets.only(bottom: 12),
-                              child: PlayerCard(
-                                player: player,
-                                trackInfo: playerTrack,
-                                albumArtUrl: albumArtUrl,
-                                isSelected: false,
-                                isPlaying: isPlaying,
-                                isGrouped: maProvider.isPlayerManuallySynced(player.playerId),
-                                backgroundColor: cardBgColor,
-                                textColor: cardTextColor,
-                                onTap: () {
-                                  HapticFeedback.mediumImpact();
-                                  maProvider.selectPlayer(player);
-                                  dismiss();
-                                },
-                                onLongPress: () {
-                                  HapticFeedback.mediumImpact();
-                                  debugPrint('🔗 Long-press on ${player.name} (${player.playerId})');
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Syncing ${player.name}...'),
-                                      duration: const Duration(seconds: 2),
-                                    ),
-                                  );
-                                  maProvider.togglePlayerSync(player.playerId);
-                                },
-                                onPlayPause: () {
-                                  if (isPlaying) {
-                                    maProvider.pausePlayer(player.playerId);
-                                  } else {
-                                    maProvider.resumePlayer(player.playerId);
-                                  }
-                                },
-                                onSkipNext: () {
-                                  maProvider.nextTrack(player.playerId);
-                                },
-                                onPower: () {
-                                  maProvider.togglePower(player.playerId);
-                                },
-                                onVolumeChange: (volume) => maProvider.setVolume(player.playerId, (volume * 100).round()),
+                              child: AnimatedOpacity(
+                                opacity: shouldDim ? 0.3 : 1.0,
+                                duration: const Duration(milliseconds: 200),
+                                child: PlayerCard(
+                                  player: player,
+                                  trackInfo: playerTrack,
+                                  albumArtUrl: albumArtUrl,
+                                  isSelected: false,
+                                  isPlaying: isPlaying,
+                                  isGrouped: maProvider.isPlayerManuallySynced(player.playerId),
+                                  backgroundColor: cardBgColor,
+                                  textColor: cardTextColor,
+                                  onTap: () {
+                                    HapticFeedback.mediumImpact();
+                                    maProvider.selectPlayer(player);
+                                    dismiss();
+                                  },
+                                  onLongPress: () {
+                                    HapticFeedback.mediumImpact();
+                                    debugPrint('🔗 Long-press on ${player.name} (${player.playerId})');
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Syncing ${player.name}...'),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                    maProvider.togglePlayerSync(player.playerId);
+                                  },
+                                  onPlayPause: () {
+                                    if (isPlaying) {
+                                      maProvider.pausePlayer(player.playerId);
+                                    } else {
+                                      maProvider.resumePlayer(player.playerId);
+                                    }
+                                  },
+                                  onSkipNext: () {
+                                    maProvider.nextTrack(player.playerId);
+                                  },
+                                  onPower: () {
+                                    maProvider.togglePower(player.playerId);
+                                  },
+                                  onVolumeChange: (volume) => maProvider.setVolume(player.playerId, (volume * 100).round()),
+                                  onPrecisionModeChanged: (isActive) => _onPrecisionModeChanged(player.playerId, isActive),
+                                ),
                               ),
                             ),
                           );

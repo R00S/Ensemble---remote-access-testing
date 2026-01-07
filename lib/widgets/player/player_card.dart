@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -5,6 +6,7 @@ import '../../providers/music_assistant_provider.dart';
 import '../../theme/design_tokens.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/debug_logger.dart';
+import '../../services/settings_service.dart';
 
 final _volumeLogger = DebugLogger();
 
@@ -26,9 +28,15 @@ class PlayerCard extends StatefulWidget {
   final VoidCallback? onSkipNext;
   final VoidCallback? onPower;
   final ValueChanged<double>? onVolumeChange;
+  final ValueChanged<bool>? onPrecisionModeChanged;
 
   // Pastel yellow for grouped players
   static const Color groupBorderColor = Color(0xFFFFF59D);
+
+  // Precision mode settings
+  static const int precisionTriggerMs = 800; // Hold still for 800ms to enter precision mode
+  static const double precisionStillnessThreshold = 5.0; // Max pixels of movement considered "still"
+  static const double precisionSensitivity = 0.1; // 10x more precise (full swipe = 10% change)
 
   const PlayerCard({
     super.key,
@@ -46,6 +54,7 @@ class PlayerCard extends StatefulWidget {
     this.onSkipNext,
     this.onPower,
     this.onVolumeChange,
+    this.onPrecisionModeChanged,
   });
 
   @override
@@ -61,6 +70,59 @@ class _PlayerCardState extends State<PlayerCard> {
   bool _hasLocalVolumeOverride = false; // True if we've set volume locally
   static const int _volumeThrottleMs = 150; // Only send volume updates every 150ms
   static const int _consecutiveSwipeWindowMs = 5000; // 5 seconds - extended window for consecutive swipes
+
+  // Precision mode state
+  bool _inPrecisionMode = false;
+  Timer? _precisionTimer;
+  Offset? _lastDragPosition;
+  bool _precisionModeEnabled = true; // From settings
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrecisionModeSetting();
+  }
+
+  Future<void> _loadPrecisionModeSetting() async {
+    final enabled = await SettingsService.getVolumePrecisionMode();
+    if (mounted) {
+      setState(() {
+        _precisionModeEnabled = enabled;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _precisionTimer?.cancel();
+    super.dispose();
+  }
+
+  void _enterPrecisionMode() {
+    if (_inPrecisionMode) return;
+    setState(() {
+      _inPrecisionMode = true;
+    });
+    widget.onPrecisionModeChanged?.call(true);
+    _volumeLogger.debug(
+      'PRECISION_MODE [${widget.player.name}]: ENTERED',
+      context: 'Volume',
+    );
+  }
+
+  void _exitPrecisionMode() {
+    _precisionTimer?.cancel();
+    _precisionTimer = null;
+    if (!_inPrecisionMode) return;
+    setState(() {
+      _inPrecisionMode = false;
+    });
+    widget.onPrecisionModeChanged?.call(false);
+    _volumeLogger.debug(
+      'PRECISION_MODE [${widget.player.name}]: EXITED',
+      context: 'Volume',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -322,17 +384,42 @@ class _PlayerCardState extends State<PlayerCard> {
       _isDraggingVolume = true;
       _dragVolumeLevel = startVolume;
     });
+    _lastDragPosition = details.globalPosition;
     HapticFeedback.lightImpact();
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
     if (!_isDraggingVolume || _cardWidth <= 0) return;
 
+    // Check for stillness to trigger precision mode (only if enabled in settings)
+    final currentPosition = details.globalPosition;
+    if (_precisionModeEnabled && _lastDragPosition != null) {
+      final movement = (currentPosition - _lastDragPosition!).distance;
+
+      if (movement < PlayerCard.precisionStillnessThreshold) {
+        // Finger is still - start precision timer if not already running
+        if (_precisionTimer == null && !_inPrecisionMode) {
+          _precisionTimer = Timer(
+            Duration(milliseconds: PlayerCard.precisionTriggerMs),
+            _enterPrecisionMode,
+          );
+        }
+      } else {
+        // Finger moved - cancel timer (but don't exit precision mode if already in it)
+        _precisionTimer?.cancel();
+        _precisionTimer = null;
+      }
+    }
+    _lastDragPosition = currentPosition;
+
     // Directional volume: drag right = increase, drag left = decrease
     // Distance determines amount of change (full card width = 100%)
     // Multiple swipes accumulate - each starts from current volume
     final dragDelta = details.delta.dx;
-    final volumeDelta = dragDelta / _cardWidth;
+
+    // Apply precision sensitivity when in precision mode
+    final sensitivity = _inPrecisionMode ? PlayerCard.precisionSensitivity : 1.0;
+    final volumeDelta = (dragDelta / _cardWidth) * sensitivity;
 
     final newVolume = (_dragVolumeLevel + volumeDelta).clamp(0.0, 1.0);
 
@@ -355,12 +442,15 @@ class _PlayerCardState extends State<PlayerCard> {
     // Send final volume on release
     _volumeLogger.debug(
       'DRAG_END [${widget.player.name}]: '
-      'finalVol=${(_dragVolumeLevel * 100).round()}%',
+      'finalVol=${(_dragVolumeLevel * 100).round()}%, '
+      'precisionMode=$_inPrecisionMode',
       context: 'Volume',
     );
     widget.onVolumeChange?.call(_dragVolumeLevel);
     _lastDragEndTime = DateTime.now().millisecondsSinceEpoch; // Track for consecutive swipes
     _hasLocalVolumeOverride = true; // Mark that we have a local volume value
+    _exitPrecisionMode();
+    _lastDragPosition = null;
     setState(() {
       _isDraggingVolume = false;
     });
@@ -368,6 +458,8 @@ class _PlayerCardState extends State<PlayerCard> {
   }
 
   void _onDragCancel() {
+    _exitPrecisionMode();
+    _lastDragPosition = null;
     setState(() {
       _isDraggingVolume = false;
     });

@@ -41,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Player settings
   bool _preferLocalPlayer = false;
   bool _smartSortPlayers = false;
+  bool _volumePrecisionMode = true;
   // Hint settings
   bool _showHints = true;
   // Library settings
@@ -92,6 +93,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Load player settings
     final preferLocal = await SettingsService.getPreferLocalPlayer();
     final smartSort = await SettingsService.getSmartSortPlayers();
+    final volumePrecision = await SettingsService.getVolumePrecisionMode();
 
     // Load hint settings
     final showHints = await SettingsService.getShowHints();
@@ -115,6 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _libraryEnabled = libraryEnabled;
         _preferLocalPlayer = preferLocal;
         _smartSortPlayers = smartSort;
+        _volumePrecisionMode = volumePrecision;
         _showHints = showHints;
         _showOnlyArtistsWithAlbums = showOnlyArtistsWithAlbums;
       });
@@ -716,6 +719,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) {
                   setState(() => _smartSortPlayers = value);
                   SettingsService.setSmartSortPlayers(value);
+                },
+                activeColor: colorScheme.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SwitchListTile(
+                title: Text(
+                  'Volume precision mode',
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                subtitle: Text(
+                  'Hold still while adjusting volume for fine control',
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
+                ),
+                value: _volumePrecisionMode,
+                onChanged: (value) {
+                  setState(() => _volumePrecisionMode = value);
+                  SettingsService.setVolumePrecisionMode(value);
                 },
                 activeColor: colorScheme.primary,
                 contentPadding: EdgeInsets.zero,

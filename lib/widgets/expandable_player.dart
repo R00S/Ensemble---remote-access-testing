@@ -11,6 +11,7 @@ import '../services/animation_debugger.dart';
 import '../theme/palette_helper.dart';
 import '../theme/theme_provider.dart';
 import '../l10n/app_localizations.dart';
+import '../services/settings_service.dart';
 import 'animated_icon_button.dart';
 import 'global_player_overlay.dart';
 import 'volume_control.dart';
@@ -119,6 +120,15 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   static const int _volumeThrottleMs = 150; // Only send volume updates every 150ms
   static const int _consecutiveSwipeWindowMs = 5000; // 5 seconds - extended window for consecutive swipes
 
+  // Volume precision mode state
+  bool _inVolumePrecisionMode = false;
+  Timer? _volumePrecisionTimer;
+  Offset? _lastVolumeDragPosition;
+  bool _volumePrecisionModeEnabled = true; // From settings
+  static const int _precisionTriggerMs = 800; // Hold still for 800ms to enter precision mode
+  static const double _precisionStillnessThreshold = 5.0; // Max pixels of movement considered "still"
+  static const double _precisionSensitivity = 0.1; // 10x more precise (full swipe = 10% change)
+
   // Track favorite state for current track
   bool _isCurrentTrackFavorite = false;
   String? _lastTrackUri; // Track which track we last checked favorite status for
@@ -201,6 +211,32 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         _stopQueueRefreshTimer();
       }
     });
+
+    // Load precision mode setting
+    _loadVolumePrecisionModeSetting();
+  }
+
+  Future<void> _loadVolumePrecisionModeSetting() async {
+    final enabled = await SettingsService.getVolumePrecisionMode();
+    if (mounted) {
+      _volumePrecisionModeEnabled = enabled;
+    }
+  }
+
+  void _enterVolumePrecisionMode() {
+    if (_inVolumePrecisionMode) return;
+    setState(() {
+      _inVolumePrecisionMode = true;
+    });
+  }
+
+  void _exitVolumePrecisionMode() {
+    _volumePrecisionTimer?.cancel();
+    _volumePrecisionTimer = null;
+    if (!_inVolumePrecisionMode) return;
+    setState(() {
+      _inVolumePrecisionMode = false;
+    });
   }
 
   Timer? _queueRefreshTimer;
@@ -228,6 +264,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     _slideOffsetNotifier.dispose();
     _positionSubscription?.cancel();
     _queueRefreshTimer?.cancel();
+    _volumePrecisionTimer?.cancel();
     _progressNotifier.dispose();
     _seekPositionNotifier.dispose();
     super.dispose();
@@ -1485,16 +1522,42 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
               _isDraggingVolume = true;
               _dragVolumeLevel = startVolume;
             });
+            _lastVolumeDragPosition = details.globalPosition;
             HapticFeedback.lightImpact();
           }
         },
         onHorizontalDragUpdate: (details) {
           // Volume swipe when device reveal is visible
           if (widget.isDeviceRevealVisible && _isDraggingVolume && !isExpanded) {
+            // Check for stillness to trigger precision mode (only if enabled in settings)
+            final currentPosition = details.globalPosition;
+            if (_volumePrecisionModeEnabled && _lastVolumeDragPosition != null) {
+              final movement = (currentPosition - _lastVolumeDragPosition!).distance;
+
+              if (movement < _precisionStillnessThreshold) {
+                // Finger is still - start precision timer if not already running
+                if (_volumePrecisionTimer == null && !_inVolumePrecisionMode) {
+                  _volumePrecisionTimer = Timer(
+                    Duration(milliseconds: _precisionTriggerMs),
+                    _enterVolumePrecisionMode,
+                  );
+                }
+              } else {
+                // Finger moved - cancel timer (but don't exit precision mode if already in it)
+                _volumePrecisionTimer?.cancel();
+                _volumePrecisionTimer = null;
+              }
+            }
+            _lastVolumeDragPosition = currentPosition;
+
             // Directional volume: drag right = increase, drag left = decrease
             // Multiple swipes accumulate - each starts from current volume
             final dragDelta = details.delta.dx;
-            final volumeDelta = dragDelta / collapsedWidth;
+
+            // Apply precision sensitivity when in precision mode
+            final sensitivity = _inVolumePrecisionMode ? _precisionSensitivity : 1.0;
+            final volumeDelta = (dragDelta / collapsedWidth) * sensitivity;
+
             final newVolume = (_dragVolumeLevel + volumeDelta).clamp(0.0, 1.0);
             if ((newVolume - _dragVolumeLevel).abs() > 0.001) {
               setState(() {
@@ -1529,6 +1592,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             maProvider.setVolume(selectedPlayer.playerId, (_dragVolumeLevel * 100).round());
             _lastVolumeDragEndTime = DateTime.now().millisecondsSinceEpoch; // Track for consecutive swipes
             _hasLocalVolumeOverride = true; // Mark that we have a local volume value
+            _exitVolumePrecisionMode();
+            _lastVolumeDragPosition = null;
             setState(() {
               _isDraggingVolume = false;
             });
@@ -1564,6 +1629,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           // Reset state if gesture is cancelled (e.g., system takes over)
           _horizontalDragStartX = null;
           if (_isDraggingVolume) {
+            _exitVolumePrecisionMode();
+            _lastVolumeDragPosition = null;
             setState(() => _isDraggingVolume = false);
           }
           if (_isDragging) {

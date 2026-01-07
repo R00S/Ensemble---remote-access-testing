@@ -84,6 +84,9 @@ class SettingsService {
   static const String _keyHasUsedPlayerReveal = 'has_used_player_reveal'; // Track if user has pulled to reveal players
   static const String _keyHasCompletedOnboarding = 'has_completed_onboarding'; // Track if user has seen welcome screen
 
+  // Volume Precision Mode Settings
+  static const String _keyVolumePrecisionMode = 'volume_precision_mode'; // Enable hold-to-precision volume control
+
   // Podcast Cover Cache (iTunes URLs for high-res artwork)
   static const String _keyPodcastCoverCache = 'podcast_cover_cache';
 
@@ -822,6 +825,22 @@ class SettingsService {
   static Future<void> setHasCompletedOnboarding(bool completed) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyHasCompletedOnboarding, completed);
+  }
+
+  // Volume Precision Mode Settings
+
+  /// Get whether volume precision mode is enabled (default: true)
+  /// When enabled, holding still while adjusting volume enters precision mode
+  /// for fine-grained control (10x more precise)
+  static Future<bool> getVolumePrecisionMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyVolumePrecisionMode) ?? true;
+  }
+
+  /// Set whether volume precision mode is enabled
+  static Future<void> setVolumePrecisionMode(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyVolumePrecisionMode, enabled);
   }
 
   // Podcast Cover Cache (iTunes URLs for high-res artwork)

@@ -148,6 +148,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   double _dragStartY = 0;
   double _dragStartValue = 0;
 
+  // Gesture-driven queue panel close state
+  bool _isQueuePanelDragging = false;
+  double _queueDragStartX = 0;
+  double _queueDragStartValue = 0;
+
   // Maximum drag distance for full expand/collapse
   static const double _maxDragDistance = 300.0;
 
@@ -375,6 +380,69 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           AnimationDebugger.endSession();
         });
       }
+    }
+  }
+
+  /// Start tracking horizontal drag on queue panel
+  void _handleQueuePanelDragStart(double globalX) {
+    _isQueuePanelDragging = true;
+    _queueDragStartX = globalX;
+    _queueDragStartValue = _queuePanelController.value;
+    _queuePanelController.stop();
+  }
+
+  /// Update queue panel position based on horizontal drag
+  void _handleQueuePanelDragUpdate(double globalX, double screenWidth) {
+    if (!_isQueuePanelDragging) return;
+
+    final dragDelta = globalX - _queueDragStartX;
+    // Dragging right (positive delta) = close (decrease value toward 0)
+    // Use screen width as max drag distance for natural feel
+    final normalizedDelta = dragDelta / screenWidth;
+    final newValue = (_queueDragStartValue - normalizedDelta).clamp(0.0, 1.0);
+
+    _queuePanelController.value = newValue;
+  }
+
+  /// Finish queue panel drag - commit or snap back
+  void _handleQueuePanelDragEnd(double velocity) {
+    if (!_isQueuePanelDragging) return;
+    _isQueuePanelDragging = false;
+
+    final currentValue = _queuePanelController.value;
+
+    // Determine whether to open or close based on velocity first, then position
+    bool shouldClose;
+    if (velocity.abs() > _commitVelocityThreshold) {
+      // High velocity: positive = swipe right = close
+      shouldClose = velocity > 0;
+    } else {
+      // Low velocity: use position threshold
+      shouldClose = currentValue < 0.5;
+    }
+
+    if (shouldClose) {
+      if (currentValue > 0.0) {
+        _queuePanelController.duration = _queueCloseDuration;
+        _queuePanelController.reverse();
+      }
+    } else {
+      if (currentValue < 1.0) {
+        _queuePanelController.duration = _queueOpenDuration;
+        _queuePanelController.forward();
+      }
+    }
+  }
+
+  /// Cancel queue panel drag - snap back to open
+  void _handleQueuePanelDragCancel() {
+    if (!_isQueuePanelDragging) return;
+    _isQueuePanelDragging = false;
+
+    // Snap back to open
+    if (_queuePanelController.value < 1.0) {
+      _queuePanelController.duration = _queueOpenDuration;
+      _queuePanelController.forward();
     }
   }
 
@@ -1519,6 +1587,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         },
         onHorizontalDragStart: (details) {
           _horizontalDragStartX = details.globalPosition.dx;
+          // Start queue panel drag if queue is open
+          if (isQueuePanelOpen && !_isQueueDragging) {
+            _handleQueuePanelDragStart(details.globalPosition.dx);
+            return;
+          }
           // Start volume drag if device reveal is visible
           if (widget.isDeviceRevealVisible && !isExpanded) {
             // For consecutive swipes, use local volume (API may not have updated player state yet)
@@ -1542,6 +1615,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           }
         },
         onHorizontalDragUpdate: (details) {
+          // Queue panel drag when queue is open
+          if (_isQueuePanelDragging) {
+            _handleQueuePanelDragUpdate(details.globalPosition.dx, MediaQuery.of(context).size.width);
+            return;
+          }
           // Volume swipe when device reveal is visible
           if (widget.isDeviceRevealVisible && _isDraggingVolume && !isExpanded) {
             // Check for stillness to trigger precision mode (only if enabled in settings)
@@ -1611,6 +1689,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           _handleHorizontalDragUpdate(details, maProvider, collapsedWidth);
         },
         onHorizontalDragEnd: (details) {
+          // End queue panel drag
+          if (_isQueuePanelDragging) {
+            _handleQueuePanelDragEnd(details.primaryVelocity ?? 0);
+            _horizontalDragStartX = null;
+            return;
+          }
           // End volume drag
           if (_isDraggingVolume) {
             // Send final volume on release
@@ -1653,6 +1737,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         onHorizontalDragCancel: () {
           // Reset state if gesture is cancelled (e.g., system takes over)
           _horizontalDragStartX = null;
+          if (_isQueuePanelDragging) {
+            _handleQueuePanelDragCancel();
+          }
           if (_isDraggingVolume) {
             _exitVolumePrecisionMode();
             _lastVolumeDragPosition = null;

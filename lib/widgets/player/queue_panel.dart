@@ -55,9 +55,6 @@ class _QueuePanelState extends State<QueuePanel> {
   double _listTopOffset = 0; // Offset of the list from top of stack
   bool _pendingReorder = false; // True while waiting for API confirmation
 
-  // Track pointer for right-swipe-to-close
-  Offset? _pointerStart;
-  static const _swipeThreshold = 80.0;
 
   @override
   void initState() {
@@ -243,27 +240,8 @@ class _QueuePanelState extends State<QueuePanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (event) {
-        // Don't track swipe-to-close while dragging
-        if (_dragIndex == null) {
-          _pointerStart = event.position;
-        }
-      },
-      onPointerMove: (event) {
-        // Only check swipe-to-close if not dragging
-        if (_pointerStart != null && _dragIndex == null) {
-          final dx = event.position.dx - _pointerStart!.dx;
-          final dy = (event.position.dy - _pointerStart!.dy).abs();
-          if (dx > _swipeThreshold && dx > dy * 2) {
-            _pointerStart = null;
-            widget.onClose();
-          }
-        }
-      },
-      onPointerUp: (_) => _pointerStart = null,
-      onPointerCancel: (_) => _pointerStart = null,
-      child: Container(
+    // Swipe-to-close is now handled by expandable_player's gesture-driven close
+    return Container(
         color: widget.backgroundColor,
         child: Column(
           children: [
@@ -340,7 +318,6 @@ class _QueuePanelState extends State<QueuePanel> {
             ),
           ],
         ),
-      ),
     );
   }
 

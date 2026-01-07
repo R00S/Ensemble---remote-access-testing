@@ -67,13 +67,14 @@ class BottomSpacing {
   static double get withMiniPlayer => navBarHeight + miniPlayerHeight + 22.0;
 }
 
-/// ValueNotifier for player expansion progress (0.0 to 1.0) and background color
+/// ValueNotifier for player expansion progress (0.0 to 1.0) and colors
 class PlayerExpansionState {
   final double progress;
   final Color? backgroundColor;
-  PlayerExpansionState(this.progress, this.backgroundColor);
+  final Color? primaryColor;
+  PlayerExpansionState(this.progress, this.backgroundColor, this.primaryColor);
 }
-final playerExpansionNotifier = ValueNotifier<PlayerExpansionState>(PlayerExpansionState(0.0, null));
+final playerExpansionNotifier = ValueNotifier<PlayerExpansionState>(PlayerExpansionState(0.0, null, null));
 
 /// Wrapper widget that provides a global player overlay above all navigation.
 ///
@@ -482,15 +483,13 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
               builder: (context, _) {
                 return Consumer<ThemeProvider>(
                 builder: (context, themeProvider, _) {
+                  // Base colors (used when not expanding or no player colors)
                   // Use adaptive primary color only when adaptive theme is enabled AND we have adaptive colors
-                  // Otherwise use colorScheme.primary (which respects Material You if enabled)
-                  final sourceColor = (themeProvider.adaptiveTheme && themeProvider.adaptiveColors != null)
+                  final baseSourceColor = (themeProvider.adaptiveTheme && themeProvider.adaptiveColors != null)
                       ? themeProvider.adaptiveColors!.primary
                       : colorScheme.primary;
 
-                  // Use cached color computation to avoid expensive HSL operations during scroll
                   final isDark = Theme.of(context).brightness == Brightness.dark;
-                  final navSelectedColor = _cachedNavColor.getAdjustedColor(sourceColor, isDark);
 
                   // Base background: use adaptive surface color when adaptive theme is enabled
                   // This themes the nav bar on detail screens and when player is expanded
@@ -501,58 +500,19 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
 
                   return ValueListenableBuilder<PlayerExpansionState>(
                     valueListenable: playerExpansionNotifier,
-                    // Pass BottomNavigationBar as child to avoid rebuilding it every frame
-                    child: BottomNavigationBar(
-                      currentIndex: navigationProvider.selectedIndex,
-                      onTap: (index) {
-                        if (GlobalPlayerOverlay.isPlayerExpanded) {
-                          GlobalPlayerOverlay.collapsePlayer();
-                        }
-                        navigationProvider.navigatorKey.currentState?.popUntil((route) => route.isFirst);
-                        if (index == 3) {
-                          GlobalPlayerOverlay.hidePlayer();
-                        } else if (navigationProvider.selectedIndex == 3) {
-                          GlobalPlayerOverlay.showPlayer();
-                        }
-                        navigationProvider.setSelectedIndex(index);
-                      },
-                      backgroundColor: Colors.transparent,
-                      selectedItemColor: navSelectedColor,
-                      unselectedItemColor: colorScheme.onSurface.withOpacity(0.54),
-                      elevation: 0,
-                      type: BottomNavigationBarType.fixed,
-                      selectedFontSize: 12,
-                      unselectedFontSize: 12,
-                      items: [
-                        BottomNavigationBarItem(
-                          icon: const Icon(Icons.home_outlined),
-                          activeIcon: const Icon(Icons.home_rounded),
-                          label: S.of(context)!.home,
-                        ),
-                        BottomNavigationBarItem(
-                          icon: const Icon(Icons.library_music_outlined),
-                          activeIcon: const Icon(Icons.library_music_rounded),
-                          label: S.of(context)!.library,
-                        ),
-                        BottomNavigationBarItem(
-                          icon: const Icon(Icons.search_rounded),
-                          activeIcon: const Icon(Icons.search_rounded),
-                          label: S.of(context)!.search,
-                        ),
-                        BottomNavigationBarItem(
-                          icon: const Icon(Icons.settings_outlined),
-                          activeIcon: const Icon(Icons.settings_rounded),
-                          label: S.of(context)!.settings,
-                        ),
-                      ],
-                    ),
-                    builder: (context, expansionState, navBar) {
-                      // Blend nav bar color with expanded player background during expansion
+                    builder: (context, expansionState, _) {
+                      // Blend nav bar background with expanded player during expansion
                       final navBgColor = expansionState.progress > 0 && expansionState.backgroundColor != null
                           ? Color.lerp(baseBgColor, expansionState.backgroundColor, expansionState.progress)!
                           : baseBgColor;
 
-                      // Use AnimatedContainer for smoother transitions instead of rebuilding
+                      // Blend icon color with player's primary color during expansion (when adaptive is on)
+                      Color sourceColor = baseSourceColor;
+                      if (themeProvider.adaptiveTheme && expansionState.progress > 0 && expansionState.primaryColor != null) {
+                        sourceColor = Color.lerp(baseSourceColor, expansionState.primaryColor!, expansionState.progress)!;
+                      }
+                      final navSelectedColor = _cachedNavColor.getAdjustedColor(sourceColor, isDark);
+
                       return Container(
                         decoration: BoxDecoration(
                           color: navBgColor,
@@ -566,7 +526,50 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                                 ]
                               : null,
                         ),
-                        child: navBar, // Reuse pre-built navigation bar
+                        child: BottomNavigationBar(
+                          currentIndex: navigationProvider.selectedIndex,
+                          onTap: (index) {
+                            if (GlobalPlayerOverlay.isPlayerExpanded) {
+                              GlobalPlayerOverlay.collapsePlayer();
+                            }
+                            navigationProvider.navigatorKey.currentState?.popUntil((route) => route.isFirst);
+                            if (index == 3) {
+                              GlobalPlayerOverlay.hidePlayer();
+                            } else if (navigationProvider.selectedIndex == 3) {
+                              GlobalPlayerOverlay.showPlayer();
+                            }
+                            navigationProvider.setSelectedIndex(index);
+                          },
+                          backgroundColor: Colors.transparent,
+                          selectedItemColor: navSelectedColor,
+                          unselectedItemColor: colorScheme.onSurface.withOpacity(0.54),
+                          elevation: 0,
+                          type: BottomNavigationBarType.fixed,
+                          selectedFontSize: 12,
+                          unselectedFontSize: 12,
+                          items: [
+                            BottomNavigationBarItem(
+                              icon: const Icon(Icons.home_outlined),
+                              activeIcon: const Icon(Icons.home_rounded),
+                              label: S.of(context)!.home,
+                            ),
+                            BottomNavigationBarItem(
+                              icon: const Icon(Icons.library_music_outlined),
+                              activeIcon: const Icon(Icons.library_music_rounded),
+                              label: S.of(context)!.library,
+                            ),
+                            BottomNavigationBarItem(
+                              icon: const Icon(Icons.search_rounded),
+                              activeIcon: const Icon(Icons.search_rounded),
+                              label: S.of(context)!.search,
+                            ),
+                            BottomNavigationBarItem(
+                              icon: const Icon(Icons.settings_outlined),
+                              activeIcon: const Icon(Icons.settings_rounded),
+                              label: S.of(context)!.settings,
+                            ),
+                          ],
+                        ),
                       );
                     },
                   );

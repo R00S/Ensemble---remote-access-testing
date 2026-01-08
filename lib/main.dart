@@ -188,8 +188,9 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
     }
 
     // Queue panel second - close it before collapsing player
+    // Use target state (not animation value) to handle rapid open-close timing
     // Use withHaptic: false because Android back gesture provides system haptic
-    if (GlobalPlayerOverlay.isQueuePanelOpen) {
+    if (GlobalPlayerOverlay.isQueuePanelTargetOpen) {
       GlobalPlayerOverlay.closeQueuePanel(withHaptic: false);
       return true; // We handled it, don't let Navigator process it
     }

@@ -100,9 +100,14 @@ class GlobalPlayerOverlay extends StatefulWidget {
   static bool get isPlayerExpanded =>
       globalPlayerKey.currentState?.isExpanded ?? false;
 
-  /// Check if the queue panel is currently open
+  /// Check if the queue panel is currently open (animation value > 0.5)
   static bool get isQueuePanelOpen =>
       globalPlayerKey.currentState?.isQueuePanelOpen ?? false;
+
+  /// Check if the queue panel is intended to be open (target state)
+  /// Use this for back gesture handling to avoid timing issues during animations
+  static bool get isQueuePanelTargetOpen =>
+      globalPlayerKey.currentState?.isQueuePanelTargetOpen ?? false;
 
   /// Close the queue panel if open
   /// [withHaptic]: Set to false for Android back gesture (system provides haptic)

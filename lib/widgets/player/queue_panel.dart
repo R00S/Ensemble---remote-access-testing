@@ -549,6 +549,7 @@ class _QueuePanelState extends State<QueuePanel> {
           ),
           child: ListTile(
             dense: true,
+            contentPadding: const EdgeInsets.only(left: 16, right: 8),
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(Radii.sm),
               child: SizedBox(

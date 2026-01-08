@@ -1165,13 +1165,18 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           canPop: !isQueuePanelOpen && !isExpanded,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) {
-              // Ignore if already animating (prevents double-processing)
-              if (_queuePanelController.isAnimating || _controller.isAnimating) return;
-
               if (isQueuePanelOpen) {
-                _toggleQueuePanel();
+                // Always close queue panel on back, even if animating
+                // Stop any existing animation and start close
+                if (_queuePanelController.isAnimating) {
+                  _queuePanelController.stop();
+                }
+                _closeQueuePanelWithSpring();
               } else if (isExpanded) {
-                collapse();
+                // Only collapse if not already animating
+                if (!_controller.isAnimating) {
+                  collapse();
+                }
               }
             }
           },

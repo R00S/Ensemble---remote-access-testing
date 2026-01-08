@@ -171,7 +171,8 @@ class _QueuePanelState extends State<QueuePanel> {
     _swipeLastTime = null;
     _isSwiping = false;
     _swipeLocked = false;
-    _startedInEdgeZone = false;
+    // NOTE: Don't reset _startedInEdgeZone here - it's needed by confirmDismiss
+    // which is called after pointer up. Reset on next pointer down instead.
     _velocitySamples.clear();
   }
 
@@ -374,6 +375,13 @@ class _QueuePanelState extends State<QueuePanel> {
     // This allows swipe-to-close to work even over ListView/Dismissible
     return Listener(
       onPointerDown: (event) {
+        // Check if touch started in edge zone (Android back gesture area)
+        // Use GLOBAL X position (screen edge), not local position within queue panel
+        // Must check BEFORE other state to block edge gestures from Dismissible too
+        final screenWidth = MediaQuery.of(context).size.width;
+        _startedInEdgeZone = event.position.dx < _edgeDeadZone ||
+                             event.position.dx > screenWidth - _edgeDeadZone;
+
         // Don't track swipe while dragging a queue item
         if (_dragIndex == null) {
           _swipeStart = event.position;
@@ -383,12 +391,6 @@ class _QueuePanelState extends State<QueuePanel> {
           _swipeLocked = false;
           _velocitySamples.clear();
           _addVelocitySample(event.position, _swipeLastTime!);
-          // Check if touch started in edge zone (Android back gesture area)
-          // Use GLOBAL X position (screen edge), not local position within queue panel
-          // Queue panel slides in from right, so its local x=0 is not the screen edge
-          final screenWidth = MediaQuery.of(context).size.width;
-          _startedInEdgeZone = event.position.dx < _edgeDeadZone ||
-                               event.position.dx > screenWidth - _edgeDeadZone;
         }
       },
       onPointerMove: (event) {
@@ -563,7 +565,12 @@ class _QueuePanelState extends State<QueuePanel> {
         ),
         child: const Icon(Icons.delete_outline, color: Colors.white, size: 24),
       ),
-      confirmDismiss: (direction) async => !isCurrentItem,
+      confirmDismiss: (direction) async {
+        // Block dismissal if swipe started from screen edge (Android back gesture)
+        if (_startedInEdgeZone) return false;
+        // Don't allow dismissing the currently playing item
+        return !isCurrentItem;
+      },
       onDismissed: (direction) => _handleDelete(item, index),
       child: _buildQueueItemWithDragHandle(item, index, isCurrentItem, isPastItem),
     );

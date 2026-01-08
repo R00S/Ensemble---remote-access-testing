@@ -525,7 +525,8 @@ class _QueuePanelState extends State<QueuePanel> {
                     _startDrag(index, itemContext, event.position);
                   },
                   // Move/up/cancel handled by parent Listener on Stack
-                  child: Center(
+                  child: Align(
+                    alignment: Alignment.centerRight,
                     child: Icon(Icons.drag_handle, color: widget.textColor.withOpacity(0.3), size: 20),
                   ),
                 ),

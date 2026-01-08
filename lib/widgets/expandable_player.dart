@@ -63,6 +63,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   // Queue panel slide animation
   late AnimationController _queuePanelController;
   late Animation<double> _queuePanelAnimation;
+  // Cached slide position animation (avoids recreating Tween.animate every frame)
+  late Animation<Offset> _queueSlideAnimation;
 
   // Adaptive theme colors extracted from album art
   ColorScheme? _lightColorScheme;
@@ -187,6 +189,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     );
     // Use controller directly - spring physics provide the easing
     _queuePanelAnimation = _queuePanelController;
+    // Cache the slide animation to avoid recreating Tween.animate() every frame
+    _queueSlideAnimation = Tween<Offset>(
+      begin: const Offset(1, 0),
+      end: Offset.zero,
+    ).animate(_queuePanelController);
 
     // Slide animation for device switching - used for snap/spring animations
     _slideController = AnimationController(
@@ -291,12 +298,13 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
   // Spring description for queue panel animations
   // Higher damping ratio prevents oscillation and ensures clean settling
-  // Critical damping = 2 * sqrt(stiffness * mass) = 2 * sqrt(400) = 40
+  // Critical damping = 2 * sqrt(stiffness * mass) = 2 * sqrt(550) ≈ 47
   // Using damping slightly above critical for overdamped (no bounce) behavior
+  // PERF: Increased stiffness from 400→550 for snappier animation
   static const SpringDescription _queueSpring = SpringDescription(
     mass: 1.0,
-    stiffness: 400.0,
-    damping: 42.0, // Overdamped - no oscillation, clean settle
+    stiffness: 550.0,
+    damping: 50.0, // Overdamped - no oscillation, clean settle
   );
 
   void expand() {
@@ -629,10 +637,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     }
     // Use overdamped spring for snappy close without oscillation
     // Slightly stiffer than open spring for quicker settle
+    // PERF: Increased stiffness from 450→600 for snappier close
     const closeSpring = SpringDescription(
       mass: 1.0,
-      stiffness: 450.0,
-      damping: 45.0, // Overdamped - no bounce, clean settle
+      stiffness: 600.0,
+      damping: 52.0, // Overdamped - no bounce, clean settle
     );
     final simulation = SpringSimulation(
       closeSpring,
@@ -1207,8 +1216,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             }
           },
           child: AnimatedBuilder(
-            // Include _slideOffsetNotifier to rebuild during finger-following drags
-            animation: Listenable.merge([_expandAnimation, _queuePanelAnimation, _slideOffsetNotifier]),
+            // PERF: Only include _expandAnimation and _slideOffsetNotifier
+            // Queue panel has its own AnimatedBuilder - don't rebuild entire player on queue animation
+            animation: Listenable.merge([_expandAnimation, _slideOffsetNotifier]),
             builder: (context, _) {
               // If no track is playing, show device selector bar
               if (currentTrack == null) {
@@ -1514,9 +1524,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
     // Volume - anchored near bottom with breathing room
     final volumeTop = expandedControlsTop + 88;
-
-    // Queue panel slide amount (0 = hidden, 1 = fully visible)
-    final queueT = _queuePanelAnimation.value;
 
     // Check if we have multiple players for swipe gesture
     final availablePlayers = _getAvailablePlayersSorted(maProvider);
@@ -2369,50 +2376,61 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     ),
                   ),
 
-                // Favorite button (expanded only) - hide when queue panel is open
-                // GPU PERF: Use icon color alpha instead of Opacity
-                // Scale pop animation when toggling favorite
-                if (t > 0.3 && queueT < 0.5)
-                  Positioned(
-                    top: topPadding + 4,
-                    right: 52,
-                    child: TweenAnimationBuilder<double>(
-                      key: ValueKey(_isCurrentTrackFavorite),
-                      tween: Tween(begin: 1.3, end: 1.0),
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOutBack,
-                      builder: (context, scale, child) => Transform.scale(
-                        scale: scale,
-                        child: child,
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          _isCurrentTrackFavorite ? Icons.favorite : Icons.favorite_border,
-                          color: (_isCurrentTrackFavorite ? Colors.red : textColor)
-                              .withOpacity(((t - 0.3) / 0.7).clamp(0.0, 1.0) * (1 - queueT * 2).clamp(0.0, 1.0)),
-                          size: 24,
-                        ),
-                        onPressed: () => _toggleCurrentTrackFavorite(currentTrack),
-                        padding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                  ),
-
-                // Queue button (expanded only) - hide when queue panel is open
-                // GPU PERF: Use icon color alpha instead of Opacity
-                if (t > 0.3 && queueT < 0.5)
-                  Positioned(
-                    top: topPadding + 4,
-                    right: 4,
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.queue_music_rounded,
-                        color: textColor.withOpacity(((t - 0.3) / 0.7).clamp(0.0, 1.0) * (1 - queueT * 2).clamp(0.0, 1.0)),
-                        size: 24,
-                      ),
-                      onPressed: _toggleQueuePanel,
-                      padding: const EdgeInsets.all(12),
-                    ),
+                // Favorite + Queue buttons (expanded only) - fade when queue panel opens
+                // PERF: Own AnimatedBuilder - only rebuilds these 2 buttons on queue animation
+                if (t > 0.3)
+                  AnimatedBuilder(
+                    animation: _queuePanelAnimation,
+                    builder: (context, _) {
+                      final queueFade = _queuePanelAnimation.value;
+                      // Hide completely when queue > 0.5
+                      if (queueFade >= 0.5) return const SizedBox.shrink();
+                      final fadeOpacity = (1 - queueFade * 2).clamp(0.0, 1.0);
+                      final expandOpacity = ((t - 0.3) / 0.7).clamp(0.0, 1.0);
+                      return Stack(
+                        children: [
+                          // Favorite button
+                          Positioned(
+                            top: topPadding + 4,
+                            right: 52,
+                            child: TweenAnimationBuilder<double>(
+                              key: ValueKey(_isCurrentTrackFavorite),
+                              tween: Tween(begin: 1.3, end: 1.0),
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutBack,
+                              builder: (context, scale, child) => Transform.scale(
+                                scale: scale,
+                                child: child,
+                              ),
+                              child: IconButton(
+                                icon: Icon(
+                                  _isCurrentTrackFavorite ? Icons.favorite : Icons.favorite_border,
+                                  color: (_isCurrentTrackFavorite ? Colors.red : textColor)
+                                      .withOpacity(expandOpacity * fadeOpacity),
+                                  size: 24,
+                                ),
+                                onPressed: () => _toggleCurrentTrackFavorite(currentTrack),
+                                padding: const EdgeInsets.all(12),
+                              ),
+                            ),
+                          ),
+                          // Queue button
+                          Positioned(
+                            top: topPadding + 4,
+                            right: 4,
+                            child: IconButton(
+                              icon: Icon(
+                                Icons.queue_music_rounded,
+                                color: textColor.withOpacity(expandOpacity * fadeOpacity),
+                                size: 24,
+                              ),
+                              onPressed: _toggleQueuePanel,
+                              padding: const EdgeInsets.all(12),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
 
                 // Player name (expanded only)
@@ -2441,17 +2459,24 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Queue/Chapters panel (slides in from right)
                 // For audiobooks: show chapters panel
                 // For music: show queue panel
-                // Use Offstage to keep widget mounted (preserves state) when hidden
+                // PERF: Own AnimatedBuilder - only rebuilds queue panel section on queue animation
+                // Main player doesn't rebuild when queue slides in/out
                 if (t > 0.5)
                   Positioned.fill(
-                    child: Offstage(
-                      offstage: queueT == 0,
+                    child: AnimatedBuilder(
+                      animation: _queuePanelAnimation,
+                      builder: (context, child) {
+                        final queueProgress = _queuePanelAnimation.value;
+                        return Offstage(
+                          offstage: queueProgress == 0,
+                          child: child,
+                        );
+                      },
+                      // PERF: Child is not rebuilt - only Offstage wrapper updates
                       child: RepaintBoundary(
                         child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(1, 0),
-                            end: Offset.zero,
-                          ).animate(_queuePanelAnimation),
+                          // PERF: Use cached animation instead of Tween.animate() every frame
+                          position: _queueSlideAnimation,
                           child: maProvider.isPlayingAudiobook
                               ? ChaptersPanel(
                                   maProvider: maProvider,

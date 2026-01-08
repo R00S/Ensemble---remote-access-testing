@@ -38,6 +38,13 @@ class PlayerCard extends StatefulWidget {
   static const double precisionStillnessThreshold = 5.0; // Max pixels of movement considered "still"
   static const double precisionSensitivity = 0.1; // 10x more precise (full swipe = 10% change)
 
+  // PERF Phase 4: Pre-cached BoxShadow to avoid allocation per frame
+  static const BoxShadow cardShadow = BoxShadow(
+    color: Color(0x33000000), // 20% black
+    blurRadius: 8,
+    offset: Offset(0, 2),
+  );
+
   const PlayerCard({
     super.key,
     required this.player,
@@ -170,13 +177,8 @@ class _PlayerCardState extends State<PlayerCard> {
                   decoration: BoxDecoration(
                     color: unfilledColor,
                     borderRadius: BorderRadius.circular(borderRadius),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                    // PERF Phase 4: Use pre-cached static BoxShadow
+                    boxShadow: const [PlayerCard.cardShadow],
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Align(
@@ -221,13 +223,8 @@ class _PlayerCardState extends State<PlayerCard> {
       decoration: BoxDecoration(
         color: widget.backgroundColor,
         borderRadius: BorderRadius.circular(borderRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        // PERF Phase 4: Use pre-cached static BoxShadow
+        boxShadow: const [PlayerCard.cardShadow],
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(

@@ -155,6 +155,24 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   double? _cachedExpandedTitleHeight;
   String? _lastMeasuredTrackName;
 
+  // PERF: Cached MaterialRectCenterArcTween for art animation
+  // Recreated only when screen dimensions change, not every frame
+  MaterialRectCenterArcTween? _artRectTween;
+  Size? _lastScreenSize;
+  double? _lastTopPadding;
+
+  // PERF: Pre-cached BoxShadow objects to avoid allocation per frame
+  static const BoxShadow _miniPlayerShadow = BoxShadow(
+    color: Color(0x4D000000), // 30% black
+    blurRadius: 8,
+    offset: Offset(0, 2),
+  );
+  static const BoxShadow _artShadowExpanded = BoxShadow(
+    color: Color(0x40000000), // 25% black
+    blurRadius: 20,
+    offset: Offset(0, 8),
+  );
+
   // Gesture-driven expansion state
   bool _isVerticalDragging = false;
   double _dragStartY = 0;
@@ -415,12 +433,22 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   Color? get currentExpandedBgColor => _currentExpandedBgColor;
   Color? _currentExpandedPrimaryColor;
 
+  // PERF Phase 4: Track last notified value to avoid unnecessary object creation
+  double _lastNotifiedProgress = -1;
+
   void _notifyExpansionProgress() {
-    playerExpansionNotifier.value = PlayerExpansionState(
-      _controller.value,
-      _currentExpandedBgColor,
-      _currentExpandedPrimaryColor,
-    );
+    final progress = _controller.value;
+    // PERF Phase 4: Only notify when progress changes by at least 0.01 (1%)
+    // This reduces object allocation while maintaining smooth visual transitions
+    if ((progress - _lastNotifiedProgress).abs() >= 0.01 ||
+        progress == 0.0 || progress == 1.0) {
+      _lastNotifiedProgress = progress;
+      playerExpansionNotifier.value = PlayerExpansionState(
+        progress,
+        _currentExpandedBgColor,
+        _currentExpandedPrimaryColor,
+      );
+    }
   }
 
   void _subscribeToPositionTracker() {
@@ -1393,9 +1421,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     // Use colorScheme.primary as fallback instead of Colors.white for light theme support
     final primaryColor = adaptiveScheme?.primary ?? colorScheme.primary;
 
-    // PERF: Pre-compute commonly used color opacities to reduce withOpacity() allocations per frame
+    // PERF Phase 4: Pre-compute commonly used color opacities to reduce withOpacity() allocations per frame
     // These are used multiple times throughout the widget tree during animation
     final textColor50 = textColor.withOpacity(0.5);
+    final textColor60 = textColor.withOpacity(MiniPlayerLayout.secondaryTextOpacity);
+    final textColor70 = textColor.withOpacity(0.7);
+    final textColor45 = textColor.withOpacity(0.45);
     final primaryColor20 = primaryColor.withOpacity(0.2);
     final primaryColor70 = primaryColor.withOpacity(0.7);
 
@@ -1445,14 +1476,20 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
     // Art position - uses MaterialRectCenterArcTween for Hero-like curved arc path
     // This creates a natural arc trajectory instead of straight diagonal movement
+    // PERF: Cache the tween - only recreate when screen dimensions change
     final collapsedArtLeft = 0.0;
     final collapsedArtTop = (_collapsedHeight - _collapsedArtSize) / 2;
     final expandedArtLeft = (screenSize.width - expandedArtSize) / 2;
     final expandedArtTop = topPadding + headerHeight + 16;
 
-    final collapsedArtRect = Rect.fromLTWH(collapsedArtLeft, collapsedArtTop, _collapsedArtSize, _collapsedArtSize);
-    final expandedArtRect = Rect.fromLTWH(expandedArtLeft, expandedArtTop, expandedArtSize, expandedArtSize);
-    final artRect = MaterialRectCenterArcTween(begin: collapsedArtRect, end: expandedArtRect).lerp(t)!;
+    if (_artRectTween == null || _lastScreenSize != screenSize || _lastTopPadding != topPadding) {
+      final collapsedArtRect = Rect.fromLTWH(collapsedArtLeft, collapsedArtTop, _collapsedArtSize, _collapsedArtSize);
+      final expandedArtRect = Rect.fromLTWH(expandedArtLeft, expandedArtTop, expandedArtSize, expandedArtSize);
+      _artRectTween = MaterialRectCenterArcTween(begin: collapsedArtRect, end: expandedArtRect);
+      _lastScreenSize = screenSize;
+      _lastTopPadding = topPadding;
+    }
+    final artRect = _artRectTween!.lerp(t)!;
     final artLeft = artRect.left;
     final artTop = artRect.top;
     final artSize = artRect.width;
@@ -1780,17 +1817,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           }
         },
         child: Container(
-          // PERF Phase 3: Use fixed shadow with animated opacity instead of animated elevation
-          // This avoids GPU-expensive shadow blur recalculations each frame
-          decoration: t < 0.95 ? BoxDecoration(
+          // PERF Phase 4: Only show shadow when meaningfully visible (t < 0.5)
+          // This avoids BoxDecoration allocation for majority of animation frames
+          // Shadow fades out quickly during first half of expansion
+          decoration: t < 0.5 ? BoxDecoration(
             borderRadius: BorderRadius.circular(borderRadius),
-            boxShadow: [
-              BoxShadow(
-                color: _shadowColor.withOpacity((1.0 - t) * 0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            boxShadow: const [_miniPlayerShadow],
           ) : null,
           // Use foregroundDecoration for border so it renders ON TOP of content
           // This prevents the album art from clipping the yellow synced border
@@ -1875,49 +1907,46 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // FALLBACK: Show main content if transition is active but peek content unavailable
                 // This prevents showing only the progress bar with no content
                 // GPU PERF: Use conditional instead of Opacity to avoid saveLayer
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (!(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
-                    left: artLeft + miniPlayerSlideOffset,
+                    left: artLeft,
                     top: artTop,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      // Use onTapUp instead of onTap - resolves immediately and wins
-                      // the gesture arena against the outer vertical drag detector
-                      onTapUp: t > 0.5 ? (_) => _showFullscreenArt(context, imageUrl) : null,
-                      child: Container(
-                        width: artSize,
-                        height: artSize,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(artBorderRadius),
-                          // GPU PERF: Fixed blur/offset, only animate shadow opacity
-                          boxShadow: t > 0.3
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.25 * ((t - 0.3) / 0.7).clamp(0.0, 1.0)),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        // Use RepaintBoundary to isolate art repaints during animation
-                        child: RepaintBoundary(
-                          child: ClipRRect(
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        // Use onTapUp instead of onTap - resolves immediately and wins
+                        // the gesture arena against the outer vertical drag detector
+                        onTapUp: t > 0.5 ? (_) => _showFullscreenArt(context, imageUrl) : null,
+                        child: Container(
+                          width: artSize,
+                          height: artSize,
+                          decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(artBorderRadius),
-                            child: imageUrl != null
-                                ? CachedNetworkImage(
-                                    imageUrl: imageUrl,
-                                    fit: BoxFit.cover,
-                                    // Fixed cache size to avoid mid-animation cache thrashing
-                                    memCacheWidth: 512,
-                                    memCacheHeight: 512,
-                                    fadeInDuration: Duration.zero,
-                                    fadeOutDuration: Duration.zero,
-                                    placeholderFadeInDuration: Duration.zero,
-                                    placeholder: (_, __) => _buildPlaceholderArt(colorScheme, t),
-                                    errorWidget: (_, __, ___) => _buildPlaceholderArt(colorScheme, t),
-                                  )
-                                : _buildPlaceholderArt(colorScheme, t),
+                            // PERF Phase 4: Only show shadow when near-expanded (t > 0.7)
+                            // Avoids BoxShadow allocation during most of animation
+                            boxShadow: t > 0.7 ? const [_artShadowExpanded] : null,
+                          ),
+                          // Use RepaintBoundary to isolate art repaints during animation
+                          child: RepaintBoundary(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(artBorderRadius),
+                              child: imageUrl != null
+                                  ? CachedNetworkImage(
+                                      imageUrl: imageUrl,
+                                      fit: BoxFit.cover,
+                                      // Fixed cache size to avoid mid-animation cache thrashing
+                                      memCacheWidth: 512,
+                                      memCacheHeight: 512,
+                                      fadeInDuration: Duration.zero,
+                                      fadeOutDuration: Duration.zero,
+                                      placeholderFadeInDuration: Duration.zero,
+                                      placeholder: (_, __) => _buildPlaceholderArt(colorScheme, t),
+                                      errorWidget: (_, __, ___) => _buildPlaceholderArt(colorScheme, t),
+                                    )
+                                  : _buildPlaceholderArt(colorScheme, t),
+                            ),
                           ),
                         ),
                       ),
@@ -1931,35 +1960,39 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // FALLBACK: Show if transition active but no peek content available
                 // GPU PERF: Use conditional instead of Opacity to avoid saveLayer
                 // Hint text - vertically centered in mini player
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (widget.isHintVisible && t < 0.5 && !(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
-                    left: titleLeft + miniPlayerSlideOffset,
+                    left: titleLeft,
                     // Center vertically: (64 - ~20) / 2 = 22
                     top: (MiniPlayerLayout.height - 20) / 2,
-                    child: SizedBox(
-                      width: titleWidth,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.lightbulb_outline,
-                            size: 16,
-                            color: textColor,
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              S.of(context)!.pullToSelectPlayers,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: titleFontSize,
-                                fontWeight: MiniPlayerLayout.primaryFontWeight,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: SizedBox(
+                        width: titleWidth,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.lightbulb_outline,
+                              size: 16,
+                              color: textColor,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                S.of(context)!.pullToSelectPlayers,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: titleFontSize,
+                                  fontWeight: MiniPlayerLayout.primaryFontWeight,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1967,30 +2000,34 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Track title - with slide animation when collapsed
                 // Hidden when hint is visible
                 // Uses Align.lerp for smooth left-to-center transition (textAlign can't be animated)
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (!(widget.isHintVisible && t < 0.5) && !(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
-                    left: titleLeft + miniPlayerSlideOffset,
+                    left: titleLeft,
                     top: titleTop,
-                    child: SizedBox(
-                      width: titleWidth,
-                      child: Align(
-                        // Smooth transition from left-aligned to centered
-                        alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
-                        child: Text(
-                          currentTrack.name,
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: titleFontSize,
-                            // Lerp font weight smoothly (w500 to w600)
-                            fontWeight: FontWeight.lerp(MiniPlayerLayout.primaryFontWeight, FontWeight.w600, t),
-                            // Lerp letter spacing smoothly (0 to -0.5)
-                            letterSpacing: _lerpDouble(0, -0.5, t),
-                            // Lerp line height smoothly (1.0 default to 1.2)
-                            height: _lerpDouble(1.0, 1.2, t),
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: SizedBox(
+                        width: titleWidth,
+                        child: Align(
+                          // Smooth transition from left-aligned to centered
+                          alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
+                          child: Text(
+                            currentTrack.name,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: titleFontSize,
+                              // Lerp font weight smoothly (w500 to w600)
+                              fontWeight: FontWeight.lerp(MiniPlayerLayout.primaryFontWeight, FontWeight.w600, t),
+                              // Lerp letter spacing smoothly (0 to -0.5)
+                              letterSpacing: _lerpDouble(0, -0.5, t),
+                              // Lerp line height smoothly (1.0 default to 1.2)
+                              height: _lerpDouble(1.0, 1.2, t),
+                            ),
+                            textAlign: TextAlign.left, // Keep static, Align handles centering
+                            maxLines: 2, // Allow 2 lines throughout, text will naturally use 1 when short
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          textAlign: TextAlign.left, // Keep static, Align handles centering
-                          maxLines: 2, // Allow 2 lines throughout, text will naturally use 1 when short
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -2003,32 +2040,36 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Hidden during transition to prevent flash
                 // FALLBACK: Show if transition active but no peek content available
                 // Uses Align.lerp for smooth left-to-center transition
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (!(_inTransition && t < 0.1 && _peekPlayer != null) && !(widget.isHintVisible && t < 0.5))
                   Positioned(
-                    left: titleLeft + miniPlayerSlideOffset,
+                    left: titleLeft,
                     top: artistTop,
-                    child: SizedBox(
-                      width: titleWidth,
-                      child: Align(
-                        // Smooth transition from left-aligned to centered
-                        alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
-                        child: Text(
-                          // Always show artist/author/podcast name (was showing "Now Playing" when device reveal visible)
-                          maProvider.isPlayingAudiobook
-                              ? (maProvider.currentAudiobook?.authorsString ?? S.of(context)!.unknownAuthor)
-                              : maProvider.isPlayingPodcast
-                                  ? (maProvider.currentPodcastName ?? S.of(context)!.podcasts)
-                                  : currentTrack.artistsString,
-                          style: TextStyle(
-                            // Lerp opacity smoothly
-                            color: textColor.withOpacity(_lerpDouble(MiniPlayerLayout.secondaryTextOpacity, 0.7, t)),
-                            fontSize: artistFontSize,
-                            // Lerp font weight smoothly
-                            fontWeight: FontWeight.lerp(FontWeight.normal, FontWeight.w400, t),
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: SizedBox(
+                        width: titleWidth,
+                        child: Align(
+                          // Smooth transition from left-aligned to centered
+                          alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
+                          child: Text(
+                            // Always show artist/author/podcast name (was showing "Now Playing" when device reveal visible)
+                            maProvider.isPlayingAudiobook
+                                ? (maProvider.currentAudiobook?.authorsString ?? S.of(context)!.unknownAuthor)
+                                : maProvider.isPlayingPodcast
+                                    ? (maProvider.currentPodcastName ?? S.of(context)!.podcasts)
+                                    : currentTrack.artistsString,
+                            style: TextStyle(
+                              // PERF Phase 4: Use Color.lerp between pre-computed colors
+                              color: Color.lerp(textColor60, textColor70, t),
+                              fontSize: artistFontSize,
+                              // Lerp font weight smoothly
+                              fontWeight: FontWeight.lerp(FontWeight.normal, FontWeight.w400, t),
+                            ),
+                            textAlign: TextAlign.left, // Keep static, Align handles centering
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          textAlign: TextAlign.left, // Keep static, Align handles centering
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -2037,25 +2078,29 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Player name - third line, fades out during first half of expansion
                 // Uses staggered opacity: fully visible at t=0, fully faded at t=0.4
                 // Position animates smoothly throughout
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (t < 0.5 && !(_inTransition && t < 0.1 && _peekPlayer != null) && !(widget.isHintVisible && t < 0.5))
                   Positioned(
-                    left: titleLeft + miniPlayerSlideOffset,
+                    left: titleLeft,
                     top: playerNameTop,
-                    child: SizedBox(
-                      width: titleWidth,
-                      child: Align(
-                        // Smooth transition from left-aligned to centered
-                        alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
-                        child: Text(
-                          selectedPlayer.name,
-                          style: TextStyle(
-                            // Staggered fade: 1.0 at t=0, 0.0 at t=0.4
-                            color: textColor.withOpacity((1.0 - t / 0.4).clamp(0.0, 1.0)),
-                            fontSize: MiniPlayerLayout.tertiaryFontSize,
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: SizedBox(
+                        width: titleWidth,
+                        child: Align(
+                          // Smooth transition from left-aligned to centered
+                          alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
+                          child: Text(
+                            selectedPlayer.name,
+                            style: TextStyle(
+                              // Staggered fade: 1.0 at t=0, 0.0 at t=0.4
+                              color: textColor.withOpacity((1.0 - t / 0.4).clamp(0.0, 1.0)),
+                              fontSize: MiniPlayerLayout.tertiaryFontSize,
+                            ),
+                            textAlign: TextAlign.left, // Keep static, Align handles centering
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          textAlign: TextAlign.left, // Keep static, Align handles centering
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),

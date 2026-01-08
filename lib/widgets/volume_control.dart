@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -13,8 +12,9 @@ import '../services/settings_service.dart';
 /// For MA players: controls player volume via API
 class VolumeControl extends StatefulWidget {
   final bool compact;
+  final Color? accentColor;
 
-  const VolumeControl({super.key, this.compact = false});
+  const VolumeControl({super.key, this.compact = false, this.accentColor});
 
   @override
   State<VolumeControl> createState() => _VolumeControlState();
@@ -46,11 +46,15 @@ class _VolumeControlState extends State<VolumeControl> {
   static const double _precisionStillnessThreshold = 5.0;
   static const double _precisionSensitivity = 0.1; // 10% range in precision mode
 
+  // Hint display state
+  bool _showHints = true;
+  bool _showPrecisionHint = false;
+
   @override
   void initState() {
     super.initState();
     _initLocalPlayer();
-    _loadPrecisionModeSetting();
+    _loadSettings();
   }
 
   Future<void> _initLocalPlayer() async {
@@ -72,10 +76,14 @@ class _VolumeControlState extends State<VolumeControl> {
     });
   }
 
-  Future<void> _loadPrecisionModeSetting() async {
-    final enabled = await SettingsService.getVolumePrecisionMode();
+  Future<void> _loadSettings() async {
+    final precisionEnabled = await SettingsService.getVolumePrecisionMode();
+    final hintsEnabled = await SettingsService.getShowHints();
     if (mounted) {
-      setState(() => _precisionModeEnabled = enabled);
+      setState(() {
+        _precisionModeEnabled = precisionEnabled;
+        _showHints = hintsEnabled;
+      });
     }
   }
 
@@ -86,14 +94,29 @@ class _VolumeControlState extends State<VolumeControl> {
       _inPrecisionMode = true;
       _precisionZoomCenter = _pendingVolume ?? 0.5;
       _precisionStartX = _lastLocalX;
+      if (_showHints) {
+        _showPrecisionHint = true;
+      }
     });
+
+    // Hide hint after 2 seconds
+    if (_showHints) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _showPrecisionHint = false);
+        }
+      });
+    }
   }
 
   void _exitPrecisionMode() {
     _precisionTimer?.cancel();
     _precisionTimer = null;
     if (_inPrecisionMode) {
-      setState(() => _inPrecisionMode = false);
+      setState(() {
+        _inPrecisionMode = false;
+        _showPrecisionHint = false;
+      });
     }
   }
 
@@ -162,6 +185,9 @@ class _VolumeControlState extends State<VolumeControl> {
             ? (_systemVolume ?? 0.5)
             : player.volume.toDouble() / 100.0;
 
+    // Use accent color if provided, otherwise fall back to theme primary
+    final accentColor = widget.accentColor ?? Theme.of(context).colorScheme.primary;
+
     if (widget.compact) {
       return IconButton(
         icon: Icon(
@@ -197,7 +223,10 @@ class _VolumeControlState extends State<VolumeControl> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final sliderWidth = constraints.maxWidth;
-                final thumbPosition = currentVolume.clamp(0.0, 1.0) * sliderWidth;
+                // Clamp thumb position to keep teardrop indicator within bounds
+                // Teardrop is 32px wide, so keep 16px from each edge
+                final rawThumbPosition = currentVolume.clamp(0.0, 1.0) * sliderWidth;
+                final clampedThumbPosition = rawThumbPosition.clamp(16.0, sliderWidth - 16.0);
 
                 return Stack(
                   clipBehavior: Clip.none,
@@ -284,10 +313,10 @@ class _VolumeControlState extends State<VolumeControl> {
                           trackHeight: 2,
                           thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                           overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
-                          activeTrackColor: _inPrecisionMode ? Colors.amber : Colors.white,
+                          activeTrackColor: _inPrecisionMode ? accentColor : Colors.white,
                           inactiveTrackColor: Colors.white.withOpacity(0.3),
-                          thumbColor: _inPrecisionMode ? Colors.amber : Colors.white,
-                          overlayColor: (_inPrecisionMode ? Colors.amber : Colors.white).withOpacity(0.2),
+                          thumbColor: _inPrecisionMode ? accentColor : Colors.white,
+                          overlayColor: (_inPrecisionMode ? accentColor : Colors.white).withOpacity(0.2),
                         ),
                         child: AbsorbPointer(
                           // AbsorbPointer prevents Slider from handling gestures
@@ -302,13 +331,37 @@ class _VolumeControlState extends State<VolumeControl> {
                     // Floating teardrop indicator (only visible when dragging)
                     if (_isDragging)
                       Positioned(
-                        left: thumbPosition - 16,
+                        left: clampedThumbPosition - 16,
                         top: -28,
                         child: CustomPaint(
                           size: const Size(32, 32),
                           painter: _TeardropPainter(
-                            color: _inPrecisionMode ? Colors.amber : Colors.white,
+                            color: _inPrecisionMode ? accentColor : Colors.white,
                             volume: (currentVolume * 100).round(),
+                          ),
+                        ),
+                      ),
+                    // Precision mode hint (only when hints enabled)
+                    if (_showPrecisionHint)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: -52,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: accentColor,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Text(
+                              'Precision mode',
+                              style: TextStyle(
+                                color: accentColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -380,11 +433,12 @@ class _TeardropPainter extends CustomPainter {
     canvas.drawPath(path, paint);
 
     // Draw the volume number (no % symbol)
+    final textColor = color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
     final textPainter = TextPainter(
       text: TextSpan(
         text: '$volume',
         style: TextStyle(
-          color: color == Colors.white ? Colors.black87 : Colors.black,
+          color: textColor,
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),

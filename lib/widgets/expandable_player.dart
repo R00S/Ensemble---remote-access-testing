@@ -173,6 +173,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     offset: Offset(0, 8),
   );
 
+  // PERF Phase 5: Cached fade animations - created once, reused every frame
+  // These replace inline .drive(Tween().chain(CurveTween())) which created new objects per frame
+  late Animation<double> _fadeIn50to100;  // Fades in during second half of animation
+
   // Gesture-driven expansion state
   bool _isVerticalDragging = false;
   double _dragStartY = 0;
@@ -198,6 +202,14 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       parent: _controller,
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
+    );
+
+    // PERF Phase 5: Cache fade animation - avoids creating Tween/CurveTween objects every frame
+    // Used for elements that fade in during second half of expansion (t=0.5 to t=1.0)
+    _fadeIn50to100 = _expandAnimation.drive(
+      Tween<double>(begin: 0.0, end: 1.0).chain(
+        CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.easeIn)),
+      ),
     );
 
     // Notify listeners of expansion progress changes
@@ -1430,6 +1442,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final primaryColor20 = primaryColor.withOpacity(0.2);
     final primaryColor70 = primaryColor.withOpacity(0.7);
 
+    // PERF Phase 5: Pre-compute Alignment and FontWeight to avoid lerp calls per text element
+    // These are used by title, artist, and player name text elements
+    final textAlignment = Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!;
+    final titleFontWeight = FontWeight.lerp(MiniPlayerLayout.primaryFontWeight, FontWeight.w600, t);
+
     // Always position above bottom nav bar
     // Overlap by 2px when expanded to eliminate any subpixel rendering gaps
     final bottomNavSpace = _bottomNavHeight + bottomPadding;
@@ -2010,15 +2027,15 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                       child: SizedBox(
                         width: titleWidth,
                         child: Align(
-                          // Smooth transition from left-aligned to centered
-                          alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
+                          // PERF Phase 5: Use pre-computed alignment
+                          alignment: textAlignment,
                           child: Text(
                             currentTrack.name,
                             style: TextStyle(
                               color: textColor,
                               fontSize: titleFontSize,
-                              // Lerp font weight smoothly (w500 to w600)
-                              fontWeight: FontWeight.lerp(MiniPlayerLayout.primaryFontWeight, FontWeight.w600, t),
+                              // PERF Phase 5: Use pre-computed font weight
+                              fontWeight: titleFontWeight,
                               // Lerp letter spacing smoothly (0 to -0.5)
                               letterSpacing: _lerpDouble(0, -0.5, t),
                               // Lerp line height smoothly (1.0 default to 1.2)
@@ -2050,8 +2067,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                       child: SizedBox(
                         width: titleWidth,
                         child: Align(
-                          // Smooth transition from left-aligned to centered
-                          alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
+                          // PERF Phase 5: Use pre-computed alignment
+                          alignment: textAlignment,
                           child: Text(
                             // Always show artist/author/podcast name (was showing "Now Playing" when device reveal visible)
                             maProvider.isPlayingAudiobook
@@ -2063,8 +2080,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                               // PERF Phase 4: Use Color.lerp between pre-computed colors
                               color: Color.lerp(textColor60, textColor70, t),
                               fontSize: artistFontSize,
-                              // Lerp font weight smoothly
-                              fontWeight: FontWeight.lerp(FontWeight.normal, FontWeight.w400, t),
                             ),
                             textAlign: TextAlign.left, // Keep static, Align handles centering
                             maxLines: 1,
@@ -2088,8 +2103,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                       child: SizedBox(
                         width: titleWidth,
                         child: Align(
-                          // Smooth transition from left-aligned to centered
-                          alignment: Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!,
+                          // PERF Phase 5: Use pre-computed alignment
+                          alignment: textAlignment,
                           child: Text(
                             selectedPlayer.name,
                             style: TextStyle(
@@ -2138,11 +2153,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     right: contentPadding,
                     top: expandedAlbumTop + (maProvider.isPlayingAudiobook ? 24 : (currentTrack.album != null ? 24 : 0)),
                     child: FadeTransition(
-                      opacity: _expandAnimation.drive(
-                        Tween(begin: 0.0, end: 1.0).chain(
-                          CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.easeIn)),
-                        ),
-                      ),
+                      // PERF Phase 5: Use cached animation instead of creating new Tween every frame
+                      opacity: _fadeIn50to100,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -2174,11 +2186,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     right: contentPadding,
                     top: expandedProgressTop,
                     child: FadeTransition(
-                      opacity: _expandAnimation.drive(
-                        Tween(begin: 0.0, end: 1.0).chain(
-                          CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.easeIn)),
-                        ),
-                      ),
+                      // PERF Phase 5: Use cached animation instead of creating new Tween every frame
+                      opacity: _fadeIn50to100,
                       child: ValueListenableBuilder<int>(
                         valueListenable: _progressNotifier,
                         builder: (context, elapsedTime, child) {
@@ -2469,11 +2478,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     right: 48,
                     top: volumeTop,
                     child: FadeTransition(
-                      opacity: _expandAnimation.drive(
-                        Tween(begin: 0.0, end: 1.0).chain(
-                          CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.easeIn)),
-                        ),
-                      ),
+                      // PERF Phase 5: Use cached animation instead of creating new Tween every frame
+                      opacity: _fadeIn50to100,
                       child: VolumeControl(compact: false, accentColor: primaryColor),
                     ),
                   ),

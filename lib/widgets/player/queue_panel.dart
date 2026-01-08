@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../providers/music_assistant_provider.dart';
 import '../../models/player.dart';
@@ -190,6 +191,9 @@ class _QueuePanelState extends State<QueuePanel> {
       _dragItem = _items[index];
     });
 
+    // Haptic feedback on drag start
+    HapticFeedback.mediumImpact();
+
     // Notify parent that drag started
     widget.onDraggingChanged?.call(true);
   }
@@ -216,6 +220,8 @@ class _QueuePanelState extends State<QueuePanel> {
         _items.insert(targetIndex, item);
         _dragIndex = targetIndex;
       });
+      // Haptic feedback on each reorder
+      HapticFeedback.selectionClick();
     } else {
       // Just update position
       setState(() {});
@@ -240,6 +246,9 @@ class _QueuePanelState extends State<QueuePanel> {
       // Block didUpdateWidget while waiting for server confirmation
       if (positionChanged) _pendingReorder = true;
     });
+
+    // Haptic feedback on drop
+    HapticFeedback.lightImpact();
 
     // Notify parent that drag ended
     widget.onDraggingChanged?.call(false);

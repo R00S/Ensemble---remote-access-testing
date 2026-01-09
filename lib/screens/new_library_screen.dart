@@ -485,6 +485,26 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     });
   }
 
+  /// Get the color for a media type - muted colors based on primaryContainer tone
+  Color _getMediaTypeColor(ColorScheme colorScheme, LibraryMediaType type) {
+    final baseColor = colorScheme.primaryContainer;
+    final baseHsl = HSLColor.fromColor(baseColor);
+
+    double hueShift;
+    switch (type) {
+      case LibraryMediaType.music:
+        hueShift = 0; // Keep primary hue (purple-ish)
+      case LibraryMediaType.books:
+        hueShift = 35; // Shift toward orange
+      case LibraryMediaType.podcasts:
+        hueShift = 160; // Shift toward teal
+      case LibraryMediaType.radio:
+        hueShift = -30; // Shift toward pink
+    }
+
+    return baseHsl.withHue((baseHsl.hue + hueShift) % 360).toColor();
+  }
+
   void _changeMediaType(LibraryMediaType type) {
     _logger.log('📚 _changeMediaType called: $type (current: $_selectedMediaType)');
     if (_selectedMediaType == type) {
@@ -1199,30 +1219,6 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       }
     }
 
-    // Muted colors for each media type - same tone as primaryContainer
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    Color getMediaTypeColor(LibraryMediaType type) {
-      // Use HSL to create colors with same muted tone as primaryContainer
-      // Shift hue for each type, keep saturation/lightness similar to primaryContainer
-      final baseColor = colorScheme.primaryContainer;
-      final baseHsl = HSLColor.fromColor(baseColor);
-
-      double hueShift;
-      switch (type) {
-        case LibraryMediaType.music:
-          hueShift = 0; // Keep primary hue (purple-ish)
-        case LibraryMediaType.books:
-          hueShift = 35; // Shift toward orange
-        case LibraryMediaType.podcasts:
-          hueShift = 160; // Shift toward teal
-        case LibraryMediaType.radio:
-          hueShift = -30; // Shift toward pink
-      }
-
-      return baseHsl.withHue((baseHsl.hue + hueShift) % 360).toColor();
-    }
-
     final types = LibraryMediaType.values;
 
     // Calculate flex values based on label length
@@ -1280,7 +1276,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeOutCubic,
                   decoration: BoxDecoration(
-                    color: getMediaTypeColor(_selectedMediaType),
+                    color: _getMediaTypeColor(colorScheme, _selectedMediaType),
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
@@ -1441,7 +1437,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             bottom: 0,
             child: Container(
               decoration: BoxDecoration(
-                color: colorScheme.primaryContainer,
+                color: _getMediaTypeColor(colorScheme, _selectedMediaType),
                 borderRadius: BorderRadius.circular(8),
               ),
             ),

@@ -99,12 +99,27 @@ class _SeriesRowState extends State<SeriesRow> with AutomaticKeepAliveClientMixi
             _seriesCovers[seriesId] = covers;
             _seriesBookCounts[seriesId] = books.length;
           });
-          // Extract colors asynchronously
-          _extractSeriesColors(seriesId, covers);
+          // Precache images for smooth hero animations
+          _precacheSeriesCovers(covers);
+          // Extract colors asynchronously (delayed to avoid jank during scroll)
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) _extractSeriesColors(seriesId, covers);
+          });
         }
       }
     } finally {
       _loadingCovers.remove(seriesId);
+    }
+  }
+
+  /// Precache series cover images for smooth hero animations
+  void _precacheSeriesCovers(List<String> covers) {
+    if (!mounted) return;
+    for (final url in covers) {
+      precacheImage(
+        CachedNetworkImageProvider(url),
+        context,
+      ).catchError((_) => false);
     }
   }
 
@@ -299,11 +314,14 @@ class _SeriesCard extends StatelessWidget {
           // Use AspectRatio to guarantee square cover
           Hero(
             tag: heroTag,
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: _buildCoverGrid(),
+            // RepaintBoundary caches the rendered grid for smooth animation
+            child: RepaintBoundary(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12), // Match detail screen
+                  child: _buildCoverGrid(),
+                ),
               ),
             ),
           ),

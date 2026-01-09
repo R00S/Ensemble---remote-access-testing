@@ -801,6 +801,9 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             _seriesCoversLoading.remove(seriesId);
           });
 
+          // Precache images for smooth hero animations
+          _precacheSeriesCovers(covers);
+
           // PERF: Queue color extraction with debounce to avoid blocking UI during scroll
           _queueColorExtraction(seriesId, covers);
         }
@@ -808,6 +811,17 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     } catch (e) {
       _logger.log('📚 Error loading series covers for $seriesId: $e');
       _seriesCoversLoading.remove(seriesId);
+    }
+  }
+
+  /// Precache series cover images for smooth hero animations
+  void _precacheSeriesCovers(List<String> covers) {
+    if (!mounted) return;
+    for (final url in covers) {
+      precacheImage(
+        CachedNetworkImageProvider(url),
+        context,
+      ).catchError((_) => false);
     }
   }
 
@@ -1992,8 +2006,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _logger.log('📚 Tapped series: ${series.name}, path: ${series.id}');
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => AudiobookSeriesScreen(
+          FadeSlidePageRoute(
+            child: AudiobookSeriesScreen(
               series: series,
               heroTag: heroTag,
               initialCovers: covers,
@@ -2024,8 +2038,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _logger.log('📚 Tapped series: ${series.name}, path: ${series.id}');
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => AudiobookSeriesScreen(
+          FadeSlidePageRoute(
+            child: AudiobookSeriesScreen(
               series: series,
               heroTag: heroTag,
               initialCovers: cachedCovers,
@@ -2039,13 +2053,16 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           // Square cover grid with Hero animation
           Hero(
             tag: heroTag,
-            child: AspectRatio(
-              aspectRatio: 1.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  color: colorScheme.surfaceVariant,
-                  child: _buildSeriesCoverGrid(series, colorScheme, maProvider, maxGridSize: maxCoverGridSize),
+            // RepaintBoundary caches the rendered grid for smooth animation
+            child: RepaintBoundary(
+              child: AspectRatio(
+                aspectRatio: 1.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12), // Match detail screen
+                  child: Container(
+                    color: colorScheme.surfaceVariant,
+                    child: _buildSeriesCoverGrid(series, colorScheme, maProvider, maxGridSize: maxCoverGridSize),
+                  ),
                 ),
               ),
             ),

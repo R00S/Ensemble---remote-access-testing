@@ -46,10 +46,6 @@ class _VolumeControlState extends State<VolumeControl> {
   static const double _precisionStillnessThreshold = 5.0;
   static const double _precisionSensitivity = 0.1; // 10% range in precision mode
 
-  // Hint display state
-  bool _showHints = true;
-  bool _showPrecisionHint = false;
-
   // Button tap indicator state
   bool _showButtonIndicator = false;
   Timer? _buttonIndicatorTimer;
@@ -82,11 +78,9 @@ class _VolumeControlState extends State<VolumeControl> {
 
   Future<void> _loadSettings() async {
     final precisionEnabled = await SettingsService.getVolumePrecisionMode();
-    final hintsEnabled = await SettingsService.getShowHints();
     if (mounted) {
       setState(() {
         _precisionModeEnabled = precisionEnabled;
-        _showHints = hintsEnabled;
       });
     }
   }
@@ -98,19 +92,7 @@ class _VolumeControlState extends State<VolumeControl> {
       _inPrecisionMode = true;
       _precisionZoomCenter = _pendingVolume ?? 0.5;
       _precisionStartX = _lastLocalX;
-      if (_showHints) {
-        _showPrecisionHint = true;
-      }
     });
-
-    // Hide hint after 2 seconds
-    if (_showHints) {
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() => _showPrecisionHint = false);
-        }
-      });
-    }
   }
 
   void _exitPrecisionMode() {
@@ -119,7 +101,6 @@ class _VolumeControlState extends State<VolumeControl> {
     if (_inPrecisionMode) {
       setState(() {
         _inPrecisionMode = false;
-        _showPrecisionHint = false;
       });
     }
   }
@@ -360,29 +341,6 @@ class _VolumeControlState extends State<VolumeControl> {
                           painter: _TeardropPainter(
                             color: _inPrecisionMode ? accentColor : Colors.white,
                             volume: (currentVolume * 100).round(),
-                          ),
-                        ),
-                      ),
-                    // Precision mode hint (styled like snackbar, above slider)
-                    if (_showPrecisionHint)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: -40,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF323232),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'Precision mode enabled',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                              ),
-                            ),
                           ),
                         ),
                       ),

@@ -520,8 +520,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
                         navBgColor = adaptiveBg ?? colorScheme.surface;
                       } else {
                         // Home screen with collapsed player - use default surface color
-                        // DEBUG: Temporarily use RED to verify fix is active
-                        navBgColor = const Color(0xFF8B0000); // Dark red - REMOVE AFTER TESTING
+                        navBgColor = colorScheme.surface;
                       }
 
                       // Log only when nav bar color changes (reduce spam)

@@ -1111,35 +1111,28 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       }
     }
 
-    // Colors for each media type - darker for dark theme, lighter for light theme
+    // Muted colors for each media type - same tone as primaryContainer
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     Color getMediaTypeColor(LibraryMediaType type) {
-      if (isDark) {
-        // Darker/muted colors for dark theme (light text on dark bg)
-        switch (type) {
-          case LibraryMediaType.music:
-            return const Color(0xFF5E35B1); // Deep purple
-          case LibraryMediaType.books:
-            return const Color(0xFFE65100); // Deep orange
-          case LibraryMediaType.podcasts:
-            return const Color(0xFF00796B); // Deep teal
-          case LibraryMediaType.radio:
-            return const Color(0xFFC2185B); // Deep pink
-        }
-      } else {
-        // Lighter pastel colors for light theme (dark text on light bg)
-        switch (type) {
-          case LibraryMediaType.music:
-            return const Color(0xFFD1C4E9); // Light purple
-          case LibraryMediaType.books:
-            return const Color(0xFFFFE0B2); // Light orange
-          case LibraryMediaType.podcasts:
-            return const Color(0xFFB2DFDB); // Light teal
-          case LibraryMediaType.radio:
-            return const Color(0xFFF8BBD9); // Light pink
-        }
+      // Use HSL to create colors with same muted tone as primaryContainer
+      // Shift hue for each type, keep saturation/lightness similar to primaryContainer
+      final baseColor = colorScheme.primaryContainer;
+      final baseHsl = HSLColor.fromColor(baseColor);
+
+      double hueShift;
+      switch (type) {
+        case LibraryMediaType.music:
+          hueShift = 0; // Keep primary hue (purple-ish)
+        case LibraryMediaType.books:
+          hueShift = 35; // Shift toward orange
+        case LibraryMediaType.podcasts:
+          hueShift = 160; // Shift toward teal
+        case LibraryMediaType.radio:
+          hueShift = -30; // Shift toward pink
       }
+
+      return baseHsl.withHue((baseHsl.hue + hueShift) % 360).toColor();
     }
 
     final types = LibraryMediaType.values;
@@ -1175,7 +1168,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
                   color: isSelected ? getMediaTypeColor(type) : Colors.transparent,
                   borderRadius: BorderRadius.horizontal(
@@ -1191,7 +1185,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                       getMediaTypeIcon(type),
                       size: 18,
                       color: isSelected
-                          ? (isDark ? Colors.white : Colors.black87)
+                          ? colorScheme.onPrimaryContainer
                           : colorScheme.onSurface.withOpacity(0.6),
                     ),
                     const SizedBox(width: 6),
@@ -1200,7 +1194,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                         getMediaTypeLabel(type),
                         style: TextStyle(
                           color: isSelected
-                              ? (isDark ? Colors.white : Colors.black87)
+                              ? colorScheme.onPrimaryContainer
                               : colorScheme.onSurface.withOpacity(0.7),
                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                           fontSize: 14,

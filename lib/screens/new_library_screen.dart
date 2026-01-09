@@ -1186,7 +1186,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                               ? Colors.black87
                               : colorScheme.onSurface.withOpacity(0.7),
                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                          fontSize: 13,
+                          fontSize: 14,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),

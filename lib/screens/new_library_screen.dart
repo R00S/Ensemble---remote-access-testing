@@ -537,15 +537,15 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       _horizontalOverscroll += notification.overscroll;
 
       // Check if we've overscrolled enough to switch
+      // Positive overscroll = swiping left at the end = go to NEXT type
+      // Negative overscroll = swiping right at the start = go to PREVIOUS type
       if (_horizontalOverscroll > _overscrollThreshold) {
-        // Overscrolled right at the end - go to previous media type
-        _horizontalOverscroll = 0;
-        _switchToPreviousMediaType();
-        return true;
-      } else if (_horizontalOverscroll < -_overscrollThreshold) {
-        // Overscrolled left at the end - go to next media type
         _horizontalOverscroll = 0;
         _switchToNextMediaType();
+        return true;
+      } else if (_horizontalOverscroll < -_overscrollThreshold) {
+        _horizontalOverscroll = 0;
+        _switchToPreviousMediaType();
         return true;
       }
     } else if (notification is ScrollEndNotification) {

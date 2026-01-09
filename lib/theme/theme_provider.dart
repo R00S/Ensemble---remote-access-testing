@@ -9,6 +9,7 @@ final _themeLogger = DebugLogger();
 
 /// Global function to update adaptive colors from an image URL
 /// This can be called from anywhere in the app (e.g., when tapping an album/artist)
+/// Sets isOnDetailScreen=true so nav bar will also use adaptive colors
 Future<void> updateAdaptiveColorsFromImage(BuildContext context, String? imageUrl) async {
   if (imageUrl == null || imageUrl.isEmpty) return;
 
@@ -16,7 +17,7 @@ Future<void> updateAdaptiveColorsFromImage(BuildContext context, String? imageUr
     final colorSchemes = await PaletteHelper.extractColorSchemes(CachedNetworkImageProvider(imageUrl));
     if (colorSchemes != null && context.mounted) {
       final themeProvider = context.read<ThemeProvider>();
-      themeProvider.updateAdaptiveColors(colorSchemes.$1, colorSchemes.$2);
+      themeProvider.updateAdaptiveColors(colorSchemes.$1, colorSchemes.$2, isFromDetailScreen: true);
     }
   } catch (e) {
     // Silently fail - colors will update when track plays
@@ -42,6 +43,10 @@ class ThemeProvider extends ChangeNotifier {
   ColorScheme? _adaptiveLightScheme;
   ColorScheme? _adaptiveDarkScheme;
 
+  // Track if we're on a detail screen (vs just player-extracted colors)
+  // When true, nav bar should use adaptive colors even when player is collapsed
+  bool _isOnDetailScreen = false;
+
   ThemeProvider() {
     _loadSettings();
   }
@@ -55,6 +60,7 @@ class ThemeProvider extends ChangeNotifier {
   AdaptiveColors? get adaptiveColors => _adaptiveColors;
   ColorScheme? get adaptiveLightScheme => _adaptiveLightScheme;
   ColorScheme? get adaptiveDarkScheme => _adaptiveDarkScheme;
+  bool get isOnDetailScreen => _isOnDetailScreen;
 
   /// Get the current adaptive primary color (for bottom nav highlight, etc.)
   Color get adaptivePrimaryColor => _adaptiveColors?.primary ?? _customColor;
@@ -162,9 +168,17 @@ class ThemeProvider extends ChangeNotifier {
   }
 
   /// Update adaptive colors from album art
-  void updateAdaptiveColors(ColorScheme? lightScheme, ColorScheme? darkScheme) {
+  /// [isFromDetailScreen] - if true, this is from navigating to a detail screen
+  /// and the nav bar should use adaptive colors even when player is collapsed
+  void updateAdaptiveColors(ColorScheme? lightScheme, ColorScheme? darkScheme, {bool isFromDetailScreen = false}) {
     _adaptiveLightScheme = lightScheme;
     _adaptiveDarkScheme = darkScheme;
+
+    // Only set detail screen flag if explicitly from a detail screen navigation
+    // Player-extracted colors should NOT set this flag
+    if (isFromDetailScreen) {
+      _isOnDetailScreen = true;
+    }
 
     // Extract AdaptiveColors from the schemes
     if (darkScheme != null) {
@@ -181,11 +195,12 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Clear adaptive colors (when no track is playing)
+  /// Clear adaptive colors (when navigating back from detail screen or no track playing)
   void clearAdaptiveColors() {
     _adaptiveColors = null;
     _adaptiveLightScheme = null;
     _adaptiveDarkScheme = null;
+    _isOnDetailScreen = false;
     notifyListeners();
   }
 }

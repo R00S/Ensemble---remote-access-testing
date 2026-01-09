@@ -6,11 +6,15 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/music_assistant_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../services/debug_logger.dart';
 import '../services/settings_service.dart';
 import '../theme/theme_provider.dart';
+
 import 'expandable_player.dart';
 import 'player/mini_player_content.dart' show MiniPlayerLayout;
 import 'player/player_reveal_overlay.dart';
+
+final _navLogger = DebugLogger();
 
 /// Cached color with contrast adjustment
 /// Avoids expensive HSL conversions during scroll
@@ -164,6 +168,9 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   late AnimationController _slideController;
   late Animation<double> _slideAnimation;
 
+  // Track last nav bar color to log only when it changes
+  Color? _lastNavBgColor;
+
   // Single bounce controller for device selector expand/collapse
   late AnimationController _singleBounceController;
 
@@ -204,6 +211,7 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
   @override
   void initState() {
     super.initState();
+    _navLogger.log('🎨 GlobalPlayerOverlay initState - nav bar fix v2 active');
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 250),
       vsync: this,
@@ -489,30 +497,44 @@ class _GlobalPlayerOverlayState extends State<GlobalPlayerOverlay>
               builder: (context, _) {
                 return Consumer<ThemeProvider>(
                 builder: (context, themeProvider, _) {
-                  // Base colors (used when not expanding or no player colors)
-                  // Use adaptive primary color only when adaptive theme is enabled AND we have adaptive colors
-                  final baseSourceColor = (themeProvider.adaptiveTheme && themeProvider.adaptiveColors != null)
-                      ? themeProvider.adaptiveColors!.primary
-                      : colorScheme.primary;
-
                   final isDark = Theme.of(context).brightness == Brightness.dark;
-
-                  // Base background: use adaptive surface color when adaptive theme is enabled
-                  // This themes the nav bar on detail screens and when player is expanded
-                  final adaptiveBg = themeProvider.getAdaptiveSurfaceColorFor(Theme.of(context).brightness);
-                  final baseBgColor = (themeProvider.adaptiveTheme && adaptiveBg != null)
-                      ? adaptiveBg
-                      : colorScheme.surface;
 
                   return ValueListenableBuilder<PlayerExpansionState>(
                     valueListenable: playerExpansionNotifier,
                     builder: (context, expansionState, _) {
-                      // Blend nav bar background with expanded player during expansion
-                      final navBgColor = expansionState.progress > 0 && expansionState.backgroundColor != null
-                          ? Color.lerp(baseBgColor, expansionState.backgroundColor, expansionState.progress)!
-                          : baseBgColor;
+                      // Nav bar color logic - only use adaptive colors when:
+                      // 1. Player is expanding/expanded, OR
+                      // 2. On a detail screen (isOnDetailScreen)
+                      // On home screen with collapsed player: always use default theme colors
+                      final bool useAdaptiveColors = themeProvider.adaptiveTheme &&
+                          (expansionState.progress > 0 || themeProvider.isOnDetailScreen);
 
-                      // Blend icon color with player's primary color during expansion (when adaptive is on)
+                      // Nav bar background color
+                      final Color navBgColor;
+                      if (expansionState.progress > 0 && expansionState.backgroundColor != null) {
+                        // Player is expanding - blend from surface to player's adaptive color
+                        navBgColor = Color.lerp(colorScheme.surface, expansionState.backgroundColor, expansionState.progress)!;
+                      } else if (useAdaptiveColors) {
+                        // On a detail screen - use adaptive surface color for nav bar
+                        final adaptiveBg = themeProvider.getAdaptiveSurfaceColorFor(Theme.of(context).brightness);
+                        navBgColor = adaptiveBg ?? colorScheme.surface;
+                      } else {
+                        // Home screen with collapsed player - use default surface color
+                        navBgColor = colorScheme.surface;
+                      }
+
+                      // Log only when nav bar color changes (reduce spam)
+                      if (_lastNavBgColor != navBgColor) {
+                        _lastNavBgColor = navBgColor;
+                        _navLogger.log('🎨 NavBar color changed: useAdaptive=$useAdaptiveColors, progress=${expansionState.progress.toStringAsFixed(2)}, isOnDetail=${themeProvider.isOnDetailScreen} -> $navBgColor');
+                      }
+
+                      // Icon color - only use adaptive colors when appropriate
+                      final Color baseSourceColor = (useAdaptiveColors && themeProvider.adaptiveColors != null)
+                          ? themeProvider.adaptiveColors!.primary
+                          : colorScheme.primary;
+
+                      // Blend icon color with player's primary color during expansion
                       Color sourceColor = baseSourceColor;
                       if (themeProvider.adaptiveTheme && expansionState.progress > 0 && expansionState.primaryColor != null) {
                         sourceColor = Color.lerp(baseSourceColor, expansionState.primaryColor!, expansionState.progress)!;

@@ -1151,7 +1151,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           final isFirst = index == 0;
           final isLast = index == types.length - 1;
 
-          return Flexible(
+          return Expanded(
             flex: getFlexForType(type),
             child: GestureDetector(
               onTap: () => _changeMediaType(type),

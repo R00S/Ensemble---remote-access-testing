@@ -68,6 +68,10 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   double _horizontalOverscroll = 0;
   static const double _overscrollThreshold = 80; // Pixels to trigger switch
 
+  // Track horizontal drag for single-category types (where PageView doesn't overscroll)
+  double _horizontalDragStart = 0;
+  double _horizontalDragDelta = 0;
+
   // View mode settings
   String _artistsViewMode = 'list'; // 'grid2', 'grid3', 'list'
   String _albumsViewMode = 'grid2'; // 'grid2', 'grid3', 'list'
@@ -570,6 +574,27 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     _changeMediaType(types[prevIndex]);
   }
 
+  // Drag handlers for single-category types
+  void _onHorizontalDragStart(DragStartDetails details) {
+    _horizontalDragStart = details.globalPosition.dx;
+    _horizontalDragDelta = 0;
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    _horizontalDragDelta = details.globalPosition.dx - _horizontalDragStart;
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    // Swipe right (positive delta) = go to previous type
+    // Swipe left (negative delta) = go to next type
+    if (_horizontalDragDelta > _overscrollThreshold) {
+      _switchToPreviousMediaType();
+    } else if (_horizontalDragDelta < -_overscrollThreshold) {
+      _switchToNextMediaType();
+    }
+    _horizontalDragDelta = 0;
+  }
+
   /// Handle scroll notifications to hide/show filter bars
   bool _handleScrollNotification(ScrollNotification notification) {
     // Don't hide while dragging letter scrollbar
@@ -1036,22 +1061,34 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                   child: Stack(
                     children: [
                       // Main scrollable content
-                      NotificationListener<ScrollNotification>(
-                        onNotification: _handleScrollNotification,
-                        // PERF: Use PageView.builder to only build visible tabs
-                        // Wrapped with horizontal overscroll detection for media type switching
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: _handleHorizontalOverscroll,
-                          child: PageView.builder(
-                            controller: _pageController,
-                            onPageChanged: _onPageChanged,
-                            itemCount: _tabCount,
-                            // Faster settling so vertical scroll works sooner after swipe
-                            physics: const _FastPageScrollPhysics(),
-                            itemBuilder: (context, index) => _buildTabAtIndex(context, l10n, index),
-                          ),
-                        ),
-                      ),
+                      // For single-category types, wrap with GestureDetector for swipe detection
+                      // (PageView with 1 item doesn't generate overscroll)
+                      _tabCount == 1
+                          ? GestureDetector(
+                              onHorizontalDragStart: _onHorizontalDragStart,
+                              onHorizontalDragUpdate: _onHorizontalDragUpdate,
+                              onHorizontalDragEnd: _onHorizontalDragEnd,
+                              child: NotificationListener<ScrollNotification>(
+                                onNotification: _handleScrollNotification,
+                                child: _buildTabAtIndex(context, l10n, 0),
+                              ),
+                            )
+                          : NotificationListener<ScrollNotification>(
+                              onNotification: _handleScrollNotification,
+                              // PERF: Use PageView.builder to only build visible tabs
+                              // Wrapped with horizontal overscroll detection for media type switching
+                              child: NotificationListener<ScrollNotification>(
+                                onNotification: _handleHorizontalOverscroll,
+                                child: PageView.builder(
+                                  controller: _pageController,
+                                  onPageChanged: _onPageChanged,
+                                  itemCount: _tabCount,
+                                  // Faster settling so vertical scroll works sooner after swipe
+                                  physics: const _FastPageScrollPhysics(),
+                                  itemBuilder: (context, index) => _buildTabAtIndex(context, l10n, index),
+                                ),
+                              ),
+                            ),
                       // Fade gradient at top - content fades as it scrolls under filter bar
                       Positioned(
                         top: 0,

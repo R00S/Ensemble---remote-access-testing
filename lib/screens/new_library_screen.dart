@@ -1111,35 +1111,69 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       }
     }
 
-    // Justify chips across full width
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: LibraryMediaType.values.map((type) {
-        final isSelected = _selectedMediaType == type;
-        return FilterChip(
-          selected: isSelected,
-          showCheckmark: false,
-          // Only show icon when selected
-          avatar: isSelected
-              ? Icon(
-                  getMediaTypeIcon(type),
-                  size: 18,
-                  color: colorScheme.onTertiaryContainer,
-                )
-              : null,
-          label: Text(getMediaTypeLabel(type)),
-          labelStyle: TextStyle(
-            color: isSelected
-                ? colorScheme.onTertiaryContainer
-                : colorScheme.onSurface.withOpacity(0.7),
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-          ),
-          backgroundColor: colorScheme.surfaceVariant.withOpacity(0.5),
-          selectedColor: colorScheme.tertiaryContainer,
-          side: BorderSide.none,
-          onSelected: (_) => _changeMediaType(type),
-        );
-      }).toList(),
+    final types = LibraryMediaType.values;
+
+    // Unified segmented bar with no gaps
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: types.asMap().entries.map((entry) {
+          final index = entry.key;
+          final type = entry.value;
+          final isSelected = _selectedMediaType == type;
+          final isFirst = index == 0;
+          final isLast = index == types.length - 1;
+
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => _changeMediaType(type),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isSelected ? colorScheme.tertiaryContainer : Colors.transparent,
+                  borderRadius: BorderRadius.horizontal(
+                    left: isFirst ? const Radius.circular(12) : Radius.zero,
+                    right: isLast ? const Radius.circular(12) : Radius.zero,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      getMediaTypeIcon(type),
+                      size: 18,
+                      color: isSelected
+                          ? colorScheme.onTertiaryContainer
+                          : colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        getMediaTypeLabel(type),
+                        style: TextStyle(
+                          color: isSelected
+                              ? colorScheme.onTertiaryContainer
+                              : colorScheme.onSurface.withOpacity(0.7),
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 

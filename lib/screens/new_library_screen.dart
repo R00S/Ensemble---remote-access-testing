@@ -3367,40 +3367,64 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
+    // Unique suffix for list view context
+    const heroSuffix = '_library_list';
+
     return RepaintBoundary(
       child: ListTile(
         key: ValueKey(playlist.itemId),
-        leading: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(8),
-          image: imageUrl != null
-              ? DecorationImage(image: CachedNetworkImageProvider(imageUrl), fit: BoxFit.cover)
-              : null,
+        leading: Hero(
+          tag: HeroTags.playlistCover + (playlist.uri ?? playlist.itemId) + heroSuffix,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 48,
+              height: 48,
+              color: colorScheme.surfaceContainerHighest,
+              child: imageUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 96,
+                      memCacheHeight: 96,
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      placeholder: (_, __) => const SizedBox(),
+                      errorWidget: (_, __, ___) => Icon(
+                        Icons.playlist_play_rounded,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : Icon(
+                      Icons.playlist_play_rounded,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+            ),
+          ),
         ),
-        child: imageUrl == null
-            ? Icon(Icons.playlist_play_rounded, color: colorScheme.onSurfaceVariant)
-            : null,
-      ),
-      title: Text(
-        playlist.name,
-        style: textTheme.titleMedium?.copyWith(
-          color: colorScheme.onSurface,
-          fontWeight: FontWeight.w500,
+        title: Hero(
+          tag: HeroTags.playlistTitle + (playlist.uri ?? playlist.itemId) + heroSuffix,
+          child: Material(
+            color: Colors.transparent,
+            child: Text(
+              playlist.name,
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        playlist.trackCount != null
-            ? '${playlist.trackCount} ${l10n.tracks}'
-            : playlist.owner ?? l10n.playlist,
-        style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+        subtitle: Text(
+          playlist.trackCount != null
+              ? '${playlist.trackCount} ${l10n.tracks}'
+              : playlist.owner ?? l10n.playlist,
+          style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         trailing: playlist.favorite == true
             ? const Icon(Icons.favorite, color: Colors.red, size: 20)
             : null,
@@ -3411,6 +3435,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             FadeSlidePageRoute(
               child: PlaylistDetailsScreen(
                 playlist: playlist,
+                heroTagSuffix: 'library_list',
                 initialImageUrl: imageUrl,
               ),
             ),
@@ -3426,73 +3451,92 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return GestureDetector(
-      onTap: () {
-        updateAdaptiveColorsFromImage(context, imageUrl);
-        Navigator.push(
-          context,
-          FadeSlidePageRoute(
-            child: PlaylistDetailsScreen(
-              playlist: playlist,
-              initialImageUrl: imageUrl,
-            ),
-          ),
-        );
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                color: colorScheme.surfaceVariant,
-                child: imageUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        placeholder: (_, __) => const SizedBox(),
-                        errorWidget: (_, __, ___) => Center(
-                          child: Icon(
-                            Icons.playlist_play_rounded,
-                            size: 48,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Icon(
-                          Icons.playlist_play_rounded,
-                          size: 48,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
+    // Unique suffix for grid view context
+    const heroSuffix = '_library_grid';
+
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: () {
+          updateAdaptiveColorsFromImage(context, imageUrl);
+          Navigator.push(
+            context,
+            FadeSlidePageRoute(
+              child: PlaylistDetailsScreen(
+                playlist: playlist,
+                heroTagSuffix: 'library_grid',
+                initialImageUrl: imageUrl,
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            playlist.name,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface,
-              fontWeight: FontWeight.w500,
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Hero(
+                tag: HeroTags.playlistCover + (playlist.uri ?? playlist.itemId) + heroSuffix,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    color: colorScheme.surfaceContainerHighest,
+                    child: imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            memCacheWidth: 256,
+                            memCacheHeight: 256,
+                            fadeInDuration: Duration.zero,
+                            fadeOutDuration: Duration.zero,
+                            placeholder: (_, __) => const SizedBox(),
+                            errorWidget: (_, __, ___) => Center(
+                              child: Icon(
+                                Icons.playlist_play_rounded,
+                                size: 48,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Icon(
+                              Icons.playlist_play_rounded,
+                              size: 48,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            playlist.trackCount != null
-                ? '${playlist.trackCount} ${l10n.tracks}'
-                : playlist.owner ?? l10n.playlist,
-            style: textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurface.withOpacity(0.7),
+            const SizedBox(height: 8),
+            Hero(
+              tag: HeroTags.playlistTitle + (playlist.uri ?? playlist.itemId) + heroSuffix,
+              child: Material(
+                color: Colors.transparent,
+                child: Text(
+                  playlist.name,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+            Text(
+              playlist.trackCount != null
+                  ? '${playlist.trackCount} ${l10n.tracks}'
+                  : playlist.owner ?? l10n.playlist,
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurface.withOpacity(0.7),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }

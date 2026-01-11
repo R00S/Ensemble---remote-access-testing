@@ -1566,37 +1566,58 @@ class SearchScreenState extends State<SearchScreen> {
     final isExpanded = _expandedPlaylistId == playlistId;
     final isInLib = _isInLibrary(playlist);
 
+    // Unique suffix for search context
+    const heroSuffix = '_search';
+
     return RepaintBoundary(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
             key: ValueKey(playlistId),
-            leading: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceVariant,
+            leading: Hero(
+              tag: HeroTags.playlistCover + playlistId + heroSuffix,
+              child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                image: imageUrl != null
-                    ? DecorationImage(
-                        image: CachedNetworkImageProvider(imageUrl),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  color: colorScheme.surfaceContainerHighest,
+                  child: imageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 96,
+                          memCacheHeight: 96,
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
+                          placeholder: (_, __) => const SizedBox(),
+                          errorWidget: (_, __, ___) => Icon(
+                            Icons.queue_music_rounded,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        )
+                      : Icon(
+                          Icons.queue_music_rounded,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                ),
               ),
-              child: imageUrl == null
-                  ? Icon(Icons.queue_music_rounded, color: colorScheme.onSurfaceVariant)
-                  : null,
             ),
-            title: Text(
-              playlist.name,
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w500,
+            title: Hero(
+              tag: HeroTags.playlistTitle + playlistId + heroSuffix,
+              child: Material(
+                color: Colors.transparent,
+                child: Text(
+                  playlist.name,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
             subtitle: showType
                 ? Row(
@@ -1637,6 +1658,7 @@ class SearchScreenState extends State<SearchScreen> {
                   FadeSlidePageRoute(
                     child: PlaylistDetailsScreen(
                       playlist: playlist,
+                      heroTagSuffix: 'search',
                       initialImageUrl: imageUrl,
                     ),
                   ),

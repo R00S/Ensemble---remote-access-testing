@@ -1,104 +1,104 @@
 {
-  "@@locale": "en",
+  "@@locale": "fr",
 
   "appTitle": "Ensemble",
   "@appTitle": {
     "description": "The application title"
   },
 
-  "connecting": "Connecting...",
+  "connecting": "Connexion...",
   "@connecting": {
     "description": "Connection status when connecting"
   },
 
-  "connected": "Connected",
+  "connected": "Connecté",
   "@connected": {
     "description": "Connection status when connected"
   },
 
-  "disconnected": "Disconnected",
+  "disconnected": "Déconnecté",
   "@disconnected": {
     "description": "Connection status when disconnected"
   },
 
-  "serverAddress": "Server Address",
+  "serverAddress": "Adresse du serveur",
   "@serverAddress": {
     "description": "Login screen server address field label"
   },
 
-  "serverAddressHint": "e.g., music.example.com or 192.168.1.100",
+  "serverAddressHint": "ex., music.example.com ou 192.168.1.100",
   "@serverAddressHint": {
     "description": "Hint text for server address field"
   },
 
-  "yourName": "Your Name",
+  "yourName": "Votre nom",
   "@yourName": {
     "description": "Login screen name field label"
   },
 
-  "yourFirstName": "Your first name",
+  "yourFirstName": "Votre prénom",
   "@yourFirstName": {
     "description": "Hint for name field"
   },
 
-  "portOptional": "Port (Optional)",
+  "portOptional": "Port (Facultatif)",
   "@portOptional": {
     "description": "Port field label"
   },
 
-  "portHint": "e.g., 8095 or leave blank",
+  "portHint": "ex., 8095 ou laisser vide",
   "@portHint": {
     "description": "Hint for port field"
   },
 
-  "portDescription": "Leave blank for reverse proxy or standard ports. Enter 8095 for direct connection.",
+  "portDescription": "Laisser vide pour les proxys inverses ou les ports standards. Entrer 8095 pour une connexion directe.",
   "@portDescription": {
     "description": "Description for port field"
   },
 
-  "username": "Username",
+  "username": "Nom d'utilisateur",
   "@username": {
     "description": "Username field label"
   },
 
-  "password": "Password",
+  "password": "Mot de passe",
   "@password": {
     "description": "Password field label"
   },
 
-  "detectAndConnect": "Detect & Connect",
+  "detectAndConnect": "Détecter et connecter",
   "@detectAndConnect": {
     "description": "Button to detect auth and connect"
   },
 
-  "connect": "Connect",
+  "connect": "Connectér",
   "@connect": {
     "description": "Connect button label"
   },
 
-  "disconnect": "Disconnect",
+  "disconnect": "Déconnectér",
   "@disconnect": {
     "description": "Disconnect button label"
   },
 
-  "authServerUrlOptional": "Auth Server URL (Optional)",
+  "authServerUrlOptional": "URL du serveur d'auth (Facultatif)",
   "@authServerUrlOptional": {
     "description": "Auth server URL field label"
   },
 
-  "authServerUrlHint": "e.g., auth.example.com (if different from server)",
+  "authServerUrlHint": "ex., auth.example.com (si different du serveur)",
   "@authServerUrlHint": {
     "description": "Hint for auth server URL"
   },
 
-  "authServerUrlDescription": "Leave empty if authentication is on the same server",
+  "authServerUrlDescription": "Laisser vide si l'authentification est sur le meme serveur",
   "@authServerUrlDescription": {
     "description": "Description for auth server URL field"
   },
 
-  "detectedAuthType": "Detected: {authType}",
-  "@detectedAuthType": {
-    "description": "Shows detected authentication type",
+  "détectédAuthType": "Detecte : {authType}",
+  "@détectédAuthType": {
+    "description": "Shows détectéd authentication type",
     "placeholders": {
       "authType": {
         "type": "String"
@@ -106,82 +106,82 @@
     }
   },
 
-  "serverRequiresAuth": "This server requires authentication",
+  "serverRequiresAuth": "Ce serveur requiert une authentification",
   "@serverRequiresAuth": {
     "description": "Message when server requires auth"
   },
 
-  "tailscaleVpnConnection": "Tailscale VPN Connection",
+  "tailscaleVpnConnection": "Connexion VPN Tailscale",
   "@tailscaleVpnConnection": {
     "description": "Tailscale connection type"
   },
 
-  "unencryptedConnection": "Unencrypted Connection",
+  "unencryptedConnection": "Connexion non chiffrée",
   "@unencryptedConnection": {
     "description": "Unencrypted connection warning"
   },
 
-  "usingHttpOverTailscale": "Using HTTP over Tailscale (encrypted tunnel)",
+  "usingHttpOverTailscale": "Utilisation de HTTP via Tailscale (tunnel chiffre)",
   "@usingHttpOverTailscale": {
     "description": "HTTP over Tailscale description"
   },
 
-  "httpsFailedUsingHttp": "HTTPS failed, using HTTP fallback",
+  "httpsFailedUsingHttp": "HTTPS a échoué, utilisation de HTTP en repli",
   "@httpsFailedUsingHttp": {
     "description": "HTTP fallback message"
   },
 
-  "httpNotEncrypted": "HTTP connection - data is not encrypted",
+  "httpNotEncrypted": "Connexion HTTP - les donnees ne sont pas chiffrées",
   "@httpNotEncrypted": {
     "description": "HTTP not encrypted warning"
   },
 
-  "pleaseEnterServerAddress": "Please enter your Music Assistant server address",
+  "pleaseEnterServerAddress": "Veuillez entrer l'adresse de votre serveur Music Assistant",
   "@pleaseEnterServerAddress": {
     "description": "Validation message for server address"
   },
 
-  "pleaseEnterName": "Please enter your name",
+  "pleaseEnterName": "Veuillez entrer votre nom",
   "@pleaseEnterName": {
     "description": "Validation message for name"
   },
 
-  "pleaseEnterValidPort": "Please enter a valid port number (1-65535)",
+  "pleaseEnterValidPort": "Veuillez entrer un numero de port valide (1-65535)",
   "@pleaseEnterValidPort": {
     "description": "Validation message for port"
   },
 
-  "pleaseEnterCredentials": "Please enter username and password",
+  "pleaseEnterCredentials": "Veuillez entrer le nom d'utilisateur et le mot de passe",
   "@pleaseEnterCredentials": {
     "description": "Validation message for credentials"
   },
 
-  "authFailed": "Authentication failed. Please check your credentials.",
+  "authFailed": "Echec de l'authentification. Veuillez verifier vos identifiants.",
   "@authFailed": {
     "description": "Authentication failed error"
   },
 
-  "maLoginFailed": "Music Assistant login failed. Please check your credentials.",
+  "maLoginFailed": "Echec de la connexion a Music Assistant. Veuillez verifier vos identifiants.",
   "@maLoginFailed": {
     "description": "MA login failed error"
   },
 
-  "connectionFailed": "Could not connect to server. Please check the address and try again.",
+  "connectionFailed": "Impossible de se connecter au serveur. Veuillez verifier l'adresse et reessayer.",
   "@connectionFailed": {
     "description": "Connection failed error"
   },
 
-  "detectingAuth": "Detecting authentication...",
+  "detectingAuth": "Detection de l'authentification...",
   "@detectingAuth": {
     "description": "Status when detecting auth"
   },
 
-  "cannotDetermineAuth": "Cannot determine authentication requirements. Please check server URL.",
+  "cannotDetermineAuth": "Impossible de determiner les exigences d'authentification. Veuillez verifier l'URL du serveur.",
   "@cannotDetermineAuth": {
     "description": "Error when auth detection fails"
   },
 
-  "noAuthentication": "No Authentication",
+  "noAuthentication": "Pas d'authentification",
   "@noAuthentication": {
     "description": "Auth type: none"
   },
@@ -196,117 +196,117 @@
     "description": "Auth type: Authelia"
   },
 
-  "musicAssistantLogin": "Music Assistant Login",
+  "musicAssistantLogin": "Connexion Music Assistant",
   "@musicAssistantLogin": {
     "description": "Auth type: MA Login"
   },
 
-  "pressBackToMinimize": "Press back again to minimize",
+  "pressBackToMinimize": "Appuyez a nouveau sur retour pour minimiser",
   "@pressBackToMinimize": {
     "description": "Back button toast message"
   },
 
-  "recentlyPlayed": "Recently Played",
+  "recentlyPlayed": "Ecoutes recemment",
   "@recentlyPlayed": {
     "description": "Home screen section title"
   },
 
-  "discoverArtists": "Discover Artists",
+  "discoverArtists": "Découvrir des artistes",
   "@discoverArtists": {
     "description": "Home screen section title"
   },
 
-  "discoverAlbums": "Discover Albums",
+  "discoverAlbums": "Découvrir des albums",
   "@discoverAlbums": {
     "description": "Home screen section title"
   },
 
-  "continueListening": "Continue Listening",
+  "continueListening": "Continuer l'écoute",
   "@continueListening": {
     "description": "Home screen section title"
   },
 
-  "discoverAudiobooks": "Discover Audiobooks",
+  "discoverAudiobooks": "Découvrir des livres audio",
   "@discoverAudiobooks": {
     "description": "Home screen section title"
   },
 
-  "discoverSeries": "Discover Series",
+  "discoverSeries": "Découvrir des séries",
   "@discoverSeries": {
     "description": "Home screen section title"
   },
 
-  "favoriteAlbums": "Favorite Albums",
+  "favoriteAlbums": "Albums favoris",
   "@favoriteAlbums": {
     "description": "Home screen section title"
   },
 
-  "favoriteArtists": "Favorite Artists",
+  "favoriteArtists": "Artistes favoris",
   "@favoriteArtists": {
     "description": "Home screen section title"
   },
 
-  "favoriteTracks": "Favorite Tracks",
+  "favoriteTracks": "Pistes favorites",
   "@favoriteTracks": {
     "description": "Home screen section title"
   },
 
-  "favoritePlaylists": "Favorite Playlists",
+  "favoritePlaylists": "Playlists favorites",
   "@favoritePlaylists": {
     "description": "Home screen section title"
   },
 
-  "favoriteRadioStations": "Favorite Radio Stations",
+  "favoriteRadioStations": "Stations de radio favorites",
   "@favoriteRadioStations": {
     "description": "Home screen section title"
   },
 
-  "favoritePodcasts": "Favorite Podcasts",
+  "favoritePodcasts": "Podcasts favoris",
   "@favoritePodcasts": {
     "description": "Home screen section title"
   },
 
-  "searchMusic": "Search music...",
+  "searchMusic": "Rechercher de la musique...",
   "@searchMusic": {
     "description": "Search placeholder text"
   },
 
-  "searchForContent": "Search for artists, albums, or tracks",
+  "searchForContent": "Rechercher des artistes, albums ou pistes",
   "@searchForContent": {
     "description": "Search hint text"
   },
 
-  "recentSearches": "Recent Searches",
+  "recentSearches": "Recherches recentes",
   "@recentSearches": {
     "description": "Label for recent search history section"
   },
 
-  "clearSearchHistory": "Clear Search History",
+  "clearSearchHistory": "Effacer l'historique de recherche",
   "@clearSearchHistory": {
     "description": "Button to clear search history"
   },
 
-  "searchHistoryCleared": "Search history cleared",
+  "searchHistoryCleared": "Historique de recherche efface",
   "@searchHistoryCleared": {
     "description": "Confirmation message after clearing search history"
   },
 
-  "libraryOnly": "Library only",
+  "libraryOnly": "Bibliothèque uniquement",
   "@libraryOnly": {
     "description": "Toggle to search only in library"
   },
 
-  "retry": "Retry",
+  "retry": "Reessayer",
   "@retry": {
     "description": "Retry button label"
   },
 
-  "all": "All",
+  "all": "Tout",
   "@all": {
     "description": "Filter option: All"
   },
 
-  "artists": "Artists",
+  "artists": "Artistes",
   "@artists": {
     "description": "Artists category"
   },
@@ -316,7 +316,7 @@
     "description": "Albums category"
   },
 
-  "tracks": "Tracks",
+  "tracks": "Pistes",
   "@tracks": {
     "description": "Tracks category"
   },
@@ -326,12 +326,12 @@
     "description": "Playlists category"
   },
 
-  "audiobooks": "Audiobooks",
+  "audiobooks": "Livres audio",
   "@audiobooks": {
     "description": "Audiobooks category"
   },
 
-  "music": "Music",
+  "music": "Musique",
   "@music": {
     "description": "Music category"
   },
@@ -346,32 +346,32 @@
     "description": "Radio stations subcategory"
   },
 
-  "selectLibrary": "Select Library",
+  "selectLibrary": "Sélectionner la bibliothèque",
   "@selectLibrary": {
     "description": "Title for library type selection bottom sheet"
   },
 
-  "noRadioStations": "No radio stations",
+  "noRadioStations": "Aucune station de radio",
   "@noRadioStations": {
     "description": "Empty state when no radio stations are available"
   },
 
-  "addRadioStationsHint": "Add radio stations in Music Assistant",
+  "addRadioStationsHint": "Ajouter des stations de radio dans Music Assistant",
   "@addRadioStationsHint": {
     "description": "Hint for adding radio stations"
   },
 
-  "searchFailed": "Search failed. Please check your connection.",
+  "searchFailed": "La recherche a échoué. Veuillez verifier votre connexion.",
   "@searchFailed": {
     "description": "Search error message"
   },
 
-  "queue": "Queue",
+  "queue": "File d'attente",
   "@queue": {
     "description": "Queue screen title"
   },
 
-  "playerQueue": "{playerName} Queue",
+  "playerQueue": "File d'attente de {playerName}",
   "@playerQueue": {
     "description": "Queue title with player name",
     "placeholders": {
@@ -381,17 +381,17 @@
     }
   },
 
-  "noPlayerSelected": "No player selected",
+  "noPlayerSelected": "Aucun lecteur selectionne",
   "@noPlayerSelected": {
     "description": "Message when no player is selected"
   },
 
-  "undo": "Undo",
+  "undo": "Annuler",
   "@undo": {
     "description": "Undo action"
   },
 
-  "removedItem": "Removed {itemName}",
+  "removedItem": "{itemName} supprimé",
   "@removedItem": {
     "description": "Snackbar message when item removed",
     "placeholders": {
@@ -401,72 +401,72 @@
     }
   },
 
-  "settings": "Settings",
+  "settings": "Paramètres",
   "@settings": {
     "description": "Settings screen title"
   },
 
-  "debugLogs": "Debug Logs",
+  "debugLogs": "Journaux de debogage",
   "@debugLogs": {
     "description": "Debug logs section"
   },
 
-  "themeMode": "Theme Mode",
+  "themeMode": "Mode de theme",
   "@themeMode": {
     "description": "Theme mode setting"
   },
 
-  "light": "Light",
+  "light": "Clair",
   "@light": {
     "description": "Light theme"
   },
 
-  "dark": "Dark",
+  "dark": "Sombre",
   "@dark": {
     "description": "Dark theme"
   },
 
-  "system": "System",
+  "system": "Système",
   "@system": {
     "description": "System theme"
   },
 
-  "pullToRefresh": "Pull to refresh the library to apply changes",
+  "pullToRefresh": "Tirez pour rafraichir la bibliothèque et appliquer les modifications",
   "@pullToRefresh": {
     "description": "Refresh hint message"
   },
 
-  "viewDebugLogs": "View Debug Logs",
+  "viewDebugLogs": "Voir les journaux de debogage",
   "@viewDebugLogs": {
     "description": "Button to view debug logs"
   },
 
-  "viewAllPlayers": "View All Players",
+  "viewAllPlayers": "Voir tous les lecteurs",
   "@viewAllPlayers": {
     "description": "Button to view all players"
   },
 
-  "copyLogs": "Copy Logs",
+  "copyLogs": "Copier les journaux",
   "@copyLogs": {
     "description": "Button to copy logs"
   },
 
-  "clearLogs": "Clear Logs",
+  "clearLogs": "Effacer les journaux",
   "@clearLogs": {
     "description": "Button to clear logs"
   },
 
-  "copyList": "Copy List",
+  "copyList": "Copier la liste",
   "@copyList": {
     "description": "Button to copy list"
   },
 
-  "close": "Close",
+  "close": "Fermer",
   "@close": {
     "description": "Close button"
   },
 
-  "allPlayersCount": "All Players ({count})",
+  "allPlayersCount": "Tous les lecteurs ({count})",
   "@allPlayersCount": {
     "description": "Dialog title with player count",
     "placeholders": {
@@ -476,7 +476,7 @@
     }
   },
 
-  "errorLoadingPlayers": "Error loading players: {error}",
+  "errorLoadingPlayers": "Erreur lors du chargement des lecteurs : {error}",
   "@errorLoadingPlayers": {
     "description": "Error loading players",
     "placeholders": {
@@ -486,22 +486,22 @@
     }
   },
 
-  "logsCopied": "Logs copied to clipboard",
+  "logsCopied": "Journaux copies dans le presse-papiers",
   "@logsCopied": {
     "description": "Confirmation when logs copied"
   },
 
-  "logsCleared": "Logs cleared",
+  "logsCleared": "Journaux effaces",
   "@logsCleared": {
     "description": "Confirmation when logs cleared"
   },
 
-  "playerListCopied": "Player list copied to clipboard!",
+  "playerListCopied": "Liste des lecteurs copiee dans le presse-papiers !",
   "@playerListCopied": {
     "description": "Confirmation when player list copied"
   },
 
-  "noLogsYet": "No logs yet",
+  "noLogsYet": "Pas encore de journaux",
   "@noLogsYet": {
     "description": "Empty logs message"
   },
@@ -511,17 +511,17 @@
     "description": "Log filter: Info+"
   },
 
-  "warnings": "Warnings",
+  "warnings": "Avertissements",
   "@warnings": {
     "description": "Log filter: Warnings"
   },
 
-  "errors": "Errors",
+  "errors": "Erreurs",
   "@errors": {
     "description": "Log filter: Errors"
   },
 
-  "showingEntries": "Showing {filtered} of {total} entries",
+  "showingEntries": "Affichage de {filtered} sur {total} entrées",
   "@showingEntries": {
     "description": "Entries count display",
     "placeholders": {
@@ -534,22 +534,22 @@
     }
   },
 
-  "thisDevice": "This device",
+  "thisDevice": "Cet appareil",
   "@thisDevice": {
     "description": "Label for current device"
   },
 
-  "ghostPlayer": "Ghost player (duplicate)",
+  "ghostPlayer": "Lecteur fantome (doublon)",
   "@ghostPlayer": {
     "description": "Warning for ghost player"
   },
 
-  "unavailableCorrupt": "Unavailable/Corrupt",
+  "unavailableCorrupt": "Indisponible/Corrompu",
   "@unavailableCorrupt": {
     "description": "Warning for corrupt player"
   },
 
-  "playerId": "ID: {id}",
+  "playerId": "ID : {id}",
   "@playerId": {
     "description": "Player ID display",
     "placeholders": {
@@ -559,7 +559,7 @@
     }
   },
 
-  "playerInfo": "Available: {available} | Provider: {provider}",
+  "playerInfo": "Disponible : {available} | Fournisseur : {provider}",
   "@playerInfo": {
     "description": "Player info display",
     "placeholders": {
@@ -572,17 +572,17 @@
     }
   },
 
-  "shareBugReport": "Share bug report",
+  "shareBugReport": "Partager le rapport de bogue",
   "@shareBugReport": {
     "description": "Share bug report option"
   },
 
-  "moreOptions": "More options",
+  "moreOptions": "Plus d'options",
   "@moreOptions": {
     "description": "More options menu"
   },
 
-  "failedToUpdateFavorite": "Failed to update favorite: {error}",
+  "failedToUpdateFavorite": "Echec de la mise a jour du favori : {error}",
   "@failedToUpdateFavorite": {
     "description": "Error updating favorite",
     "placeholders": {
@@ -592,32 +592,32 @@
     }
   },
 
-  "noPlayersAvailable": "No players available",
+  "noPlayersAvailable": "Aucun lecteur disponible",
   "@noPlayersAvailable": {
     "description": "Message when no players available"
   },
 
-  "albumAddedToQueue": "Album added to queue",
+  "albumAddedToQueue": "Album ajouté a la file d'attente",
   "@albumAddedToQueue": {
     "description": "Confirmation when album added"
   },
 
-  "tracksAddedToQueue": "Tracks added to queue",
+  "tracksAddedToQueue": "Pistes ajoutées a la file d'attente",
   "@tracksAddedToQueue": {
     "description": "Confirmation when tracks added"
   },
 
-  "play": "Play",
+  "play": "Lire",
   "@play": {
     "description": "Play button label"
   },
 
-  "noPlayersFound": "No players found",
+  "noPlayersFound": "Aucun lecteur trouve",
   "@noPlayersFound": {
     "description": "Message when no players found"
   },
 
-  "startingRadio": "Starting {name} radio",
+  "startingRadio": "Demarrage de la radio {name}",
   "@startingRadio": {
     "description": "Status when starting radio",
     "placeholders": {
@@ -627,7 +627,7 @@
     }
   },
 
-  "failedToStartRadio": "Failed to start radio: {error}",
+  "failedToStartRadio": "Echec du demarrage de la radio : {error}",
   "@failedToStartRadio": {
     "description": "Error starting radio",
     "placeholders": {
@@ -637,7 +637,7 @@
     }
   },
 
-  "startingRadioOnPlayer": "Starting {name} radio on {playerName}",
+  "startingRadioOnPlayer": "Demarrage de la radio {name} sur {playerName}",
   "@startingRadioOnPlayer": {
     "description": "Status when starting radio on player",
     "placeholders": {
@@ -650,7 +650,7 @@
     }
   },
 
-  "addedRadioToQueue": "Added {name} radio to queue",
+  "addedRadioToQueue": "Radio {name} ajoutée a la file d'attente",
   "@addedRadioToQueue": {
     "description": "Confirmation when radio added to queue",
     "placeholders": {
@@ -660,7 +660,7 @@
     }
   },
 
-  "failedToAddToQueue": "Failed to add to queue: {error}",
+  "failedToAddToQueue": "Echec de l'ajout a la file d'attente : {error}",
   "@failedToAddToQueue": {
     "description": "Error adding to queue",
     "placeholders": {
@@ -670,12 +670,7 @@
     }
   },
 
-  "radio": "Radio",
-  "@radio": {
-    "description": "Radio button label"
-  },
-
-  "playingRadioStation": "Playing {name}",
+  "playingRadioStation": "Lecture de {name}",
   "@playingRadioStation": {
     "description": "Status when playing radio station",
     "placeholders": {
@@ -685,22 +680,22 @@
     }
   },
 
-  "addedToQueue": "Added to queue",
+  "addedToQueue": "Ajoute a la file d'attente",
   "@addedToQueue": {
     "description": "Confirmation when item added to queue"
   },
 
-  "inLibrary": "In Library",
+  "inLibrary": "Dans la bibliothèque",
   "@inLibrary": {
     "description": "In library section title"
   },
 
-  "noAlbumsFound": "No albums found",
+  "noAlbumsFound": "Aucun album trouve",
   "@noAlbumsFound": {
     "description": "Empty albums message"
   },
 
-  "playing": "Playing {name}",
+  "playing": "Lecture de {name}",
   "@playing": {
     "description": "Status when playing",
     "placeholders": {
@@ -710,17 +705,17 @@
     }
   },
 
-  "playingTrack": "Playing track",
+  "playingTrack": "Lecture de la piste",
   "@playingTrack": {
     "description": "Status when playing track"
   },
 
-  "nowPlaying": "Now playing",
+  "nowPlaying": "En cours de lecture",
   "@nowPlaying": {
     "description": "Label shown when device selector is open to indicate current player"
   },
 
-  "markedAsFinished": "{name} marked as finished",
+  "markedAsFinished": "{name} marque comme termine",
   "@markedAsFinished": {
     "description": "Audiobook marked finished",
     "placeholders": {
@@ -730,7 +725,7 @@
     }
   },
 
-  "failedToMarkFinished": "Failed to mark as finished: {error}",
+  "failedToMarkFinished": "Echec du marquage comme termine : {error}",
   "@failedToMarkFinished": {
     "description": "Error marking finished",
     "placeholders": {
@@ -740,7 +735,7 @@
     }
   },
 
-  "markedAsUnplayed": "{name} marked as unplayed",
+  "markedAsUnplayed": "{name} marque comme non lu",
   "@markedAsUnplayed": {
     "description": "Audiobook marked unplayed",
     "placeholders": {
@@ -750,7 +745,7 @@
     }
   },
 
-  "failedToMarkUnplayed": "Failed to mark as unplayed: {error}",
+  "failedToMarkUnplayed": "Echec du marquage comme non lu : {error}",
   "@failedToMarkUnplayed": {
     "description": "Error marking unplayed",
     "placeholders": {
@@ -760,7 +755,7 @@
     }
   },
 
-  "failedToPlay": "Failed to play: {error}",
+  "failedToPlay": "Echec de la lecture : {error}",
   "@failedToPlay": {
     "description": "Error playing",
     "placeholders": {
@@ -770,17 +765,17 @@
     }
   },
 
-  "markAsFinished": "Mark as Finished",
+  "markAsFinished": "Marquer comme termine",
   "@markAsFinished": {
     "description": "Button to mark as finished"
   },
 
-  "markAsUnplayed": "Mark as Unplayed",
+  "markAsUnplayed": "Marquer comme non lu",
   "@markAsUnplayed": {
     "description": "Button to mark as unplayed"
   },
 
-  "byAuthor": "By {author}",
+  "byAuthor": "Par {author}",
   "@byAuthor": {
     "description": "Author attribution",
     "placeholders": {
@@ -790,7 +785,7 @@
     }
   },
 
-  "audiobookCount": "{count} audiobook(s)",
+  "audiobookCount": "{count} livre(s) audio",
   "@audiobookCount": {
     "description": "Audiobook count",
     "placeholders": {
@@ -800,12 +795,12 @@
     }
   },
 
-  "loading": "Loading...",
+  "loading": "Chargement...",
   "@loading": {
     "description": "Loading state"
   },
 
-  "bookCount": "{count} book(s)",
+  "bookCount": "{count} livre(s)",
   "@bookCount": {
     "description": "Book count",
     "placeholders": {
@@ -815,177 +810,177 @@
     }
   },
 
-  "books": "Books",
+  "books": "Livres",
   "@books": {
     "description": "Books section title"
   },
 
-  "noFavoriteAudiobooks": "No favorite audiobooks",
+  "noFavoriteAudiobooks": "Aucun livre audio favori",
   "@noFavoriteAudiobooks": {
     "description": "Empty favorite audiobooks"
   },
 
-  "tapHeartAudiobook": "Tap the heart on an audiobook to add it to favorites",
+  "tapHeartAudiobook": "Appuyez sur le coeur d'un livre audio pour l'ajoutér aux favoris",
   "@tapHeartAudiobook": {
     "description": "Hint to add audiobook favorite"
   },
 
-  "noAudiobooks": "No audiobooks",
+  "noAudiobooks": "Aucun livre audio",
   "@noAudiobooks": {
     "description": "Empty audiobooks"
   },
 
-  "addAudiobooksHint": "Add audiobooks to your library to see them here",
+  "addAudiobooksHint": "Ajoutez des livres audio a votre bibliothèque pour les voir ici",
   "@addAudiobooksHint": {
     "description": "Hint to add audiobooks"
   },
 
-  "noFavoriteArtists": "No favorite artists",
+  "noFavoriteArtists": "Aucun artiste favori",
   "@noFavoriteArtists": {
     "description": "Empty favorite artists"
   },
 
-  "tapHeartArtist": "Tap the heart on an artist to add them to favorites",
+  "tapHeartArtist": "Appuyez sur le coeur d'un artiste pour l'ajoutér aux favoris",
   "@tapHeartArtist": {
     "description": "Hint to add artist favorite"
   },
 
-  "noFavoriteAlbums": "No favorite albums",
+  "noFavoriteAlbums": "Aucun album favori",
   "@noFavoriteAlbums": {
     "description": "Empty favorite albums"
   },
 
-  "tapHeartAlbum": "Tap the heart on an album to add it to favorites",
+  "tapHeartAlbum": "Appuyez sur le coeur d'un album pour l'ajoutér aux favoris",
   "@tapHeartAlbum": {
     "description": "Hint to add album favorite"
   },
 
-  "noFavoritePlaylists": "No favorite playlists",
+  "noFavoritePlaylists": "Aucune playlist favorite",
   "@noFavoritePlaylists": {
     "description": "Empty favorite playlists"
   },
 
-  "tapHeartPlaylist": "Tap the heart on a playlist to add it to favorites",
+  "tapHeartPlaylist": "Appuyez sur le coeur d'une playlist pour l'ajoutér aux favoris",
   "@tapHeartPlaylist": {
     "description": "Hint to add playlist favorite"
   },
 
-  "noFavoriteTracks": "No favorite tracks",
+  "noFavoriteTracks": "Aucune piste favorite",
   "@noFavoriteTracks": {
     "description": "Empty favorite tracks"
   },
 
-  "longPressTrackHint": "Long-press a track and tap the heart to add it to favorites",
+  "longPressTrackHint": "Appuyez longuement sur une piste et touchez le coeur pour l'ajoutér aux favoris",
   "@longPressTrackHint": {
     "description": "Hint to add track favorite"
   },
 
-  "loadSeries": "Load Series",
+  "loadSeries": "Charger les séries",
   "@loadSeries": {
-    "description": "Button to load series"
+    "description": "Button to load séries"
   },
 
-  "notConnected": "Not connected to Music Assistant",
-  "@notConnected": {
+  "notConnectéd": "Non connecte a Music Assistant",
+  "@notConnectéd": {
     "description": "Disconnected state title"
   },
 
-  "notConnectedTitle": "Not Connected",
-  "@notConnectedTitle": {
+  "notConnectédTitle": "Non connecte",
+  "@notConnectédTitle": {
     "description": "Disconnected state short title"
   },
 
-  "connectHint": "Connect to your Music Assistant server to start listening",
+  "connectHint": "Connectéz-vous a votre serveur Music Assistant pour commencer a écouter",
   "@connectHint": {
     "description": "Hint to connect"
   },
 
-  "configureServer": "Configure Server",
+  "configureServer": "Configurer le serveur",
   "@configureServer": {
     "description": "Button to configure server"
   },
 
-  "noArtistsFound": "No artists found",
+  "noArtistsFound": "Aucun artiste trouve",
   "@noArtistsFound": {
     "description": "Empty artists"
   },
 
-  "noTracksFound": "No tracks found",
+  "noTracksFound": "Aucune piste trouvee",
   "@noTracksFound": {
     "description": "Empty tracks"
   },
 
-  "noPlaylistsFound": "No playlists found",
+  "noPlaylistsFound": "Aucune playlist trouvee",
   "@noPlaylistsFound": {
     "description": "Empty playlists"
   },
 
-  "queueIsEmpty": "Queue is empty",
+  "queueIsEmpty": "La file d'attente est vide",
   "@queueIsEmpty": {
     "description": "Empty queue"
   },
 
-  "noResultsFound": "No results found",
+  "noResultsFound": "Aucun resultat trouve",
   "@noResultsFound": {
     "description": "Empty search results"
   },
 
-  "refresh": "Refresh",
+  "refresh": "Rafraichir",
   "@refresh": {
     "description": "Refresh button"
   },
 
-  "debugConsole": "Debug Console",
+  "debugConsole": "Console de debogage",
   "@debugConsole": {
     "description": "Debug console title"
   },
 
-  "copy": "Copy",
+  "copy": "Copier",
   "@copy": {
     "description": "Copy button"
   },
 
-  "clear": "Clear",
+  "clear": "Effacer",
   "@clear": {
     "description": "Clear button"
   },
 
-  "noLogsToCopy": "No logs to copy",
+  "noLogsToCopy": "Aucun journal a copier",
   "@noLogsToCopy": {
     "description": "Message when no logs to copy"
   },
 
-  "noDebugLogsYet": "No debug logs yet. Try detecting auth.",
+  "noDebugLogsYet": "Pas encore de journaux de debogage. Essayez de détectér l'authentification.",
   "@noDebugLogsYet": {
     "description": "Empty debug logs hint"
   },
 
-  "showDebug": "Show Debug",
+  "showDebug": "Afficher le debogage",
   "@showDebug": {
     "description": "Button to show debug"
   },
 
-  "hideDebug": "Hide Debug",
+  "hideDebug": "Masquer le debogage",
   "@hideDebug": {
     "description": "Button to hide debug"
   },
 
-  "chapters": "Chapters",
+  "chapters": "Chapitres",
   "@chapters": {
     "description": "Chapters panel title"
   },
 
-  "noChapters": "No chapters",
+  "noChapters": "Aucun chapitre",
   "@noChapters": {
     "description": "Empty chapters title"
   },
 
-  "noChapterInfo": "This audiobook has no chapter information",
+  "noChapterInfo": "Ce livre audio n'a pas d'informations de chapitre",
   "@noChapterInfo": {
     "description": "Empty chapters message"
   },
 
-  "errorSeeking": "Error seeking: {error}",
+  "errorSeeking": "Erreur de positionnement : {error}",
   "@errorSeeking": {
     "description": "Error when seeking",
     "placeholders": {
@@ -995,7 +990,7 @@
     }
   },
 
-  "error": "Error: {error}",
+  "error": "Erreur : {error}",
   "@error": {
     "description": "Generic error message",
     "placeholders": {
@@ -1005,22 +1000,22 @@
     }
   },
 
-  "home": "Home",
+  "home": "Accueil",
   "@home": {
     "description": "Home navigation label"
   },
 
-  "library": "Library",
+  "library": "Bibliothèque",
   "@library": {
     "description": "Library navigation label"
   },
 
-  "homeScreen": "Home Screen",
+  "homeScreen": "Ecran d'accueil",
   "@homeScreen": {
     "description": "Home screen settings section"
   },
 
-  "metadataApis": "Metadata APIs",
+  "metadataApis": "API de metadonnees",
   "@metadataApis": {
     "description": "Metadata APIs settings section"
   },
@@ -1035,87 +1030,87 @@
     "description": "Material You theme option"
   },
 
-  "adaptiveTheme": "Adaptive Theme",
+  "adaptiveTheme": "Theme adaptatif",
   "@adaptiveTheme": {
     "description": "Adaptive theme option"
   },
 
-  "language": "Language",
+  "language": "Langue",
   "@language": {
     "description": "Language setting"
   },
 
-  "english": "English",
+  "english": "Anglais",
   "@english": {
     "description": "English language"
   },
 
-  "german": "German",
+  "german": "Allemand",
   "@german": {
     "description": "German language"
   },
 
-  "spanish": "Spanish",
+  "spanish": "Espagnol",
   "@spanish": {
     "description": "Spanish language"
   },
 
-  "french": "French",
+  "french": "Français",
   "@french": {
     "description": "French language"
   },
 
-  "noTracksInPlaylist": "No tracks in playlist",
-  "sortAlphabetically": "Sort alphabetically",
-  "sortByYear": "Sort by year",
-  "sortBySeriesOrder": "Sort by series order",
-  "listView": "List view",
-  "gridView": "Grid view",
-  "noBooksInSeries": "No books found in this series",
-  "artist": "Artist",
-  "showRecentlyPlayedAlbums": "Show recently played albums",
-  "showRandomArtists": "Show random artists to discover",
-  "showRandomAlbums": "Show random albums to discover",
-  "showAudiobooksInProgress": "Show audiobooks in progress",
-  "showRandomAudiobooks": "Show random audiobooks to discover",
-  "showRandomSeries": "Show random audiobook series to discover",
-  "showFavoriteAlbums": "Show a row of your favorite albums",
-  "showFavoriteArtists": "Show a row of your favorite artists",
-  "showFavoriteTracks": "Show a row of your favorite tracks",
-  "showFavoritePlaylists": "Show a row of your favorite playlists",
-  "showFavoriteRadioStations": "Show a row of your favorite radio stations",
-  "showFavoritePodcasts": "Show a row of your favorite podcasts",
-  "extractColorsFromArtwork": "Extract colors from album and artist artwork",
-  "chooseHomeScreenRows": "Choose which rows to display on the home screen",
-  "addedToFavorites": "Added to favorites",
-  "removedFromFavorites": "Removed from favorites",
-  "addedToLibrary": "Added to library",
-  "removedFromLibrary": "Removed from library",
-  "addToLibrary": "Add to library",
-  "unknown": "Unknown",
-  "noUpcomingTracks": "No upcoming tracks",
-  "showAll": "Show all",
-  "showFavoritesOnly": "Show favorites only",
-  "changeView": "Change view",
-  "authors": "Authors",
-  "series": "Series",
-  "shows": "Shows",
+  "noTracksInPlaylist": "Aucune piste dans la playlist",
+  "sortAlphabetically": "Trier alphabétiquement",
+  "sortByYear": "Trier par année",
+  "sortBySeriesOrder": "Trier par ordre de série",
+  "listView": "Vue en liste",
+  "gridView": "Vue en grille",
+  "noBooksInSeries": "Aucun livre trouve dans cette série",
+  "artist": "Artiste",
+  "showRecentlyPlayedAlbums": "Afficher les albums écoutes recemment",
+  "showRandomArtists": "Afficher des artistes aléatoires a découvrir",
+  "showRandomAlbums": "Afficher des albums aléatoires a découvrir",
+  "showAudiobooksInProgress": "Afficher les livres audio en cours",
+  "showRandomAudiobooks": "Afficher des livres audio aléatoires a découvrir",
+  "showRandomSeries": "Afficher des séries de livres audio aléatoires a découvrir",
+  "showFavoriteAlbums": "Afficher une rangee de vos albums favoris",
+  "showFavoriteArtists": "Afficher une rangee de vos artistes favoris",
+  "showFavoriteTracks": "Afficher une rangee de vos pistes favorites",
+  "showFavoritePlaylists": "Afficher une rangee de vos playlists favorites",
+  "showFavoriteRadioStations": "Afficher une rangee de vos stations de radio favorites",
+  "showFavoritePodcasts": "Afficher une rangee de vos podcasts favoris",
+  "extractColorsFromArtwork": "Extraire les couleurs des pochettes d'albums et d'artistes",
+  "chooseHomeScreenRows": "Choisir les rangees a afficher sur l'ecran d'accueil",
+  "addedToFavorites": "Ajoute aux favoris",
+  "removedFromFavorites": "Retire des favoris",
+  "addedToLibrary": "Ajoute a la bibliothèque",
+  "removedFromLibrary": "Retire de la bibliothèque",
+  "addToLibrary": "Ajouter a la bibliothèque",
+  "unknown": "Inconnu",
+  "noUpcomingTracks": "Aucune piste a venir",
+  "showAll": "Tout afficher",
+  "showFavoritesOnly": "Afficher les favoris uniquement",
+  "changeView": "Changer la vue",
+  "authors": "Auteurs",
+  "séries": "Series",
+  "shows": "Emissions",
   "podcasts": "Podcasts",
-  "podcastSupportComingSoon": "Podcast support coming soon",
-  "noPodcasts": "No podcasts",
-  "addPodcastsHint": "Subscribe to podcasts in Music Assistant",
+  "podcastSupportComingSoon": "Prise en charge des podcasts bientot disponible",
+  "noPodcasts": "Aucun podcast",
+  "addPodcastsHint": "Abonnez-vous a des podcasts dans Music Assistant",
   "episodes": "Episodes",
   "episode": "Episode",
   "playlist": "Playlist",
-  "connectionError": "Connection Error",
-  "twoColumnGrid": "2-column grid",
-  "threeColumnGrid": "3-column grid",
-  "fromProviders": "From Providers",
+  "connectionError": "Erreur de connexion",
+  "twoColumnGrid": "Grille a 2 colonnes",
+  "threeColumnGrid": "Grille a 3 colonnes",
+  "fromProviders": "Des fournisseurs",
 
-  "resume": "Resume",
-  "about": "About",
-  "inProgress": "In progress",
-  "narratedBy": "Narrated by {narrators}",
+  "resume": "Reprendre",
+  "about": "A propos",
+  "inProgress": "En cours",
+  "narratedBy": "Lu par {narrators}",
   "@narratedBy": {
     "placeholders": {
       "narrators": {
@@ -1123,11 +1118,11 @@
       }
     }
   },
-  "unknownNarrator": "Unknown Narrator",
-  "unknownAuthor": "Unknown Author",
-  "loadingChapters": "Loading chapters...",
-  "noChapterInfoAvailable": "No chapter information available",
-  "percentComplete": "{percent}% complete",
+  "unknownNarrator": "Narrateur inconnu",
+  "unknownAuthor": "Auteur inconnu",
+  "loadingChapters": "Chargement des chapitres...",
+  "noChapterInfoAvailable": "Aucune information de chapitre disponible",
+  "percentComplete": "{percent}% termine",
   "@percentComplete": {
     "placeholders": {
       "percent": {
@@ -1135,14 +1130,14 @@
       }
     }
   },
-  "theAudioDbApiKey": "TheAudioDB API Key",
-  "theAudioDbApiKeyHint": "Use \"2\" for free tier or premium key",
-  "audiobookLibraries": "Audiobook Libraries",
-  "chooseAudiobookLibraries": "Choose which Audiobookshelf libraries to include",
-  "unknownLibrary": "Unknown Library",
-  "noSeriesFound": "No Series Found",
-  "ensembleBugReport": "Ensemble Bug Report",
-  "byOwner": "By {owner}",
+  "theAudioDbApiKey": "Cle API TheAudioDB",
+  "theAudioDbApiKeyHint": "Utilisez \"2\" pour le niveau gratuit ou une cle premium",
+  "audiobookLibraries": "Bibliothèques de livres audio",
+  "chooseAudiobookLibraries": "Choisir quelles bibliothèques Audiobookshelf inclure",
+  "unknownLibrary": "Bibliothèque inconnue",
+  "noSeriesFound": "Aucune série trouvee",
+  "ensembleBugReport": "Rapport de bogue Ensemble",
+  "byOwner": "Par {owner}",
   "@byOwner": {
     "placeholders": {
       "owner": {
@@ -1150,35 +1145,35 @@
       }
     }
   },
-  "noSeriesAvailable": "No series available from your audiobook library.\nPull to refresh.",
-  "pullToLoadSeries": "Pull down to load series\nfrom Music Assistant",
+  "noSeriesAvailable": "Aucune série disponible dans votre bibliothèque de livres audio.\nTirez pour rafraichir.",
+  "pullToLoadSeries": "Tirez vers le bas pour charger les séries\ndepuis Music Assistant",
 
-  "search": "Search",
+  "search": "Rechercher",
   "@search": {
     "description": "Search navigation label"
   },
 
-  "metadataApisDescription": "Artist images are automatically fetched from Deezer. Add API keys below for artist biographies and album descriptions.",
+  "metadataApisDescription": "Les images d'artistes sont automatiquement recuperees depuis Deezer. Ajoutez les cles API ci-dessous pour les biographies d'artistes et les descriptions d'albums.",
   "@metadataApisDescription": {
     "description": "Description for metadata APIs section"
   },
 
-  "lastFmApiKey": "Last.fm API Key",
+  "lastFmApiKey": "Cle API Last.fm",
   "@lastFmApiKey": {
     "description": "Last.fm API key field label"
   },
 
-  "lastFmApiKeyHint": "Get free key at last.fm/api",
+  "lastFmApiKeyHint": "Obtenez une cle gratuite sur last.fm/api",
   "@lastFmApiKeyHint": {
     "description": "Hint for Last.fm API key field"
   },
 
-  "swipeToSwitchDevice": "Swipe to change player",
+  "swipeToSwitchDevice": "Balayez pour changer de lecteur",
   "@swipeToSwitchDevice": {
     "description": "Hint for device switching gesture"
   },
 
-  "chapterNumber": "Chapter {number}",
+  "chapterNumber": "Chapitre {number}",
   "@chapterNumber": {
     "description": "Chapter number display",
     "placeholders": {
@@ -1188,27 +1183,27 @@
     }
   },
 
-  "pcmAudio": "PCM Audio",
+  "pcmAudio": "Audio PCM",
   "@pcmAudio": {
     "description": "PCM audio format label"
   },
 
-  "playOn": "Play on...",
+  "playOn": "Lire sur...",
   "@playOn": {
     "description": "Bottom sheet title for selecting player"
   },
 
-  "addAlbumToQueueOn": "Add album to queue on...",
+  "addAlbumToQueueOn": "Ajouter l'album a la file d'attente sur...",
   "@addAlbumToQueueOn": {
     "description": "Bottom sheet title for adding album to queue"
   },
 
-  "addToQueueOn": "Add to queue on...",
+  "addToQueueOn": "Ajouter a la file d'attente sur...",
   "@addToQueueOn": {
     "description": "Bottom sheet title for adding to queue"
   },
 
-  "startRadioOn": "Start {name} radio on...",
+  "startRadioOn": "Demarrer la radio {name} sur...",
   "@startRadioOn": {
     "description": "Bottom sheet title for starting radio",
     "placeholders": {
@@ -1218,12 +1213,12 @@
     }
   },
 
-  "book": "book",
+  "book": "livre",
   "@book": {
     "description": "Singular form of book"
   },
 
-  "audiobookSingular": "audiobook",
+  "audiobookSingular": "livre audio",
   "@audiobookSingular": {
     "description": "Singular form of audiobook"
   },
@@ -1233,7 +1228,7 @@
     "description": "Singular form of album for search type indicator"
   },
 
-  "trackSingular": "Track",
+  "trackSingular": "Piste",
   "@trackSingular": {
     "description": "Singular form of track for search type indicator"
   },
@@ -1243,7 +1238,7 @@
     "description": "Singular form of podcast for search type indicator"
   },
 
-  "trackCount": "{count} {count, plural, =1{track} other{tracks}}",
+  "trackCount": "{count, plural, =1{{count} piste} other{{count} pistes}}",
   "@trackCount": {
     "description": "Track count with plural",
     "placeholders": {
@@ -1253,72 +1248,72 @@
     }
   },
 
-  "materialYouDescription": "Use system colors (Android 12+)",
+  "materialYouDescription": "Utiliser les couleurs systeme (Android 12+)",
   "@materialYouDescription": {
     "description": "Description for Material You theme option"
   },
 
-  "accentColor": "Accent Color",
+  "accentColor": "Couleur d'accentuation",
   "@accentColor": {
     "description": "Accent color selection label"
   },
 
-  "players": "Players",
+  "players": "Lecteurs",
   "@players": {
     "description": "Players settings section title"
   },
 
-  "preferLocalPlayer": "Prefer Local Player",
+  "preferLocalPlayer": "Préférer le lecteur local",
   "@preferLocalPlayer": {
     "description": "Setting to always prefer local player"
   },
 
-  "preferLocalPlayerDescription": "Always select this device first when available",
+  "preferLocalPlayerDescription": "Toujours sélectionner cet appareil en premier si disponible",
   "@preferLocalPlayerDescription": {
     "description": "Description for prefer local player setting"
   },
 
-  "smartSortPlayers": "Smart Sort",
+  "smartSortPlayers": "Tri intelligent",
   "@smartSortPlayers": {
     "description": "Setting to sort players by status"
   },
 
-  "smartSortPlayersDescription": "Sort by status (playing, on, off) instead of alphabetically",
+  "smartSortPlayersDescription": "Trier par statut (en lecture, allume, eteint) au lieu d'alphabétiquement",
   "@smartSortPlayersDescription": {
     "description": "Description for smart sort players setting"
   },
 
-  "playerStateUnavailable": "Unavailable",
+  "playerStateUnavailable": "Indisponible",
   "@playerStateUnavailable": {
     "description": "Player state when unavailable"
   },
 
-  "playerStateOff": "Off",
+  "playerStateOff": "Eteint",
   "@playerStateOff": {
     "description": "Player state when powered off"
   },
 
-  "playerStateIdle": "Idle",
+  "playerStateIdle": "Inactif",
   "@playerStateIdle": {
     "description": "Player state when idle"
   },
 
-  "playerStateExternalSource": "External Source",
+  "playerStateExternalSource": "Source externe",
   "@playerStateExternalSource": {
     "description": "Player state when playing from external source (optical, Spotify, etc.)"
   },
 
-  "playerSelected": "Selected",
+  "playerSelected": "Selectionne",
   "@playerSelected": {
     "description": "Label for selected player"
   },
 
-  "actionQueuedForSync": "Will sync when online",
+  "actionQueuedForSync": "Sera synchronise une fois en ligne",
   "@actionQueuedForSync": {
     "description": "Message when action is queued for sync while offline"
   },
 
-  "pendingOfflineActions": "{count} pending sync",
+  "pendingOfflineActions": "{count} en attente de synchronisation",
   "@pendingOfflineActions": {
     "description": "Shows number of pending offline actions",
     "placeholders": {
@@ -1328,62 +1323,62 @@
     }
   },
 
-  "hintsAndTips": "Hints & Tips",
+  "hintsAndTips": "Astuces et conseils",
   "@hintsAndTips": {
     "description": "Settings section title for hints"
   },
 
-  "showHints": "Show Hints",
+  "showHints": "Afficher les astuces",
   "@showHints": {
     "description": "Toggle label for showing hints"
   },
 
-  "showHintsDescription": "Display helpful tips for discovering features",
+  "showHintsDescription": "Afficher des conseils utiles pour découvrir les fonctionnalites",
   "@showHintsDescription": {
     "description": "Description for show hints toggle"
   },
 
-  "pullToSelectPlayers": "Pull to select players",
+  "pullToSelectPlayers": "Tirez pour sélectionner les lecteurs",
   "@pullToSelectPlayers": {
     "description": "Hint shown when mini player bounces"
   },
 
-  "holdToSync": "Long-press to sync",
+  "holdToSync": "Appui long pour synchroniser",
   "@holdToSync": {
     "description": "Hint for long-press to sync players"
   },
 
-  "swipeToAdjustVolume": "Swipe to adjust volume",
+  "swipeToAdjustVolume": "Balayez pour ajuster le volume",
   "@swipeToAdjustVolume": {
     "description": "Hint for swiping left/right to adjust player volume"
   },
 
-  "selectPlayerHint": "Choose a player, or dismiss by swiping down",
+  "selectPlayerHint": "Choisissez un lecteur ou fermez en balayant vers le bas",
   "@selectPlayerHint": {
     "description": "First-time hint for selecting a player in device selector"
   },
 
-  "welcomeToEnsemble": "Welcome to Ensemble",
+  "welcomeToEnsemble": "Bienvenue dans Ensemble",
   "@welcomeToEnsemble": {
     "description": "Welcome message title for onboarding"
   },
 
-  "welcomeMessage": "By default your phone is the selected player.\nPull the mini player down to select another player.",
+  "welcomeMessage": "Par defaut, votre telephone est le lecteur selectionne.\nTirez le mini-lecteur vers le bas pour sélectionner un autre lecteur.",
   "@welcomeMessage": {
     "description": "Welcome message body explaining how to select players"
   },
 
-  "skip": "Skip",
+  "skip": "Passer",
   "@skip": {
     "description": "Button to skip onboarding or hints"
   },
 
-  "dismissPlayerHint": "Swipe down, tap outside, or press back to return",
+  "dismissPlayerHint": "Balayez vers le bas, touchez a l'exterieur ou appuyez sur retour pour revenir",
   "@dismissPlayerHint": {
     "description": "Hint explaining how to dismiss the player selector"
   },
 
-  "playingAlbum": "Playing {albumName}",
+  "playingAlbum": "Lecture de {albumName}",
   "@playingAlbum": {
     "description": "Message shown when starting to play an album",
     "placeholders": {
@@ -1393,7 +1388,7 @@
     }
   },
 
-  "playingPlaylist": "Playing {playlistName}",
+  "playingPlaylist": "Lecture de {playlistName}",
   "@playingPlaylist": {
     "description": "Message shown when starting to play a playlist",
     "placeholders": {

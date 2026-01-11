@@ -274,6 +274,29 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
                   ],
                   supportedLocales: S.supportedLocales,
                   locale: localeProvider.locale,
+                  // Fallback to English when locale is not supported
+                  localeListResolutionCallback: (locales, supportedLocales) {
+                    // If user has set a specific locale, try to use it
+                    if (localeProvider.locale != null) {
+                      for (final supported in supportedLocales) {
+                        if (supported.languageCode == localeProvider.locale!.languageCode) {
+                          return supported;
+                        }
+                      }
+                    }
+                    // Try to match system locales
+                    if (locales != null) {
+                      for (final locale in locales) {
+                        for (final supported in supportedLocales) {
+                          if (supported.languageCode == locale.languageCode) {
+                            return supported;
+                          }
+                        }
+                      }
+                    }
+                    // Fallback to English (not German)
+                    return const Locale('en');
+                  },
                   themeMode: themeProvider.themeMode,
                   theme: AppTheme.lightTheme(colorScheme: lightColorScheme),
                   darkTheme: AppTheme.darkTheme(colorScheme: darkColorScheme),

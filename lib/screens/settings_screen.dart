@@ -684,6 +684,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   Navigator.pop(dialogContext);
                                 },
                               ),
+                              RadioListTile<String?>(
+                                title: const Text('Français'),
+                                value: 'fr',
+                                groupValue: localeProvider.locale?.languageCode,
+                                onChanged: (value) {
+                                  localeProvider.setLocale(const Locale('fr'));
+                                  Navigator.pop(dialogContext);
+                                },
+                              ),
                             ],
                           ),
                         );

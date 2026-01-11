@@ -4,6 +4,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
 import '../widgets/common/empty_state.dart';
+import '../theme/theme_provider.dart';
+import '../utils/page_transitions.dart';
 import 'playlist_details_screen.dart';
 import '../l10n/app_localizations.dart';
 
@@ -147,13 +149,13 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
             ? const Icon(Icons.favorite, color: Colors.red, size: 20)
             : null,
         onTap: () {
+          updateAdaptiveColorsFromImage(context, imageUrl);
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => PlaylistDetailsScreen(
+            FadeSlidePageRoute(
+              child: PlaylistDetailsScreen(
                 playlist: playlist,
-                provider: playlist.provider,
-                itemId: playlist.itemId,
+                initialImageUrl: imageUrl,
               ),
             ),
           );

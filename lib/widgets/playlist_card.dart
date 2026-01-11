@@ -42,8 +42,8 @@ class PlaylistCard extends StatelessWidget {
             FadeSlidePageRoute(
               child: PlaylistDetailsScreen(
                 playlist: playlist,
-                provider: playlist.provider,
-                itemId: playlist.itemId,
+                heroTagSuffix: heroTagSuffix,
+                initialImageUrl: imageUrl,
               ),
             ),
           );

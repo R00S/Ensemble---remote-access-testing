@@ -1631,13 +1631,13 @@ class SearchScreenState extends State<SearchScreen> {
               if (isExpanded) {
                 setState(() => _expandedPlaylistId = null);
               } else {
+                updateAdaptiveColorsFromImage(context, imageUrl);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => PlaylistDetailsScreen(
+                  FadeSlidePageRoute(
+                    child: PlaylistDetailsScreen(
                       playlist: playlist,
-                      provider: playlist.provider,
-                      itemId: playlist.itemId,
+                      initialImageUrl: imageUrl,
                     ),
                   ),
                 );

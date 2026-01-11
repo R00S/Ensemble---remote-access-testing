@@ -3405,13 +3405,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             ? const Icon(Icons.favorite, color: Colors.red, size: 20)
             : null,
         onTap: () {
+          updateAdaptiveColorsFromImage(context, imageUrl);
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => PlaylistDetailsScreen(
+            FadeSlidePageRoute(
+              child: PlaylistDetailsScreen(
                 playlist: playlist,
-                provider: playlist.provider,
-                itemId: playlist.itemId,
+                initialImageUrl: imageUrl,
               ),
             ),
           );
@@ -3428,13 +3428,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
     return GestureDetector(
       onTap: () {
+        updateAdaptiveColorsFromImage(context, imageUrl);
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => PlaylistDetailsScreen(
+          FadeSlidePageRoute(
+            child: PlaylistDetailsScreen(
               playlist: playlist,
-              provider: playlist.provider,
-              itemId: playlist.itemId,
+              initialImageUrl: imageUrl,
             ),
           ),
         );

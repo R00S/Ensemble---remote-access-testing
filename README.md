@@ -81,28 +81,16 @@ This application was built with AI-assisted development using **Claude Code** an
 
 Download the latest release from the [Releases page](https://github.com/R00S/Ensemble---remote-access-testing/releases).
 
-**Note:** This is a development/testing build with **experimental Remote Access features**. The WebRTC Remote Access feature is currently **not functional** for audio playback - use the Cloudflared tunnel workaround instead (see Remote Access section below).
+For the stable upstream version with the latest features, see the [main Ensemble repository](https://github.com/CollotsSpot/Ensemble/releases).
 
-For a stable production build, see the [main Ensemble repository](https://github.com/CollotsSpot/Ensemble/releases).
+### Remote Access
 
-### Remote Access (Alpha)
-
-Connect to your Music Assistant server from anywhere - no port forwarding or VPN required.
-
-**Status:** ⚠️ Alpha - WebRTC implementation not functional for audio playback
-
-**Current Limitation:**
-The WebRTC Remote Access feature currently **does not work** for audio playback. While the MA API connection works, the app cannot register as a player device over WebRTC due to architectural limitations (Sendspin audio streaming requires a separate WebSocket connection that cannot be established through the WebRTC data channel with the current implementation).
-
-**✅ Recommended Workaround: Cloudflared Tunnel**
-
-For remote access, use **Cloudflare Tunnel** to expose your Music Assistant server:
+Connect to your Music Assistant server from anywhere using **Cloudflare Tunnel**:
 
 1. Set up [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) to expose your MA server
-2. Get your cloudflare tunnel URL (e.g., `https://ma.yourdomain.com`)
-3. In the app, tap "Connect via URL" (not "Connect via Remote Access")
-4. Enter your cloudflare URL
-5. Authenticate with your MA credentials
+2. Get your Cloudflare tunnel URL (e.g., `https://ma.yourdomain.com`)
+3. In the app, enter your Cloudflare URL
+4. Authenticate with your MA credentials
 
 This provides:
 - ✅ Full remote access to your Music Assistant server
@@ -110,7 +98,9 @@ This provides:
 - ✅ All features functional (library, playback, control)
 - ✅ Secure connection through Cloudflare
 
-**For developers:** See [Remote Access Research](docs/REMOTE_ACCESS_RESEARCH.md) for technical details and potential future solutions.
+**Alternative:** Use [Tailscale](https://tailscale.com/) VPN for secure remote access to your local network.
+
+**For developers:** See [Remote Access Research](docs/REMOTE_ACCESS_RESEARCH.md) and [Fork Comparison](docs/FORK_COMPARISON.md) for details on why WebRTC remote access was not implemented.
 
 ## Setup
 

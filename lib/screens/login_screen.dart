@@ -9,6 +9,7 @@ import '../services/debug_logger.dart';
 import '../widgets/debug/debug_console.dart';
 import '../l10n/app_localizations.dart';
 import 'home_screen.dart';
+import 'remote/remote_access_login_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -507,6 +508,39 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   );
                 },
+              ),
+
+              const SizedBox(height: 48),
+
+              // Remote Access button
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const RemoteAccessLoginScreen(),
+                    ),
+                  );
+                },
+                icon: Icon(
+                  Icons.cloud_outlined,
+                  color: colorScheme.primary,
+                ),
+                label: Text(
+                  'Connect via Remote Access',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                  backgroundColor: colorScheme.primaryContainer.withOpacity(0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
 
               const SizedBox(height: 24),

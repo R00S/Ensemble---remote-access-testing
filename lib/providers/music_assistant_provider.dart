@@ -22,6 +22,7 @@ import '../services/position_tracker.dart';
 import '../services/sendspin_service.dart';
 import '../services/pcm_audio_player.dart';
 import '../services/offline_action_queue.dart';
+import '../services/remote/remote_access_manager.dart';
 import '../constants/timings.dart';
 import '../services/database_service.dart';
 import '../main.dart' show audioHandler;
@@ -791,6 +792,41 @@ class MusicAssistantProvider with ChangeNotifier {
     if (_serverUrl == null) {
       _logger.log('🔄 No server URL saved, skipping reconnect');
       return;
+    }
+
+    // CRITICAL: Check if we're using remote access by checking for saved remote ID
+    // This persists across app lifecycle unlike isRemoteMode which depends on active state
+    final remoteManager = RemoteAccessManager.instance;
+    final savedRemoteId = await remoteManager.getSavedRemoteId();
+    final savedMode = await remoteManager.getSavedMode();
+    
+    final isRemoteMode = savedMode == ConnectionMode.remote && 
+                        savedRemoteId != null && 
+                        savedRemoteId.isNotEmpty;
+    
+    if (isRemoteMode) {
+      _logger.log('🔄 Remote Access mode detected (ID: ${savedRemoteId!.substring(0, 8)}...)');
+      
+      // Force WebRTC reconnection on app resume
+      // Mobile OSes suspend peer connections when app backgrounds
+      _logger.log('🔄 Forcing WebRTC transport reconnection...');
+      try {
+        // Disconnect old transport if it exists
+        if (remoteManager.transport != null) {
+          _logger.log('🔄 Cleaning up old WebRTC transport');
+          remoteManager.transport!.disconnect();
+        }
+        
+        // Create fresh WebRTC connection
+        await remoteManager.connectWithRemoteId(savedRemoteId);
+        _logger.log('🔄 WebRTC transport reconnected successfully');
+      } catch (e) {
+        _logger.log('❌ WebRTC transport reconnection failed: $e');
+        _error = 'Failed to reconnect: $e';
+        _connectionState = MAConnectionState.error;
+        notifyListeners();
+        return;
+      }
     }
 
     // IMMEDIATELY load cached players for instant UI display

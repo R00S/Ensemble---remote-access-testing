@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
+import 'package:stream_channel/stream_channel.dart';
 import 'package:uuid/uuid.dart';
 import '../constants/network.dart';
 import '../constants/timings.dart' show Timings, LibraryConstants;
@@ -13,6 +14,8 @@ import 'settings_service.dart';
 import 'device_id_service.dart';
 import 'retry_helper.dart';
 import 'auth/auth_manager.dart';
+import 'remote/remote_access_manager.dart';
+import 'remote/transport.dart';
 
 enum MAConnectionState {
   disconnected,
@@ -89,6 +92,15 @@ class MusicAssistantAPI {
 
     try {
       _updateConnectionState(MAConnectionState.connecting);
+
+      // Check if RemoteAccessManager has an active WebRTC transport
+      // Don't rely on isRemoteMode state - check if transport exists and is connected
+      final remoteManager = RemoteAccessManager.instance;
+      if (remoteManager.transport != null && 
+          remoteManager.transport!.state == TransportState.connected) {
+        _logger.log('Connection: Using Remote Access WebRTC transport');
+        return await _connectViaRemoteTransport(remoteManager.transport!);
+      }
 
       // Normal WebSocket connection flow
       _logger.log('Connection: Using direct WebSocket connection');
@@ -232,6 +244,60 @@ class MusicAssistantAPI {
       _connectionInProgress = null;
     } catch (e) {
       _logger.log('Connection: Failed - $e');
+      _updateConnectionState(MAConnectionState.error);
+      if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
+        _connectionInProgress!.completeError(e);
+      }
+      _connectionInProgress = null;
+      rethrow;
+    }
+  }
+
+  /// Connect using RemoteAccess WebRTC transport
+  /// This is a minimal integration point that allows using WebRTC instead of WebSocket
+  Future<void> _connectViaRemoteTransport(ITransport transport) async {
+    try {
+      _logger.log('[Remote] Setting up WebRTC transport bridge');
+
+      // Create a custom channel that wraps the WebRTC transport
+      _channel = _TransportChannelAdapter(transport);
+
+      // Wait for server info message
+      _connectionCompleter = Completer<void>();
+
+      // Listen to messages from the transport
+      _channel!.stream.listen(
+        _handleMessage,
+        onError: (error) {
+          _logger.log('[Remote] Transport error: $error');
+          _updateConnectionState(MAConnectionState.error);
+          _reconnect();
+        },
+        onDone: () {
+          _logger.log('[Remote] Transport connection closed');
+          _updateConnectionState(MAConnectionState.disconnected);
+          if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
+            _connectionCompleter!.completeError(Exception('Connection closed'));
+          }
+          _reconnect();
+        },
+      );
+
+      // Wait for server info message with timeout
+      await _connectionCompleter!.future.timeout(
+        Timings.connectionTimeout,
+        onTimeout: () {
+          throw Exception('Connection timeout - no server info received');
+        },
+      );
+
+      _logger.log('[Remote] Connected via WebRTC transport');
+      if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
+        _connectionInProgress!.complete();
+      }
+      _connectionInProgress = null;
+    } catch (e) {
+      _logger.log('[Remote] Connection failed: $e');
       _updateConnectionState(MAConnectionState.error);
       if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
         _connectionInProgress!.completeError(e);
@@ -2929,4 +2995,74 @@ class MusicAssistantAPI {
     }
     _eventStreams.clear();
   }
+}
+
+/// Adapter to make ITransport look like a WebSocketChannel
+/// This allows the existing MusicAssistantAPI code to work with WebRTC transport
+class _TransportChannelAdapter extends StreamChannelMixin implements WebSocketChannel {
+  final ITransport _transport;
+  final StreamController<String> _messageController = StreamController<String>.broadcast();
+
+  _TransportChannelAdapter(this._transport) {
+    // Forward messages from transport to our stream
+    _transport.messageStream.listen(
+      (message) => _messageController.add(message),
+      onError: (error) => _messageController.addError(error),
+      onDone: () => _messageController.close(),
+    );
+  }
+
+  @override
+  Stream get stream => _messageController.stream;
+
+  @override
+  WebSocketSink get sink => _TransportSinkAdapter(_transport);
+
+  @override
+  int? get closeCode => null;
+
+  @override
+  String? get closeReason => null;
+
+  @override
+  String? get protocol => null;
+
+  @override
+  Future<void> get ready => Future.value();
+}
+
+/// Adapter to make ITransport send operations work like WebSocketSink
+class _TransportSinkAdapter implements WebSocketSink {
+  final ITransport _transport;
+
+  _TransportSinkAdapter(this._transport);
+
+  @override
+  void add(dynamic data) {
+    if (data is String) {
+      _transport.send(data);
+    } else {
+      throw ArgumentError('Only String data is supported');
+    }
+  }
+
+  @override
+  void addError(Object error, [StackTrace? stackTrace]) {
+    // Not supported for transport
+  }
+
+  @override
+  Future addStream(Stream stream) async {
+    await for (final data in stream) {
+      add(data);
+    }
+  }
+
+  @override
+  Future close([int? closeCode, String? closeReason]) async {
+    _transport.disconnect();
+  }
+
+  @override
+  Future get done => Future.value();
 }

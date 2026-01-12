@@ -87,8 +87,31 @@ class Player {
   bool get isGroupLeader => groupMembers != null && groupMembers!.length > 1 && syncedTo == null;
   bool get isGroupChild => syncedTo != null;
 
+  // A player is manually synced if it's synced TO another player (child of a sync group)
+  // This excludes pre-configured MA speaker groups which have groupMembers but no syncedTo
+  // Used for yellow border highlight - only shows for players the user manually synced
+  bool get isManuallySynced => syncedTo != null;
+
   // Track when this Player object was created (for local interpolation fallback)
   static final Map<String, double> _playerCreationTimes = {};
+  static const int _maxCreationTimesEntries = 50;
+
+  /// Clean up old creation time entries using LRU eviction
+  static void _cleanupCreationTimes() {
+    if (_playerCreationTimes.length <= _maxCreationTimesEntries) return;
+
+    // Sort by timestamp value (oldest first) for true LRU eviction
+    final sortedEntries = _playerCreationTimes.entries.toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+
+    // Remove oldest entries until we're at target size
+    final entriesToRemove = sortedEntries.take(
+      _playerCreationTimes.length - _maxCreationTimesEntries,
+    );
+    for (final entry in entriesToRemove) {
+      _playerCreationTimes.remove(entry.key);
+    }
+  }
 
   // Calculate current elapsed time (interpolated if playing)
   double get currentElapsedTime {
@@ -130,13 +153,8 @@ class Player {
     if (!_playerCreationTimes.containsKey(creationKey)) {
       // First time seeing this elapsed_time - record when we saw it
       _playerCreationTimes[creationKey] = now;
-      // Clean up old entries to prevent memory leak
-      if (_playerCreationTimes.length > 100) {
-        final keysToRemove = _playerCreationTimes.keys.take(50).toList();
-        for (final key in keysToRemove) {
-          _playerCreationTimes.remove(key);
-        }
-      }
+      // Clean up old entries to prevent memory leak (LRU eviction)
+      _cleanupCreationTimes();
     }
 
     final creationTime = _playerCreationTimes[creationKey]!;

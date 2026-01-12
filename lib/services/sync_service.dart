@@ -5,6 +5,7 @@ import '../models/media_item.dart';
 import 'database_service.dart';
 import 'debug_logger.dart';
 import 'music_assistant_api.dart';
+import 'settings_service.dart';
 
 /// Sync status for UI indicators
 enum SyncStatus {
@@ -150,10 +151,14 @@ class SyncService with ChangeNotifier {
     try {
       _logger.log('🔄 Starting background library sync...');
 
+      // Read artist filter setting - when ON, only fetch artists that have albums
+      final showOnlyArtistsWithAlbums = await SettingsService.getShowOnlyArtistsWithAlbums();
+      _logger.log('🎨 Sync using albumArtistsOnly: $showOnlyArtistsWithAlbums');
+
       // Fetch fresh data from MA API (in parallel for speed)
       final results = await Future.wait([
         api.getAlbums(limit: 1000),
-        api.getArtists(limit: 1000),
+        api.getArtists(limit: 1000, albumArtistsOnly: showOnlyArtistsWithAlbums),
         api.getAudiobooks(limit: 1000),
         api.getPlaylists(limit: 1000),
       ]);
@@ -165,6 +170,12 @@ class SyncService with ChangeNotifier {
 
       _logger.log('📥 Fetched ${albums.length} albums, ${artists.length} artists, '
                   '${audiobooks.length} audiobooks, ${playlists.length} playlists from MA');
+
+      // Clear old cache before saving fresh data (removes stale items)
+      await _db.clearCacheForType('album');
+      await _db.clearCacheForType('artist');
+      await _db.clearCacheForType('audiobook');
+      await _db.clearCacheForType('playlist');
 
       // Save to database cache
       await _saveAlbumsToCache(albums);

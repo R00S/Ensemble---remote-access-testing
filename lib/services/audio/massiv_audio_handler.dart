@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
@@ -10,6 +11,12 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   final AuthManager authManager;
   final _logger = DebugLogger();
+
+  // Stream subscriptions for proper cleanup
+  StreamSubscription? _interruptionSubscription;
+  StreamSubscription? _becomingNoisySubscription;
+  StreamSubscription? _playbackEventSubscription;
+  StreamSubscription? _currentIndexSubscription;
 
   // Track current metadata separately from what's in the notification
   // This allows us to update the notification when metadata arrives late
@@ -42,7 +49,7 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
     await session.configure(const AudioSessionConfiguration.music());
 
     // Handle audio interruptions
-    session.interruptionEventStream.listen((event) {
+    _interruptionSubscription = session.interruptionEventStream.listen((event) {
       if (event.begin) {
         switch (event.type) {
           case AudioInterruptionType.duck:
@@ -68,15 +75,15 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
     });
 
     // Handle becoming noisy (headphones unplugged)
-    session.becomingNoisyEventStream.listen((_) {
+    _becomingNoisySubscription = session.becomingNoisyEventStream.listen((_) {
       pause();
     });
 
     // Broadcast playback state changes
-    _player.playbackEventStream.listen(_broadcastState);
+    _playbackEventSubscription = _player.playbackEventStream.listen(_broadcastState);
 
     // Broadcast current media item changes
-    _player.currentIndexStream.listen((_) {
+    _currentIndexSubscription = _player.currentIndexStream.listen((_) {
       if (_currentMediaItem != null) {
         mediaItem.add(_currentMediaItem);
       }
@@ -293,4 +300,13 @@ class MassivAudioHandler extends BaseAudioHandler with SeekHandler {
   Stream<Duration?> get durationStream => _player.durationStream;
 
   MediaItem? get currentMediaItem => _currentMediaItem;
+
+  /// Dispose of resources and cancel all subscriptions
+  Future<void> dispose() async {
+    await _interruptionSubscription?.cancel();
+    await _becomingNoisySubscription?.cancel();
+    await _playbackEventSubscription?.cancel();
+    await _currentIndexSubscription?.cancel();
+    await _player.dispose();
+  }
 }

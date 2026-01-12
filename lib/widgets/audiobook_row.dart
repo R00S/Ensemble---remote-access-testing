@@ -14,6 +14,8 @@ class AudiobookRow extends StatefulWidget {
   final Future<List<Audiobook>> Function() loadAudiobooks;
   final String? heroTagSuffix;
   final double? rowHeight;
+  /// Optional: synchronous getter for cached data (for instant display)
+  final List<Audiobook>? Function()? getCachedAudiobooks;
 
   const AudiobookRow({
     super.key,
@@ -21,6 +23,7 @@ class AudiobookRow extends StatefulWidget {
     required this.loadAudiobooks,
     this.heroTagSuffix,
     this.rowHeight,
+    this.getCachedAudiobooks,
   });
 
   @override
@@ -28,9 +31,10 @@ class AudiobookRow extends StatefulWidget {
 }
 
 class _AudiobookRowState extends State<AudiobookRow> with AutomaticKeepAliveClientMixin {
-  late Future<List<Audiobook>> _audiobooksFuture;
-  List<Audiobook>? _cachedAudiobooks;
+  List<Audiobook> _audiobooks = [];
+  bool _isLoading = true;
   bool _hasLoaded = false;
+  bool _hasPrecachedAudiobooks = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -38,25 +42,116 @@ class _AudiobookRowState extends State<AudiobookRow> with AutomaticKeepAliveClie
   @override
   void initState() {
     super.initState();
-    _loadAudiobooksOnce();
+    // Get cached data synchronously BEFORE first build (no spinner flash)
+    final cached = widget.getCachedAudiobooks?.call();
+    if (cached != null && cached.isNotEmpty) {
+      _audiobooks = cached;
+      _isLoading = false;
+    }
+    _loadAudiobooks();
   }
 
-  void _loadAudiobooksOnce() {
-    if (!_hasLoaded) {
-      _audiobooksFuture = widget.loadAudiobooks().then((audiobooks) {
-        _cachedAudiobooks = audiobooks;
-        return audiobooks;
-      });
-      _hasLoaded = true;
+  Future<void> _loadAudiobooks() async {
+    if (_hasLoaded) return;
+    _hasLoaded = true;
+
+    // Load fresh data (always update - fresh data may have updated progress)
+    try {
+      final freshAudiobooks = await widget.loadAudiobooks();
+      if (mounted && freshAudiobooks.isNotEmpty) {
+        setState(() {
+          _audiobooks = freshAudiobooks;
+          _isLoading = false;
+        });
+        // Pre-cache images for smooth hero animations
+        _precacheAudiobookImages(freshAudiobooks);
+      }
+    } catch (e) {
+      // Silent failure - keep showing cached data
+    }
+
+    if (mounted && _isLoading) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// Pre-cache audiobook images so Hero animations are smooth on first tap
+  void _precacheAudiobookImages(List<Audiobook> audiobooks) {
+    if (!mounted || _hasPrecachedAudiobooks) return;
+    _hasPrecachedAudiobooks = true;
+
+    final maProvider = context.read<MusicAssistantProvider>();
+
+    // Only precache first ~10 visible items
+    final audiobooksToCache = audiobooks.take(10);
+
+    for (final audiobook in audiobooksToCache) {
+      final imageUrl = maProvider.api?.getImageUrl(audiobook, size: 256);
+      if (imageUrl != null) {
+        precacheImage(
+          CachedNetworkImageProvider(imageUrl),
+          context,
+        ).catchError((_) {
+          // Silently ignore precache errors
+          return false;
+        });
+      }
     }
   }
 
   static final _logger = DebugLogger();
 
+  Widget _buildContent(double contentHeight, ColorScheme colorScheme, MusicAssistantProvider maProvider) {
+    // Only show loading if we have no data at all
+    if (_audiobooks.isEmpty && _isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_audiobooks.isEmpty) {
+      return Center(
+        child: Text(
+          'No audiobooks found',
+          style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+        ),
+      );
+    }
+
+    const textAreaHeight = 44.0;
+    final artworkSize = contentHeight - textAreaHeight;
+    final cardWidth = artworkSize;
+    final itemExtent = cardWidth + 12;
+
+    return ScrollConfiguration(
+      behavior: const _StretchScrollBehavior(),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        itemCount: _audiobooks.length,
+        itemExtent: itemExtent,
+        cacheExtent: 500,
+        addAutomaticKeepAlives: false,
+        addRepaintBoundaries: false,
+        itemBuilder: (context, index) {
+          final audiobook = _audiobooks[index];
+          return Container(
+            key: ValueKey(audiobook.uri ?? audiobook.itemId),
+            width: cardWidth,
+            margin: const EdgeInsets.symmetric(horizontal: 6.0),
+            child: _AudiobookCard(
+              audiobook: audiobook,
+              heroTagSuffix: widget.heroTagSuffix ?? 'home_${widget.title.replaceAll(' ', '_').toLowerCase()}',
+              maProvider: maProvider,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _logger.startBuild('AudiobookRow:${widget.title}');
-    super.build(context);
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
     final maProvider = context.read<MusicAssistantProvider>();
@@ -82,62 +177,7 @@ class _AudiobookRowState extends State<AudiobookRow> with AutomaticKeepAliveClie
               ),
             ),
             Expanded(
-              child: FutureBuilder<List<Audiobook>>(
-                future: _audiobooksFuture,
-                builder: (context, snapshot) {
-                  final audiobooks = snapshot.data ?? _cachedAudiobooks;
-
-                  if (audiobooks == null && snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (snapshot.hasError && audiobooks == null) {
-                    return Center(
-                      child: Text('Error: ${snapshot.error}'),
-                    );
-                  }
-
-                  if (audiobooks == null || audiobooks.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'No audiobooks found',
-                        style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
-                      ),
-                    );
-                  }
-
-                  const textAreaHeight = 44.0;
-                  final artworkSize = contentHeight - textAreaHeight;
-                  final cardWidth = artworkSize;
-                  final itemExtent = cardWidth + 12;
-
-                  return ScrollConfiguration(
-                    behavior: const _StretchScrollBehavior(),
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                      itemCount: audiobooks.length,
-                      itemExtent: itemExtent,
-                      cacheExtent: 500,
-                      addAutomaticKeepAlives: false,
-                      addRepaintBoundaries: false,
-                      itemBuilder: (context, index) {
-                        final audiobook = audiobooks[index];
-                        return Container(
-                          key: ValueKey(audiobook.uri ?? audiobook.itemId),
-                          width: cardWidth,
-                          margin: const EdgeInsets.symmetric(horizontal: 6.0),
-                          child: _AudiobookCard(
-                            audiobook: audiobook,
-                            heroTagSuffix: widget.heroTagSuffix ?? 'home_${widget.title.replaceAll(' ', '_').toLowerCase()}',
-                            maProvider: maProvider,
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                },
-              ),
+              child: _buildContent(contentHeight, colorScheme, maProvider),
             ),
           ],
         ),

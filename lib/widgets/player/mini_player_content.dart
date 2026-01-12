@@ -3,18 +3,27 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 /// Shared constants for mini player layout
 class MiniPlayerLayout {
-  static const double height = 64.0;
-  static const double artSize = 64.0;
+  static const double height = 72.0;
+  static const double artSize = 72.0;
   static const double textLeftOffset = 10.0; // Gap between art and text
-  static const double textLeft = artSize + textLeftOffset; // 74px
-  static const double primaryTop = 13.0;
-  static const double secondaryTop = 33.0;
+  static const double textLeft = artSize + textLeftOffset; // 82px
+  // 3-line layout: track, artist, player
+  static const double primaryTop = 9.0;
+  static const double secondaryTop = 26.0;
+  static const double tertiaryTop = 46.0;
+  // 2-line layout (evenly spaced): player name, hint
+  // Height 72 / 3 = 24px spacing. Line 1 center at 24, Line 2 center at 48
+  static const double primaryTop2Line = 14.0; // 24 - (18/2) = 15, adjusted to 14
+  static const double secondaryTop2Line = 40.0; // raised slightly from 42
   static const double textRightPadding = 12.0;
+  static const double powerButtonSize = 40.0; // Power button tap area
   static const double iconSize = 28.0;
   static const double iconOpacity = 0.4;
   static const double secondaryTextOpacity = 0.6;
-  static const double primaryFontSize = 16.0;
+  static const double primaryFontSize = 16.0; // 3-line playing mode
+  static const double primaryFontSize2Line = 18.0; // larger for 2-line off mode
   static const double secondaryFontSize = 14.0;
+  static const double tertiaryFontSize = 14.0;
   static const FontWeight primaryFontWeight = FontWeight.w500;
 }
 
@@ -29,6 +38,10 @@ class MiniPlayerContent extends StatelessWidget {
   /// Secondary text line (artist name or "Swipe to switch device")
   /// If null, primary text will be vertically centered
   final String? secondaryText;
+
+  /// Tertiary text line (player name when playing)
+  /// If provided, uses 3-line layout; if null, uses centered 2-line layout
+  final String? tertiaryText;
 
   /// Album art URL - if null, shows device icon
   final String? imageUrl;
@@ -57,10 +70,17 @@ class MiniPlayerContent extends StatelessWidget {
   /// Progress value 0.0 to 1.0 (only used if showProgress is true)
   final double progress;
 
+  /// Callback for power button tap (only shown in 2-line mode when provided)
+  final VoidCallback? onPowerToggle;
+
+  /// Whether the player is currently powered on
+  final bool isPoweredOn;
+
   const MiniPlayerContent({
     super.key,
     required this.primaryText,
     this.secondaryText,
+    this.tertiaryText,
     this.imageUrl,
     required this.playerName,
     required this.backgroundColor,
@@ -70,18 +90,34 @@ class MiniPlayerContent extends StatelessWidget {
     this.isHint = false,
     this.showProgress = false,
     this.progress = 0.0,
+    this.onPowerToggle,
+    this.isPoweredOn = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final hasSecondaryLine = secondaryText != null && secondaryText!.isNotEmpty;
+    final hasTertiaryLine = tertiaryText != null && tertiaryText!.isNotEmpty;
+    final is2LineMode = !hasTertiaryLine;
+    final showPowerButton = is2LineMode && onPowerToggle != null;
     final slidePixels = slideOffset * width;
 
-    // Calculate text width (leaves room for right padding)
-    final textWidth = width - MiniPlayerLayout.textLeft - MiniPlayerLayout.textRightPadding;
+    // Use 3-line layout when tertiary exists, 2-line centered otherwise
+    final primaryTop = hasTertiaryLine ? MiniPlayerLayout.primaryTop : MiniPlayerLayout.primaryTop2Line;
+    final secondaryTop = hasTertiaryLine ? MiniPlayerLayout.secondaryTop : MiniPlayerLayout.secondaryTop2Line;
+
+    // Calculate right padding (extra space for power button in 2-line mode)
+    final rightPadding = showPowerButton
+        ? MiniPlayerLayout.powerButtonSize + 8.0
+        : MiniPlayerLayout.textRightPadding;
 
     // Darkened background for icon area (matches DeviceSelectorBar)
     final iconAreaBackground = Color.lerp(backgroundColor, Colors.black, 0.15)!;
+
+    // Font size for primary text (larger in 2-line mode)
+    final primaryFontSize = is2LineMode
+        ? MiniPlayerLayout.primaryFontSize2Line
+        : MiniPlayerLayout.primaryFontSize;
 
     return SizedBox(
       width: width,
@@ -99,10 +135,10 @@ class MiniPlayerContent extends StatelessWidget {
               child: Container(color: backgroundColor),
             ),
 
-          // Art / Icon area
+          // Art / Icon area - centered vertically
           Positioned(
             left: slidePixels,
-            top: 0,
+            top: (MiniPlayerLayout.height - MiniPlayerLayout.artSize) / 2,
             child: SizedBox(
               width: MiniPlayerLayout.artSize,
               height: MiniPlayerLayout.artSize,
@@ -125,14 +161,14 @@ class MiniPlayerContent extends StatelessWidget {
           Positioned(
             left: MiniPlayerLayout.textLeft + slidePixels,
             top: hasSecondaryLine
-                ? MiniPlayerLayout.primaryTop
-                : (MiniPlayerLayout.height - MiniPlayerLayout.primaryFontSize) / 2,
-            right: MiniPlayerLayout.textRightPadding - slidePixels,
+                ? primaryTop
+                : (MiniPlayerLayout.height - primaryFontSize) / 2,
+            right: rightPadding - slidePixels,
             child: Text(
               primaryText,
               style: TextStyle(
                 color: textColor,
-                fontSize: MiniPlayerLayout.primaryFontSize,
+                fontSize: primaryFontSize,
                 fontWeight: MiniPlayerLayout.primaryFontWeight,
               ),
               maxLines: 1,
@@ -144,8 +180,8 @@ class MiniPlayerContent extends StatelessWidget {
           if (hasSecondaryLine)
             Positioned(
               left: MiniPlayerLayout.textLeft + slidePixels,
-              top: MiniPlayerLayout.secondaryTop,
-              right: MiniPlayerLayout.textRightPadding - slidePixels,
+              top: secondaryTop,
+              right: rightPadding - slidePixels,
               child: isHint
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
@@ -178,6 +214,44 @@ class MiniPlayerContent extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+            ),
+
+          // Tertiary text line (player name, only for 3-line layout)
+          if (hasTertiaryLine)
+            Positioned(
+              left: MiniPlayerLayout.textLeft + slidePixels,
+              top: MiniPlayerLayout.tertiaryTop,
+              right: MiniPlayerLayout.textRightPadding - slidePixels,
+              child: Text(
+                tertiaryText!,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: MiniPlayerLayout.tertiaryFontSize,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+          // Power button (only for 2-line mode when callback provided)
+          // Matches PlayerCard power button style
+          if (showPowerButton)
+            Positioned(
+              right: 8.0 - slidePixels,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: IconButton(
+                  onPressed: onPowerToggle,
+                  icon: Icon(
+                    Icons.power_settings_new_rounded,
+                    color: isPoweredOn ? textColor : textColor.withOpacity(0.5),
+                    size: 20,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ),
             ),
         ],
       ),

@@ -251,6 +251,21 @@
     "description": "Home screen section title"
   },
 
+  "favoritePlaylists": "Favorite Playlists",
+  "@favoritePlaylists": {
+    "description": "Home screen section title"
+  },
+
+  "favoriteRadioStations": "Favorite Radio Stations",
+  "@favoriteRadioStations": {
+    "description": "Home screen section title"
+  },
+
+  "favoritePodcasts": "Favorite Podcasts",
+  "@favoritePodcasts": {
+    "description": "Home screen section title"
+  },
+
   "searchMusic": "Search music...",
   "@searchMusic": {
     "description": "Search placeholder text"
@@ -314,6 +329,36 @@
   "audiobooks": "Audiobooks",
   "@audiobooks": {
     "description": "Audiobooks category"
+  },
+
+  "music": "Music",
+  "@music": {
+    "description": "Music category"
+  },
+
+  "radio": "Radio",
+  "@radio": {
+    "description": "Radio category"
+  },
+
+  "stations": "Stations",
+  "@stations": {
+    "description": "Radio stations subcategory"
+  },
+
+  "selectLibrary": "Select Library",
+  "@selectLibrary": {
+    "description": "Title for library type selection bottom sheet"
+  },
+
+  "noRadioStations": "No radio stations",
+  "@noRadioStations": {
+    "description": "Empty state when no radio stations are available"
+  },
+
+  "addRadioStationsHint": "Add radio stations in Music Assistant",
+  "@addRadioStationsHint": {
+    "description": "Hint for adding radio stations"
   },
 
   "searchFailed": "Search failed. Please check your connection.",
@@ -628,6 +673,16 @@
   "radio": "Radio",
   "@radio": {
     "description": "Radio button label"
+  },
+
+  "playingRadioStation": "Playing {name}",
+  "@playingRadioStation": {
+    "description": "Status when playing radio station",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
 
   "addedToQueue": "Added to queue",
@@ -1005,6 +1060,11 @@
     "description": "Spanish language"
   },
 
+  "french": "French",
+  "@french": {
+    "description": "French language"
+  },
+
   "noTracksInPlaylist": "No tracks in playlist",
   "sortAlphabetically": "Sort alphabetically",
   "sortByYear": "Sort by year",
@@ -1022,10 +1082,16 @@
   "showFavoriteAlbums": "Show a row of your favorite albums",
   "showFavoriteArtists": "Show a row of your favorite artists",
   "showFavoriteTracks": "Show a row of your favorite tracks",
+  "showFavoritePlaylists": "Show a row of your favorite playlists",
+  "showFavoriteRadioStations": "Show a row of your favorite radio stations",
+  "showFavoritePodcasts": "Show a row of your favorite podcasts",
   "extractColorsFromArtwork": "Extract colors from album and artist artwork",
   "chooseHomeScreenRows": "Choose which rows to display on the home screen",
   "addedToFavorites": "Added to favorites",
   "removedFromFavorites": "Removed from favorites",
+  "addedToLibrary": "Added to library",
+  "removedFromLibrary": "Removed from library",
+  "addToLibrary": "Add to library",
   "unknown": "Unknown",
   "noUpcomingTracks": "No upcoming tracks",
   "showAll": "Show all",
@@ -1036,6 +1102,10 @@
   "shows": "Shows",
   "podcasts": "Podcasts",
   "podcastSupportComingSoon": "Podcast support coming soon",
+  "noPodcasts": "No podcasts",
+  "addPodcastsHint": "Subscribe to podcasts in Music Assistant",
+  "episodes": "Episodes",
+  "episode": "Episode",
   "playlist": "Playlist",
   "connectionError": "Connection Error",
   "twoColumnGrid": "2-column grid",
@@ -1168,6 +1238,11 @@
     "description": "Singular form of track for search type indicator"
   },
 
+  "podcastSingular": "Podcast",
+  "@podcastSingular": {
+    "description": "Singular form of podcast for search type indicator"
+  },
+
   "trackCount": "{count} {count, plural, =1{track} other{tracks}}",
   "@trackCount": {
     "description": "Track count with plural",
@@ -1273,9 +1348,14 @@
     "description": "Hint shown when mini player bounces"
   },
 
-  "holdToSync": "Tap and hold a player to sync",
+  "holdToSync": "Long-press to sync",
   "@holdToSync": {
     "description": "Hint for long-press to sync players"
+  },
+
+  "swipeToAdjustVolume": "Swipe to adjust volume",
+  "@swipeToAdjustVolume": {
+    "description": "Hint for swiping left/right to adjust player volume"
   },
 
   "selectPlayerHint": "Choose a player, or dismiss by swiping down",
@@ -1301,5 +1381,25 @@
   "dismissPlayerHint": "Swipe down, tap outside, or press back to return",
   "@dismissPlayerHint": {
     "description": "Hint explaining how to dismiss the player selector"
+  },
+
+  "playingAlbum": "Playing {albumName}",
+  "@playingAlbum": {
+    "description": "Message shown when starting to play an album",
+    "placeholders": {
+      "albumName": {
+        "type": "String"
+      }
+    }
+  },
+
+  "playingPlaylist": "Playing {playlistName}",
+  "@playingPlaylist": {
+    "description": "Message shown when starting to play a playlist",
+    "placeholders": {
+      "playlistName": {
+        "type": "String"
+      }
+    }
   }
 }

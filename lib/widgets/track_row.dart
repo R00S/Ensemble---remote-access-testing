@@ -9,12 +9,15 @@ class TrackRow extends StatefulWidget {
   final String title;
   final Future<List<Track>> Function() loadTracks;
   final double? rowHeight;
+  /// Optional: synchronous getter for cached data (for instant display)
+  final List<Track>? Function()? getCachedTracks;
 
   const TrackRow({
     super.key,
     required this.title,
     required this.loadTracks,
     this.rowHeight,
+    this.getCachedTracks,
   });
 
   @override
@@ -22,8 +25,8 @@ class TrackRow extends StatefulWidget {
 }
 
 class _TrackRowState extends State<TrackRow> with AutomaticKeepAliveClientMixin {
-  late Future<List<Track>> _tracksFuture;
-  List<Track>? _cachedTracks;
+  List<Track> _tracks = [];
+  bool _isLoading = true;
   bool _hasLoaded = false;
 
   @override
@@ -32,25 +35,111 @@ class _TrackRowState extends State<TrackRow> with AutomaticKeepAliveClientMixin 
   @override
   void initState() {
     super.initState();
-    _loadTracksOnce();
+    // Get cached data synchronously BEFORE first build (no spinner flash)
+    final cached = widget.getCachedTracks?.call();
+    if (cached != null && cached.isNotEmpty) {
+      _tracks = cached;
+      _isLoading = false;
+    }
+    _loadTracks();
   }
 
-  void _loadTracksOnce() {
-    if (!_hasLoaded) {
-      _tracksFuture = widget.loadTracks().then((tracks) {
-        _cachedTracks = tracks;
-        return tracks;
-      });
-      _hasLoaded = true;
+  Future<void> _loadTracks() async {
+    if (_hasLoaded) return;
+    _hasLoaded = true;
+
+    // Load fresh data (always update)
+    try {
+      final freshTracks = await widget.loadTracks();
+      if (mounted && freshTracks.isNotEmpty) {
+        setState(() {
+          _tracks = freshTracks;
+          _isLoading = false;
+        });
+        // Pre-cache images for smooth scrolling
+        _precacheTrackImages(freshTracks);
+      }
+    } catch (e) {
+      // Silent failure - keep showing cached data
+    }
+
+    if (mounted && _isLoading) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _precacheTrackImages(List<Track> tracks) {
+    if (!mounted) return;
+    final maProvider = context.read<MusicAssistantProvider>();
+
+    final tracksToCache = tracks.take(10);
+
+    for (final track in tracksToCache) {
+      final imageUrl = maProvider.api?.getImageUrl(track, size: 256);
+      if (imageUrl != null) {
+        precacheImage(
+          CachedNetworkImageProvider(imageUrl),
+          context,
+        ).catchError((_) => false);
+      }
     }
   }
 
   static final _logger = DebugLogger();
 
+  Widget _buildContent(double contentHeight, ColorScheme colorScheme) {
+    // Only show loading if we have no data at all
+    if (_tracks.isEmpty && _isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_tracks.isEmpty) {
+      return Center(
+        child: Text(
+          'No tracks found',
+          style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+        ),
+      );
+    }
+
+    // Card layout: square artwork + text below
+    // Text area: 8px gap + ~18px title + ~18px artist = ~44px
+    const textAreaHeight = 44.0;
+    final artworkSize = contentHeight - textAreaHeight;
+    final cardWidth = artworkSize; // Card width = artwork width (square)
+    final itemExtent = cardWidth + 12;
+
+    return ScrollConfiguration(
+      behavior: const _StretchScrollBehavior(),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        itemCount: _tracks.length,
+        itemExtent: itemExtent,
+        cacheExtent: 500, // Preload ~3 items ahead for smoother scrolling
+        addAutomaticKeepAlives: false, // Row already uses AutomaticKeepAliveClientMixin
+        addRepaintBoundaries: false, // Cards already have RepaintBoundary
+        itemBuilder: (context, index) {
+          final track = _tracks[index];
+          return Container(
+            key: ValueKey(track.uri ?? track.itemId),
+            width: cardWidth,
+            margin: const EdgeInsets.symmetric(horizontal: 6.0),
+            child: _TrackCard(
+              track: track,
+              tracks: _tracks,
+              index: index,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _logger.startBuild('TrackRow:${widget.title}');
-    super.build(context);
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -76,64 +165,7 @@ class _TrackRowState extends State<TrackRow> with AutomaticKeepAliveClientMixin 
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<Track>>(
-              future: _tracksFuture,
-              builder: (context, snapshot) {
-                final tracks = snapshot.data ?? _cachedTracks;
-
-                if (tracks == null && snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError && tracks == null) {
-                  return Center(
-                    child: Text('Error: ${snapshot.error}'),
-                  );
-                }
-
-                if (tracks == null || tracks.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No tracks found',
-                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
-                    ),
-                  );
-                }
-
-                // Card layout: square artwork + text below
-                // Text area: 8px gap + ~18px title + ~18px artist = ~44px
-                const textAreaHeight = 44.0;
-                final artworkSize = contentHeight - textAreaHeight;
-                final cardWidth = artworkSize; // Card width = artwork width (square)
-                final itemExtent = cardWidth + 12;
-
-                return ScrollConfiguration(
-                  behavior: const _StretchScrollBehavior(),
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    itemCount: tracks.length,
-                    itemExtent: itemExtent,
-                    cacheExtent: 500, // Preload ~3 items ahead for smoother scrolling
-                    addAutomaticKeepAlives: false, // Row already uses AutomaticKeepAliveClientMixin
-                    addRepaintBoundaries: false, // Cards already have RepaintBoundary
-                    itemBuilder: (context, index) {
-                      final track = tracks[index];
-                      return Container(
-                        key: ValueKey(track.uri ?? track.itemId),
-                        width: cardWidth,
-                        margin: const EdgeInsets.symmetric(horizontal: 6.0),
-                        child: _TrackCard(
-                          track: track,
-                          tracks: tracks,
-                          index: index,
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+            child: _buildContent(contentHeight, colorScheme),
           ),
           ],
         ),

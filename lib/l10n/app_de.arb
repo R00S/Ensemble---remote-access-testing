@@ -68,6 +68,12 @@
   "tracks": "Songs",
   "playlists": "Wiedergabelisten",
   "audiobooks": "Hörbücher",
+  "music": "Musik",
+  "radio": "Radio",
+  "stations": "Sender",
+  "selectLibrary": "Bibliothek auswählen",
+  "noRadioStations": "Keine Radiosender",
+  "addRadioStationsHint": "Füge Radiosender in Music Assistant hinzu",
   "searchFailed": "Suche fehlgeschlagen. Bitte überprüfe deine Verbindung.",
 
   "queue": "Warteschlange",
@@ -197,6 +203,7 @@
   "english": "Englisch",
   "german": "Deutsch",
   "spanish": "Spanisch",
+  "french": "Französisch",
 
   "noTracksInPlaylist": "Keine Songs in Wiedergabeliste",
   "sortAlphabetically": "Alphabetisch sortieren",
@@ -287,5 +294,6 @@
   "showHints": "Hinweise anzeigen",
   "showHintsDescription": "Hilfreiche Tipps zum Entdecken von Funktionen anzeigen",
   "pullToSelectPlayers": "Ziehen um Geräte auszuwählen",
-  "holdToSync": "Gerät gedrückt halten zum Synchronisieren"
+  "holdToSync": "Gedrückt halten zum Sync",
+  "swipeToAdjustVolume": "Wischen für Lautstärke"
 }

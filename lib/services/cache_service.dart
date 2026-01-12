@@ -11,13 +11,24 @@ class CacheService {
   final DebugLogger _logger = DebugLogger();
   bool _homeRowsLoaded = false;
 
+  // Cache size limits to prevent unbounded memory growth
+  static const int _maxDetailCacheSize = 50; // Max albums/playlists/artists cached
+  static const int _maxSearchCacheSize = 20; // Max search queries cached
+  static const int _maxPlayerTrackCacheSize = 30; // Max player track associations
+
   // Home screen row caching
   List<Album>? _cachedRecentAlbums;
   List<Artist>? _cachedDiscoverArtists;
   List<Album>? _cachedDiscoverAlbums;
+  List<Audiobook>? _cachedInProgressAudiobooks;
+  List<Audiobook>? _cachedDiscoverAudiobooks;
+  List<AudiobookSeries>? _cachedDiscoverSeries;
   DateTime? _recentAlbumsLastFetched;
   DateTime? _discoverArtistsLastFetched;
   DateTime? _discoverAlbumsLastFetched;
+  DateTime? _inProgressAudiobooksLastFetched;
+  DateTime? _discoverAudiobooksLastFetched;
+  DateTime? _discoverSeriesLastFetched;
 
   // Detail screen caching
   final Map<String, List<Track>> _albumTracksCache = {};
@@ -38,6 +49,7 @@ class CacheService {
 
   // Player track cache (for smooth swipe transitions)
   final Map<String, Track?> _playerTrackCache = {};
+  final Map<String, DateTime> _playerTrackCacheTime = {};
 
   // ============================================================================
   // HOME SCREEN ROW CACHING
@@ -106,12 +118,99 @@ class CacheService {
     _persistHomeRowToDatabase('discover_albums', albums.map((a) => a.toJson()).toList());
   }
 
+  /// Check if in-progress audiobooks cache is valid
+  bool isInProgressAudiobooksCacheValid({bool forceRefresh = false}) {
+    if (forceRefresh) return false;
+    final now = DateTime.now();
+    return _cachedInProgressAudiobooks != null &&
+        _inProgressAudiobooksLastFetched != null &&
+        now.difference(_inProgressAudiobooksLastFetched!) < Timings.homeRowCacheDuration;
+  }
+
+  /// Get cached in-progress audiobooks
+  List<Audiobook>? getCachedInProgressAudiobooks() => _cachedInProgressAudiobooks;
+
+  /// Set cached in-progress audiobooks
+  void setCachedInProgressAudiobooks(List<Audiobook> audiobooks) {
+    _cachedInProgressAudiobooks = audiobooks;
+    _inProgressAudiobooksLastFetched = DateTime.now();
+    _logger.log('✅ Cached ${audiobooks.length} in-progress audiobooks');
+  }
+
+  /// Check if discover audiobooks cache is valid
+  bool isDiscoverAudiobooksCacheValid({bool forceRefresh = false}) {
+    if (forceRefresh) return false;
+    final now = DateTime.now();
+    return _cachedDiscoverAudiobooks != null &&
+        _discoverAudiobooksLastFetched != null &&
+        now.difference(_discoverAudiobooksLastFetched!) < Timings.homeRowCacheDuration;
+  }
+
+  /// Get cached discover audiobooks
+  List<Audiobook>? getCachedDiscoverAudiobooks() => _cachedDiscoverAudiobooks;
+
+  /// Set cached discover audiobooks
+  void setCachedDiscoverAudiobooks(List<Audiobook> audiobooks) {
+    _cachedDiscoverAudiobooks = audiobooks;
+    _discoverAudiobooksLastFetched = DateTime.now();
+    _logger.log('✅ Cached ${audiobooks.length} discover audiobooks');
+  }
+
+  /// Check if discover series cache is valid
+  bool isDiscoverSeriesCacheValid({bool forceRefresh = false}) {
+    if (forceRefresh) return false;
+    final now = DateTime.now();
+    return _cachedDiscoverSeries != null &&
+        _discoverSeriesLastFetched != null &&
+        now.difference(_discoverSeriesLastFetched!) < Timings.homeRowCacheDuration;
+  }
+
+  /// Get cached discover series
+  List<AudiobookSeries>? getCachedDiscoverSeries() => _cachedDiscoverSeries;
+
+  /// Set cached discover series
+  void setCachedDiscoverSeries(List<AudiobookSeries> series) {
+    _cachedDiscoverSeries = series;
+    _discoverSeriesLastFetched = DateTime.now();
+    _logger.log('✅ Cached ${series.length} discover series');
+  }
+
+  /// Invalidate audiobook caches
+  void invalidateAudiobookCaches() {
+    _cachedInProgressAudiobooks = null;
+    _inProgressAudiobooksLastFetched = null;
+    _cachedDiscoverAudiobooks = null;
+    _discoverAudiobooksLastFetched = null;
+    _cachedDiscoverSeries = null;
+    _discoverSeriesLastFetched = null;
+    _logger.log('🗑️ Audiobook caches invalidated');
+  }
+
   /// Invalidate home screen cache (call on pull-to-refresh)
   void invalidateHomeCache() {
     _recentAlbumsLastFetched = null;
     _discoverArtistsLastFetched = null;
     _discoverAlbumsLastFetched = null;
+    _inProgressAudiobooksLastFetched = null;
+    _discoverAudiobooksLastFetched = null;
+    _discoverSeriesLastFetched = null;
     _logger.log('🗑️ Home screen cache invalidated');
+  }
+
+  /// Invalidate home album caches (call when albums are added/removed from library)
+  void invalidateHomeAlbumCaches() {
+    _cachedRecentAlbums = null;
+    _recentAlbumsLastFetched = null;
+    _cachedDiscoverAlbums = null;
+    _discoverAlbumsLastFetched = null;
+    _logger.log('🗑️ Home album caches invalidated');
+  }
+
+  /// Invalidate home artist caches (call when artists are added/removed from library)
+  void invalidateHomeArtistCaches() {
+    _cachedDiscoverArtists = null;
+    _discoverArtistsLastFetched = null;
+    _logger.log('🗑️ Home artist caches invalidated');
   }
 
   // ============================================================================
@@ -135,13 +234,21 @@ class CacheService {
   void setCachedAlbumTracks(String cacheKey, List<Track> tracks) {
     _albumTracksCache[cacheKey] = tracks;
     _albumTracksCacheTime[cacheKey] = DateTime.now();
+    _evictOldestEntries(_albumTracksCache, _albumTracksCacheTime, _maxDetailCacheSize);
     _logger.log('✅ Cached ${tracks.length} tracks for album $cacheKey');
   }
 
-  /// Invalidate album tracks cache
+  /// Invalidate album tracks cache for a specific album
   void invalidateAlbumTracksCache(String albumId) {
     _albumTracksCache.remove(albumId);
     _albumTracksCacheTime.remove(albumId);
+  }
+
+  /// Invalidate all album tracks caches (call when tracks are added/removed from library)
+  void invalidateAllAlbumTracksCaches() {
+    _albumTracksCache.clear();
+    _albumTracksCacheTime.clear();
+    _logger.log('🗑️ All album tracks caches invalidated');
   }
 
   /// Check if playlist tracks cache is valid
@@ -161,13 +268,21 @@ class CacheService {
   void setCachedPlaylistTracks(String cacheKey, List<Track> tracks) {
     _playlistTracksCache[cacheKey] = tracks;
     _playlistTracksCacheTime[cacheKey] = DateTime.now();
+    _evictOldestEntries(_playlistTracksCache, _playlistTracksCacheTime, _maxDetailCacheSize);
     _logger.log('✅ Cached ${tracks.length} tracks for playlist $cacheKey');
   }
 
-  /// Invalidate playlist tracks cache
+  /// Invalidate playlist tracks cache for a specific playlist
   void invalidatePlaylistTracksCache(String playlistId) {
     _playlistTracksCache.remove(playlistId);
     _playlistTracksCacheTime.remove(playlistId);
+  }
+
+  /// Invalidate all playlist tracks caches (call when tracks are added/removed from library)
+  void invalidateAllPlaylistTracksCaches() {
+    _playlistTracksCache.clear();
+    _playlistTracksCacheTime.clear();
+    _logger.log('🗑️ All playlist tracks caches invalidated');
   }
 
   /// Check if artist albums cache is valid
@@ -187,7 +302,15 @@ class CacheService {
   void setCachedArtistAlbums(String cacheKey, List<Album> albums) {
     _artistAlbumsCache[cacheKey] = albums;
     _artistAlbumsCacheTime[cacheKey] = DateTime.now();
+    _evictOldestEntries(_artistAlbumsCache, _artistAlbumsCacheTime, _maxDetailCacheSize);
     _logger.log('✅ Cached ${albums.length} albums for artist $cacheKey');
+  }
+
+  /// Invalidate all artist albums caches (call when albums are added/removed from library)
+  void invalidateArtistAlbumsCache() {
+    _artistAlbumsCache.clear();
+    _artistAlbumsCacheTime.clear();
+    _logger.log('🗑️ Artist albums cache invalidated');
   }
 
   // ============================================================================
@@ -211,7 +334,15 @@ class CacheService {
   void setCachedSearchResults(String cacheKey, Map<String, List<MediaItem>> results) {
     _searchCache[cacheKey] = results;
     _searchCacheTime[cacheKey] = DateTime.now();
+    _evictOldestEntries(_searchCache, _searchCacheTime, _maxSearchCacheSize);
     _logger.log('✅ Cached search results for "$cacheKey"');
+  }
+
+  /// Invalidate all search cache (call when library items change)
+  void invalidateSearchCache() {
+    _searchCache.clear();
+    _searchCacheTime.clear();
+    _logger.log('🗑️ Search cache invalidated');
   }
 
   // ============================================================================
@@ -254,14 +385,20 @@ class CacheService {
   /// Get cached track for a player (used for smooth swipe transitions)
   Track? getCachedTrackForPlayer(String playerId) => _playerTrackCache[playerId];
 
+  /// Get all player IDs that have cached tracks
+  Iterable<String> getAllCachedPlayerIds() => _playerTrackCache.keys;
+
   /// Set cached track for a player
   void setCachedTrackForPlayer(String playerId, Track? track) {
     _playerTrackCache[playerId] = track;
+    _playerTrackCacheTime[playerId] = DateTime.now();
+    _evictOldestEntries(_playerTrackCache, _playerTrackCacheTime, _maxPlayerTrackCacheSize);
   }
 
   /// Clear cached track for a player (e.g., when external source is active)
   void clearCachedTrackForPlayer(String playerId) {
     _playerTrackCache.remove(playerId);
+    _playerTrackCacheTime.remove(playerId);
   }
 
   // ============================================================================
@@ -279,6 +416,7 @@ class CacheService {
     _searchCache.clear();
     _searchCacheTime.clear();
     _playerTrackCache.clear();
+    _playerTrackCacheTime.clear();
     _logger.log('🗑️ All detail caches cleared');
   }
 
@@ -363,5 +501,35 @@ class CacheService {
         _logger.log('⚠️ Failed to persist $rowType: $e');
       }
     }();
+  }
+
+  // ============================================================================
+  // LRU CACHE EVICTION
+  // ============================================================================
+
+  /// Evict oldest entries from cache maps to enforce size limit (LRU eviction)
+  /// Uses the timestamp map to determine which entries are oldest
+  void _evictOldestEntries<K, V>(
+    Map<K, V> cache,
+    Map<K, DateTime> cacheTime,
+    int maxSize,
+  ) {
+    if (cache.length <= maxSize) return;
+
+    // Sort keys by timestamp (oldest first)
+    final sortedKeys = cacheTime.keys.toList()
+      ..sort((a, b) => (cacheTime[a] ?? DateTime.now())
+          .compareTo(cacheTime[b] ?? DateTime.now()));
+
+    // Remove oldest entries until we're at maxSize
+    final keysToRemove = sortedKeys.take(cache.length - maxSize);
+    for (final key in keysToRemove) {
+      cache.remove(key);
+      cacheTime.remove(key);
+    }
+
+    if (keysToRemove.isNotEmpty) {
+      _logger.log('🗑️ LRU evicted ${keysToRemove.length} cache entries');
+    }
   }
 }

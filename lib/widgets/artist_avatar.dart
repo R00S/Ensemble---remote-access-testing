@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
@@ -32,11 +33,21 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
   String? _fallbackImageUrl;
   bool _triedFallback = false;
   bool _maImageFailed = false;
+  Timer? _fallbackTimer;
+
+  /// Delay before fetching fallback images to avoid requests during fast scroll
+  static const _fallbackDelay = Duration(milliseconds: 200);
 
   @override
   void initState() {
     super.initState();
     _loadImage();
+  }
+
+  @override
+  void dispose() {
+    _fallbackTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadImage() async {
@@ -56,14 +67,23 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
       return;
     }
 
-    // Fallback to external sources (MA returned null)
-    _fetchFallbackImage();
+    // Fallback to external sources (MA returned null) - with delay
+    _scheduleFallbackFetch();
+  }
+
+  /// Schedule fallback fetch with delay to avoid requests during fast scroll
+  void _scheduleFallbackFetch() {
+    if (_triedFallback) return;
+    _triedFallback = true;
+    _fallbackTimer?.cancel();
+    _fallbackTimer = Timer(_fallbackDelay, () {
+      if (mounted) {
+        _fetchFallbackImage();
+      }
+    });
   }
 
   Future<void> _fetchFallbackImage() async {
-    if (_triedFallback) return;
-    _triedFallback = true;
-
     final fallbackUrl = await MetadataService.getArtistImageUrl(widget.artist.name);
     _fallbackImageUrl = fallbackUrl;
 
@@ -79,7 +99,7 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
     // When MA image fails to load, try Deezer fallback
     if (!_maImageFailed) {
       _maImageFailed = true;
-      _fetchFallbackImage();
+      _scheduleFallbackFetch();
     }
   }
 
@@ -100,6 +120,9 @@ class _ArtistAvatarState extends State<ArtistAvatar> {
           width: widget.radius * 2,
           height: widget.radius * 2,
           fit: BoxFit.cover,
+          // PERF: Use imageSize for memory cache to reduce decode overhead
+          memCacheWidth: widget.imageSize,
+          memCacheHeight: widget.imageSize,
           fadeInDuration: Duration.zero,
           fadeOutDuration: Duration.zero,
           placeholder: (context, url) => Container(

@@ -66,7 +66,7 @@ class LibraryArtistsScreen extends StatelessWidget {
 
     return RefreshIndicator(
       color: colorScheme.primary,
-      backgroundColor: colorScheme.surface,
+      backgroundColor: colorScheme.background,
       onRefresh: () async {
         await context.read<MusicAssistantProvider>().loadLibrary();
       },

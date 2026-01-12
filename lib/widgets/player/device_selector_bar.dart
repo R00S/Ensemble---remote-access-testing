@@ -16,6 +16,7 @@ class DeviceSelectorBar extends StatelessWidget {
   final GestureDragStartCallback? onHorizontalDragStart;
   final GestureDragUpdateCallback? onHorizontalDragUpdate;
   final GestureDragEndCallback? onHorizontalDragEnd;
+  final VoidCallback? onPowerToggle;
 
   const DeviceSelectorBar({
     super.key,
@@ -31,6 +32,7 @@ class DeviceSelectorBar extends StatelessWidget {
     this.onHorizontalDragStart,
     this.onHorizontalDragUpdate,
     this.onHorizontalDragEnd,
+    this.onPowerToggle,
   });
 
   @override
@@ -68,6 +70,8 @@ class DeviceSelectorBar extends StatelessWidget {
                   width: width,
                   slideOffset: slideOffset,
                   isHint: swipeHint != null,
+                  onPowerToggle: onPowerToggle,
+                  isPoweredOn: selectedPlayer.powered,
                 ),
               ],
             ),

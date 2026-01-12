@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -6,7 +7,6 @@ import 'package:palette_generator/palette_generator.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
 import '../widgets/global_player_overlay.dart';
-import '../widgets/player_selector.dart';
 import '../widgets/album_card.dart';
 import '../widgets/artist_avatar.dart';
 import '../utils/page_transitions.dart';
@@ -14,6 +14,7 @@ import '../constants/hero_tags.dart';
 import '../theme/theme_provider.dart';
 import '../widgets/common/empty_state.dart';
 import '../widgets/common/disconnected_state.dart';
+import '../widgets/letter_scrollbar.dart';
 import '../services/settings_service.dart';
 import '../services/metadata_service.dart';
 import '../services/debug_logger.dart';
@@ -26,9 +27,10 @@ import 'settings_screen.dart';
 import 'audiobook_author_screen.dart';
 import 'audiobook_detail_screen.dart';
 import 'audiobook_series_screen.dart';
+import 'podcast_detail_screen.dart';
 
 /// Media type for the library
-enum LibraryMediaType { music, books, podcasts }
+enum LibraryMediaType { music, books, podcasts, radio }
 
 class NewLibraryScreen extends StatefulWidget {
   const NewLibraryScreen({super.key});
@@ -38,8 +40,8 @@ class NewLibraryScreen extends StatefulWidget {
 }
 
 class _NewLibraryScreenState extends State<NewLibraryScreen>
-    with SingleTickerProviderStateMixin, RestorationMixin {
-  late TabController _tabController;
+    with RestorationMixin {
+  late PageController _pageController;
   List<Playlist> _playlists = [];
   List<Track> _favoriteTracks = [];
   List<Audiobook> _audiobooks = [];
@@ -48,8 +50,27 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   bool _isLoadingAudiobooks = false;
   bool _showFavoritesOnly = false;
 
+  // PERF: Pre-sorted lists - computed once on data load, not on every build
+  List<Playlist> _sortedPlaylists = [];
+  List<String> _playlistNames = [];
+  List<Track> _sortedFavoriteTracks = [];
+  List<Audiobook> _sortedAudiobooks = [];
+  List<String> _audiobookNames = [];
+  List<String> _sortedAuthorNames = [];
+  Map<String, List<Audiobook>> _groupedAudiobooksByAuthor = {};
+  List<AudiobookSeries> _sortedSeries = [];
+  List<String> _seriesNames = [];
+
   // Media type selection (Music, Books, Podcasts)
   LibraryMediaType _selectedMediaType = LibraryMediaType.music;
+
+  // Track overscroll for switching between media types
+  double _horizontalOverscroll = 0;
+  static const double _overscrollThreshold = 80; // Pixels to trigger switch
+
+  // Track horizontal drag for single-category types (where PageView doesn't overscroll)
+  double _horizontalDragStart = 0;
+  double _horizontalDragDelta = 0;
 
   // View mode settings
   String _artistsViewMode = 'list'; // 'grid2', 'grid3', 'list'
@@ -58,6 +79,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   String _audiobooksViewMode = 'grid2'; // 'grid2', 'grid3', 'list'
   String _authorsViewMode = 'list'; // 'grid2', 'grid3', 'list'
   String _seriesViewMode = 'grid2'; // 'grid2', 'grid3'
+  String _radioViewMode = 'list'; // 'grid2', 'grid3', 'list'
+  String _podcastsViewMode = 'grid2'; // 'grid2', 'grid3', 'list'
   String _audiobooksSortOrder = 'alpha'; // 'alpha', 'year'
 
   // Author image cache
@@ -75,9 +98,32 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   // Series book counts cache: seriesId -> number of books
   final Map<String, int> _seriesBookCounts = {};
   bool _seriesLoaded = false;
+  // Pre-cache flag for podcast images (smooth hero animations)
+  bool _hasPrecachedPodcasts = false;
+  // PERF: Debounce color extraction to avoid blocking UI during scroll
+  Timer? _colorExtractionDebounce;
+  final Map<String, List<String>> _pendingColorExtractions = {};
 
   // Restoration: Remember selected tab across app restarts
   final RestorableInt _selectedTabIndex = RestorableInt(0);
+  // PERF: Separate ValueNotifier for efficient UI updates (RestorableInt doesn't implement ValueListenable)
+  final ValueNotifier<int> _tabIndexNotifier = ValueNotifier<int>(0);
+
+  // Scroll-to-hide filter bars
+  bool _isFilterBarVisible = true;
+  double _lastScrollOffset = 0;
+  static const double _scrollThreshold = 10.0;
+  bool _isLetterScrollbarDragging = false; // Disable scroll-to-hide while dragging
+
+  // Scroll controllers for letter scrollbar
+  final ScrollController _artistsScrollController = ScrollController();
+  final ScrollController _albumsScrollController = ScrollController();
+  final ScrollController _playlistsScrollController = ScrollController();
+  final ScrollController _authorsScrollController = ScrollController();
+  final ScrollController _audiobooksScrollController = ScrollController();
+  final ScrollController _seriesScrollController = ScrollController();
+  final ScrollController _podcastsScrollController = ScrollController();
+  final ScrollController _radioScrollController = ScrollController();
 
   int get _tabCount {
     switch (_selectedMediaType) {
@@ -87,6 +133,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         return 3; // Authors, All Books, Series
       case LibraryMediaType.podcasts:
         return 1; // Coming soon placeholder
+      case LibraryMediaType.radio:
+        return 1; // Radio stations
     }
   }
 
@@ -96,19 +144,22 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   @override
   void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
     registerForRestoration(_selectedTabIndex, 'selected_tab_index');
-    // Apply restored tab index after TabController is created
-    if (_tabController.index != _selectedTabIndex.value &&
-        _selectedTabIndex.value < _tabController.length) {
-      _tabController.index = _selectedTabIndex.value;
+    // Sync ValueNotifier with restored value
+    _tabIndexNotifier.value = _selectedTabIndex.value;
+    // Apply restored tab index after PageController is created
+    if (_selectedTabIndex.value < _tabCount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(_selectedTabIndex.value);
+        }
+      });
     }
   }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabCount, vsync: this);
-    // Listen to tab changes to persist selection
-    _tabController.addListener(_onTabChanged);
+    _pageController = PageController();
     _loadPlaylists();
     _loadViewPreferences();
   }
@@ -121,6 +172,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final audiobooksMode = await SettingsService.getLibraryAudiobooksViewMode();
     final audiobooksSortOrder = await SettingsService.getLibraryAudiobooksSortOrder();
     final seriesMode = await SettingsService.getLibrarySeriesViewMode();
+    final radioMode = await SettingsService.getLibraryRadioViewMode();
+    final podcastsMode = await SettingsService.getLibraryPodcastsViewMode();
     if (mounted) {
       setState(() {
         _artistsViewMode = artistsMode;
@@ -130,6 +183,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _audiobooksViewMode = audiobooksMode;
         _audiobooksSortOrder = audiobooksSortOrder;
         _seriesViewMode = seriesMode;
+        _radioViewMode = radioMode;
+        _podcastsViewMode = podcastsMode;
       });
     }
   }
@@ -216,7 +271,23 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   void _toggleAudiobooksSortOrder() {
     final newOrder = _audiobooksSortOrder == 'alpha' ? 'year' : 'alpha';
-    setState(() => _audiobooksSortOrder = newOrder);
+    // PERF: Re-sort once on order change, not on every build
+    final sorted = List<Audiobook>.from(_audiobooks);
+    if (newOrder == 'year') {
+      sorted.sort((a, b) {
+        if (a.year == null && b.year == null) return a.name.compareTo(b.name);
+        if (a.year == null) return 1;
+        if (b.year == null) return -1;
+        return a.year!.compareTo(b.year!);
+      });
+    } else {
+      sorted.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
+    setState(() {
+      _audiobooksSortOrder = newOrder;
+      _sortedAudiobooks = sorted;
+      _audiobookNames = sorted.map((a) => a.name).toList();
+    });
     SettingsService.setLibraryAudiobooksSortOrder(newOrder);
   }
 
@@ -237,6 +308,38 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     SettingsService.setLibrarySeriesViewMode(newMode);
   }
 
+  void _cycleRadioViewMode() {
+    String newMode;
+    switch (_radioViewMode) {
+      case 'list':
+        newMode = 'grid2';
+        break;
+      case 'grid2':
+        newMode = 'grid3';
+        break;
+      default:
+        newMode = 'list';
+    }
+    setState(() => _radioViewMode = newMode);
+    SettingsService.setLibraryRadioViewMode(newMode);
+  }
+
+  void _cyclePodcastsViewMode() {
+    String newMode;
+    switch (_podcastsViewMode) {
+      case 'grid2':
+        newMode = 'grid3';
+        break;
+      case 'grid3':
+        newMode = 'list';
+        break;
+      default:
+        newMode = 'grid2';
+    }
+    setState(() => _podcastsViewMode = newMode);
+    SettingsService.setLibraryPodcastsViewMode(newMode);
+  }
+
   IconData _getViewModeIcon(String mode) {
     switch (mode) {
       case 'list':
@@ -250,7 +353,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
   String _getCurrentViewMode() {
     // Return the view mode for the currently selected tab
-    final tabIndex = _tabController.index;
+    final tabIndex = _selectedTabIndex.value;
 
     // Handle books media type
     if (_selectedMediaType == LibraryMediaType.books) {
@@ -264,6 +367,16 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         default:
           return 'list';
       }
+    }
+
+    // Handle radio media type
+    if (_selectedMediaType == LibraryMediaType.radio) {
+      return _radioViewMode;
+    }
+
+    // Handle podcasts media type
+    if (_selectedMediaType == LibraryMediaType.podcasts) {
+      return _podcastsViewMode;
     }
 
     // Handle music media type
@@ -297,7 +410,7 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   }
 
   void _cycleCurrentViewMode() {
-    final tabIndex = _tabController.index;
+    final tabIndex = _selectedTabIndex.value;
 
     // Handle books media type
     if (_selectedMediaType == LibraryMediaType.books) {
@@ -312,6 +425,18 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           _cycleSeriesViewMode();
           break;
       }
+      return;
+    }
+
+    // Handle radio media type
+    if (_selectedMediaType == LibraryMediaType.radio) {
+      _cycleRadioViewMode();
+      return;
+    }
+
+    // Handle podcasts media type
+    if (_selectedMediaType == LibraryMediaType.podcasts) {
+      _cyclePodcastsViewMode();
       return;
     }
 
@@ -346,16 +471,38 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
   }
 
-  void _recreateTabController() {
-    final oldIndex = _tabController.index;
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    _tabController = TabController(length: _tabCount, vsync: this);
-    _tabController.addListener(_onTabChanged);
-    // Restore to previous index if valid, otherwise default to 0
-    if (oldIndex < _tabCount) {
-      _tabController.index = oldIndex;
+  void _resetCategoryIndex() {
+    // Reset to first category when media type changes
+    if (_selectedTabIndex.value >= _tabCount) {
+      _selectedTabIndex.value = 0;
+      _tabIndexNotifier.value = 0;
     }
+    // Jump to the selected category without animation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(_selectedTabIndex.value);
+      }
+    });
+  }
+
+  /// Get the color for a media type - muted colors based on primaryContainer tone
+  Color _getMediaTypeColor(ColorScheme colorScheme, LibraryMediaType type) {
+    final baseColor = colorScheme.primaryContainer;
+    final baseHsl = HSLColor.fromColor(baseColor);
+
+    double hueShift;
+    switch (type) {
+      case LibraryMediaType.music:
+        hueShift = 0; // Keep primary hue (purple-ish)
+      case LibraryMediaType.books:
+        hueShift = 35; // Shift toward orange
+      case LibraryMediaType.podcasts:
+        hueShift = 160; // Shift toward teal
+      case LibraryMediaType.radio:
+        hueShift = -30; // Shift toward pink
+    }
+
+    return baseHsl.withHue((baseHsl.hue + hueShift) % 360).toColor();
   }
 
   void _changeMediaType(LibraryMediaType type) {
@@ -366,8 +513,10 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
     setState(() {
       _selectedMediaType = type;
-      _recreateTabController();
     });
+    _selectedTabIndex.value = 0; // Reset to first category
+    _tabIndexNotifier.value = 0;
+    _resetCategoryIndex();
     // Load audiobooks when switching to books tab
     if (type == LibraryMediaType.books) {
       _logger.log('📚 Switched to Books, _audiobooks.isEmpty=${_audiobooks.isEmpty}');
@@ -379,41 +528,178 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _loadSeries();
       }
     }
+    // Load radio stations when switching to radio tab
+    if (type == LibraryMediaType.radio) {
+      final maProvider = context.read<MusicAssistantProvider>();
+      if (maProvider.radioStations.isEmpty) {
+        maProvider.loadRadioStations();
+      }
+    }
+    // Load podcasts when switching to podcasts tab
+    if (type == LibraryMediaType.podcasts) {
+      final maProvider = context.read<MusicAssistantProvider>();
+      if (maProvider.podcasts.isEmpty) {
+        maProvider.loadPodcasts();
+      }
+    }
   }
 
-  void _onTabChanged() {
-    if (!_tabController.indexIsChanging) {
-      _selectedTabIndex.value = _tabController.index;
+  void _onPageChanged(int index) {
+    // Update both: RestorableInt for persistence, ValueNotifier for UI
+    // No setState needed - ValueListenableBuilder will rebuild only the filter chips
+    _selectedTabIndex.value = index;
+    _tabIndexNotifier.value = index;
+  }
+
+  /// Handle horizontal overscroll to switch between media types
+  bool _handleHorizontalOverscroll(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.horizontal) {
+      return false;
     }
+
+    if (notification is OverscrollNotification) {
+      _horizontalOverscroll += notification.overscroll;
+
+      // Check if we've overscrolled enough to switch
+      // Positive overscroll = swiping left at the end = go to NEXT type
+      // Negative overscroll = swiping right at the start = go to PREVIOUS type
+      if (_horizontalOverscroll > _overscrollThreshold) {
+        _horizontalOverscroll = 0;
+        _switchToNextMediaType();
+        return true;
+      } else if (_horizontalOverscroll < -_overscrollThreshold) {
+        _horizontalOverscroll = 0;
+        _switchToPreviousMediaType();
+        return true;
+      }
+    } else if (notification is ScrollEndNotification) {
+      // Reset overscroll accumulation when scroll ends
+      _horizontalOverscroll = 0;
+    }
+
+    return false;
+  }
+
+  void _switchToNextMediaType() {
+    final types = LibraryMediaType.values;
+    final currentIndex = types.indexOf(_selectedMediaType);
+    final nextIndex = (currentIndex + 1) % types.length;
+    _changeMediaType(types[nextIndex]);
+  }
+
+  void _switchToPreviousMediaType() {
+    final types = LibraryMediaType.values;
+    final currentIndex = types.indexOf(_selectedMediaType);
+    final prevIndex = (currentIndex - 1 + types.length) % types.length;
+    _changeMediaType(types[prevIndex]);
+  }
+
+  // Drag handlers for single-category types
+  void _onHorizontalDragStart(DragStartDetails details) {
+    _horizontalDragStart = details.globalPosition.dx;
+    _horizontalDragDelta = 0;
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    _horizontalDragDelta = details.globalPosition.dx - _horizontalDragStart;
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    // Swipe right (positive delta) = go to previous type
+    // Swipe left (negative delta) = go to next type
+    if (_horizontalDragDelta > _overscrollThreshold) {
+      _switchToPreviousMediaType();
+    } else if (_horizontalDragDelta < -_overscrollThreshold) {
+      _switchToNextMediaType();
+    }
+    _horizontalDragDelta = 0;
+  }
+
+  /// Handle scroll notifications to hide/show filter bars
+  bool _handleScrollNotification(ScrollNotification notification) {
+    // Don't hide while dragging letter scrollbar
+    if (_isLetterScrollbarDragging) {
+      return false;
+    }
+
+    // Only respond to vertical scroll (not horizontal PageView swipe)
+    if (notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    if (notification is ScrollUpdateNotification) {
+      final currentOffset = notification.metrics.pixels;
+      final delta = currentOffset - _lastScrollOffset;
+
+      if (delta.abs() > _scrollThreshold) {
+        final shouldShow = delta < 0 || currentOffset <= 0;
+        if (shouldShow != _isFilterBarVisible) {
+          setState(() {
+            _isFilterBarVisible = shouldShow;
+          });
+        }
+        _lastScrollOffset = currentOffset;
+      }
+    }
+    return false;
+  }
+
+  void _onLetterScrollbarDragChanged(bool isDragging) {
+    setState(() {
+      _isLetterScrollbarDragging = isDragging;
+      // Show the filter bar when starting to drag
+      if (isDragging) {
+        _isFilterBarVisible = true;
+      }
+    });
+  }
+
+  void _animateToCategory(int index) {
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    // Update both for persistence and UI
+    _selectedTabIndex.value = index;
+    _tabIndexNotifier.value = index;
   }
 
   @override
   void dispose() {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
+    _colorExtractionDebounce?.cancel();
+    _pageController.dispose();
     _selectedTabIndex.dispose();
+    _tabIndexNotifier.dispose();
+    _artistsScrollController.dispose();
+    _albumsScrollController.dispose();
+    _playlistsScrollController.dispose();
+    _authorsScrollController.dispose();
+    _audiobooksScrollController.dispose();
+    _seriesScrollController.dispose();
+    _podcastsScrollController.dispose();
+    _radioScrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadPlaylists({bool? favoriteOnly}) async {
     final maProvider = context.read<MusicAssistantProvider>();
-    if (maProvider.api != null) {
-      final playlists = await maProvider.api!.getPlaylists(
-        limit: 100,
-        favoriteOnly: favoriteOnly,
-      );
-      if (mounted) {
-        setState(() {
-          _playlists = playlists;
-          _isLoadingPlaylists = false;
-        });
-      }
-    } else {
-      if (mounted) {
-        setState(() {
-          _isLoadingPlaylists = false;
-        });
-      }
+    final playlists = await maProvider.getPlaylists(
+      limit: 100,
+      favoriteOnly: favoriteOnly,
+    );
+    if (mounted) {
+      // PERF: Pre-sort once on load, not on every build
+      final sorted = List<Playlist>.from(playlists)
+        ..sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+      setState(() {
+        _playlists = playlists;
+        _sortedPlaylists = sorted;
+        _playlistNames = sorted.map((p) => p.name ?? '').toList();
+        _isLoadingPlaylists = false;
+      });
     }
   }
 
@@ -431,8 +717,16 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         favoriteOnly: true,
       );
       if (mounted) {
+        // PERF: Pre-sort once on load, not on every build
+        final sorted = List<Track>.from(tracks)
+          ..sort((a, b) {
+            final artistCompare = a.artistsString.compareTo(b.artistsString);
+            if (artistCompare != 0) return artistCompare;
+            return a.name.compareTo(b.name);
+          });
         setState(() {
           _favoriteTracks = tracks;
+          _sortedFavoriteTracks = sorted;
           _isLoadingTracks = false;
         });
       }
@@ -459,32 +753,39 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     });
 
     final maProvider = context.read<MusicAssistantProvider>();
-    if (maProvider.api != null) {
-      _logger.log('📚 Calling API getAudiobooks...');
-      final audiobooks = await maProvider.api!.getAudiobooks(
-        limit: 10000,  // Large limit to get all audiobooks
-        favoriteOnly: favoriteOnly,
-      );
-      _logger.log('📚 API returned ${audiobooks.length} audiobooks');
-      if (audiobooks.isNotEmpty) {
-        _logger.log('📚 First audiobook: ${audiobooks.first.name} by ${audiobooks.first.authorsString}');
+    _logger.log('📚 Calling getAudiobooks...');
+    final audiobooks = await maProvider.getAudiobooks(
+      limit: 10000,  // Large limit to get all audiobooks
+      favoriteOnly: favoriteOnly,
+    );
+    _logger.log('📚 Returned ${audiobooks.length} audiobooks');
+    if (audiobooks.isNotEmpty) {
+      _logger.log('📚 First audiobook: ${audiobooks.first.name} by ${audiobooks.first.authorsString}');
+    }
+    if (mounted) {
+      // PERF: Pre-sort and pre-group once on load, not on every build
+      final sortedAlpha = List<Audiobook>.from(audiobooks)
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+      // Group audiobooks by author
+      final authorMap = <String, List<Audiobook>>{};
+      for (final book in audiobooks) {
+        final authorName = book.authorsString;
+        authorMap.putIfAbsent(authorName, () => []).add(book);
       }
-      if (mounted) {
-        setState(() {
-          _audiobooks = audiobooks;
-          _isLoadingAudiobooks = false;
-        });
-        _logger.log('📚 State updated, _audiobooks.length = ${_audiobooks.length}');
-        // Fetch author images in background
-        _fetchAuthorImages(audiobooks);
-      }
-    } else {
-      _logger.log('📚 API is null!');
-      if (mounted) {
-        setState(() {
-          _isLoadingAudiobooks = false;
-        });
-      }
+      final sortedAuthors = authorMap.keys.toList()..sort();
+
+      setState(() {
+        _audiobooks = audiobooks;
+        _sortedAudiobooks = sortedAlpha;
+        _audiobookNames = sortedAlpha.map((a) => a.name).toList();
+        _groupedAudiobooksByAuthor = authorMap;
+        _sortedAuthorNames = sortedAuthors;
+        _isLoadingAudiobooks = false;
+      });
+      _logger.log('📚 State updated, _audiobooks.length = ${_audiobooks.length}');
+      // Fetch author images in background
+      _fetchAuthorImages(audiobooks);
     }
   }
 
@@ -536,8 +837,13 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _logger.log('📚 Loaded ${series.length} series');
 
         if (mounted) {
+          // PERF: Pre-sort once on load, not on every build
+          final sorted = List<AudiobookSeries>.from(series)
+            ..sort((a, b) => a.name.compareTo(b.name));
           setState(() {
             _series = series;
+            _sortedSeries = sorted;
+            _seriesNames = sorted.map((s) => s.name).toList();
             _isLoadingSeries = false;
             _seriesLoaded = true;
           });
@@ -587,8 +893,11 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
             _seriesCoversLoading.remove(seriesId);
           });
 
-          // Extract colors from covers asynchronously (don't block UI)
-          _extractSeriesColors(seriesId, covers);
+          // Precache images for smooth hero animations
+          _precacheSeriesCovers(covers);
+
+          // PERF: Queue color extraction with debounce to avoid blocking UI during scroll
+          _queueColorExtraction(seriesId, covers);
         }
       }
     } catch (e) {
@@ -597,14 +906,57 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     }
   }
 
+  /// Precache series cover images for smooth hero animations
+  void _precacheSeriesCovers(List<String> covers) {
+    if (!mounted) return;
+    for (final url in covers) {
+      precacheImage(
+        CachedNetworkImageProvider(url),
+        context,
+      ).catchError((_) => false);
+    }
+  }
+
+  /// PERF: Queue color extraction requests - processed after scroll settles
+  void _queueColorExtraction(String seriesId, List<String> coverUrls) {
+    if (coverUrls.isEmpty) return;
+
+    // Add to pending queue
+    _pendingColorExtractions[seriesId] = coverUrls;
+
+    // Cancel existing timer and start a new one
+    _colorExtractionDebounce?.cancel();
+    _colorExtractionDebounce = Timer(const Duration(milliseconds: 300), () {
+      _processQueuedColorExtractions();
+    });
+  }
+
+  /// PERF: Process all queued color extractions in batch after scroll settles
+  Future<void> _processQueuedColorExtractions() async {
+    if (_pendingColorExtractions.isEmpty || !mounted) return;
+
+    // Copy and clear the queue to avoid processing new items added during extraction
+    final toProcess = Map<String, List<String>>.from(_pendingColorExtractions);
+    _pendingColorExtractions.clear();
+
+    // Process each series sequentially to avoid overwhelming the UI thread
+    for (final entry in toProcess.entries) {
+      if (!mounted) break;
+      await _extractSeriesColors(entry.key, entry.value);
+      // Small yield between extractions to keep UI responsive
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
   /// Extract dominant colors from series book covers for empty cell backgrounds
   Future<void> _extractSeriesColors(String seriesId, List<String> coverUrls) async {
-    if (coverUrls.isEmpty) return;
+    if (coverUrls.isEmpty || !mounted) return;
 
     final extractedColors = <Color>[];
 
     // Extract colors from first few covers (limit to avoid too much processing)
     for (final url in coverUrls.take(4)) {
+      if (!mounted) break;
       try {
         final palette = await PaletteGenerator.fromImageProvider(
           CachedNetworkImageProvider(url),
@@ -641,8 +993,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
   void _toggleFavoritesMode(bool value) {
     setState(() {
       _showFavoritesOnly = value;
-      _recreateTabController();
     });
+    _resetCategoryIndex();
     if (value) {
       _loadPlaylists(favoriteOnly: true);
       _loadFavoriteTracks();
@@ -679,7 +1031,6 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 ),
               ),
               centerTitle: true,
-              actions: const [PlayerSelector()],
             ),
             body: DisconnectedState.withSettingsAction(
               context: context,
@@ -693,114 +1044,300 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
 
         return Scaffold(
           backgroundColor: colorScheme.background,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            titleSpacing: 0,
-            toolbarHeight: 56,
-            // Top left: Media type segmented selector
-            title: _buildMediaTypeSelector(colorScheme),
-            leadingWidth: 16,
-            leading: const SizedBox(),
-            centerTitle: false,
-            // Top right: Device selector
-            actions: const [PlayerSelector()],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
-              child: Stack(
-                children: [
-                  // Bottom border line extending full width
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      height: 1,
-                      color: colorScheme.outlineVariant.withOpacity(0.3),
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Two-row filter: Row 1 = Media types (hides on scroll), Row 2 = Sub-categories (always visible)
+                _buildFilterRows(colorScheme, l10n, showLibraryTypeRow: _isFilterBarVisible),
+                // Connecting banner when showing cached data
+                // Hide when we have cached players - UI is functional during background reconnect
+                if (!isConnected && syncService.hasCache && !context.read<MusicAssistantProvider>().hasCachedPlayers)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: colorScheme.primaryContainer.withOpacity(0.5),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.connecting,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Row(
+                Expanded(
+                  child: Stack(
                     children: [
-                      // Tabs centered
-                      Expanded(
-                        child: TabBar(
-                          controller: _tabController,
-                          labelColor: colorScheme.primary,
-                          unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
-                          indicatorColor: colorScheme.primary,
-                          indicatorWeight: 3,
-                          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
-                          tabs: _buildTabs(l10n),
+                      // Main scrollable content
+                      // For single-category types, wrap with GestureDetector for swipe detection
+                      // (PageView with 1 item doesn't generate overscroll)
+                      _tabCount == 1
+                          ? GestureDetector(
+                              onHorizontalDragStart: _onHorizontalDragStart,
+                              onHorizontalDragUpdate: _onHorizontalDragUpdate,
+                              onHorizontalDragEnd: _onHorizontalDragEnd,
+                              child: NotificationListener<ScrollNotification>(
+                                onNotification: _handleScrollNotification,
+                                child: _buildTabAtIndex(context, l10n, 0),
+                              ),
+                            )
+                          : NotificationListener<ScrollNotification>(
+                              onNotification: _handleScrollNotification,
+                              // PERF: Use PageView.builder to only build visible tabs
+                              // Wrapped with horizontal overscroll detection for media type switching
+                              child: NotificationListener<ScrollNotification>(
+                                onNotification: _handleHorizontalOverscroll,
+                                child: PageView.builder(
+                                  controller: _pageController,
+                                  onPageChanged: _onPageChanged,
+                                  itemCount: _tabCount,
+                                  // Faster settling so vertical scroll works sooner after swipe
+                                  physics: const _FastPageScrollPhysics(),
+                                  itemBuilder: (context, index) => _buildTabAtIndex(context, l10n, index),
+                                ),
+                              ),
+                            ),
+                      // Fade gradient at top - content fades as it scrolls under filter bar
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: 24,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  colorScheme.background,
+                                  colorScheme.surface.withOpacity(0),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      // Favorites + Layout buttons on the right
-                      IconButton(
-                        icon: Icon(
-                          _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
-                          color: _showFavoritesOnly ? Colors.red : colorScheme.onSurface.withOpacity(0.7),
-                          size: 20,
-                        ),
-                        onPressed: () => _toggleFavoritesMode(!_showFavoritesOnly),
-                        tooltip: _showFavoritesOnly ? l10n.showAll : l10n.showFavoritesOnly,
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          _getViewModeIcon(_getCurrentViewMode()),
-                          color: colorScheme.onSurface.withOpacity(0.7),
-                          size: 20,
-                        ),
-                        onPressed: _cycleCurrentViewMode,
-                        tooltip: l10n.changeView,
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      ),
-                      const SizedBox(width: 8),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          body: Column(
-            children: [
-              // Connecting banner when showing cached data
-              // Hide when we have cached players - UI is functional during background reconnect
-              if (!isConnected && syncService.hasCache && !context.read<MusicAssistantProvider>().hasCachedPlayers)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  color: colorScheme.primaryContainer.withOpacity(0.5),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.connecting,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
+        );
+      },
+    );
+  }
+
+  // ============ FILTER ROWS ============
+  // Consistent height for filter rows
+  static const double _filterRowHeight = 36.0;
+
+  Widget _buildFilterRows(ColorScheme colorScheme, S l10n, {required bool showLibraryTypeRow}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Row 1: Media type chips (hides when scrolling)
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          height: showLibraryTypeRow ? _filterRowHeight : 0,
+          clipBehavior: Clip.hardEdge,
+          decoration: const BoxDecoration(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _buildMediaTypeChips(colorScheme, l10n),
+          ),
+        ),
+        if (showLibraryTypeRow) const SizedBox(height: 12), // Space between rows
+        // Row 2: Sub-category chips (left) + action buttons (right) - always visible
+        SizedBox(
+          height: _filterRowHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Left: category chips - wrapped in ValueListenableBuilder for efficient rebuilds
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: _tabIndexNotifier,
+                      builder: (context, selectedIndex, _) {
+                        return _buildCategoryChips(colorScheme, l10n, selectedIndex);
+                      },
+                    ),
                   ),
                 ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: _buildTabViews(context, l10n),
+                // Right: action buttons
+                _buildInlineActionButtons(colorScheme),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMediaTypeChips(ColorScheme colorScheme, S l10n) {
+    String getMediaTypeLabel(LibraryMediaType type) {
+      switch (type) {
+        case LibraryMediaType.music:
+          return l10n.music;
+        case LibraryMediaType.books:
+          return l10n.audiobooks;
+        case LibraryMediaType.podcasts:
+          return l10n.podcasts;
+        case LibraryMediaType.radio:
+          return l10n.radio;
+      }
+    }
+
+    IconData getMediaTypeIcon(LibraryMediaType type) {
+      switch (type) {
+        case LibraryMediaType.music:
+          return MdiIcons.musicNote;
+        case LibraryMediaType.books:
+          return MdiIcons.bookOpenPageVariant;
+        case LibraryMediaType.podcasts:
+          return MdiIcons.podcast;
+        case LibraryMediaType.radio:
+          return MdiIcons.radio;
+      }
+    }
+
+    final types = LibraryMediaType.values;
+
+    // Calculate flex values based on label length
+    // Longer labels get more space to avoid clipping
+    // Base flex of 10 for icon + padding, plus label length
+    int getFlexForType(LibraryMediaType type) {
+      final label = getMediaTypeLabel(type);
+      // Base space for icon/padding + proportional text space
+      return 10 + label.length;
+    }
+
+    // Pre-calculate flex values and total
+    final flexValues = types.map((t) => getFlexForType(t)).toList();
+    final totalFlex = flexValues.reduce((a, b) => a + b);
+    final selectedIndex = types.indexOf(_selectedMediaType);
+
+    // Horizontal inset for the pill highlight (gap between adjacent tabs)
+    const double hInset = 2.0;
+    final isFirstTab = selectedIndex == 0;
+    final isLastTab = selectedIndex == types.length - 1;
+
+    // Animated sliding highlight with pill shape
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
+
+        // Calculate left position for a given tab index
+        double getLeftPosition(int index) {
+          double left = 0;
+          for (int i = 0; i < index; i++) {
+            left += (flexValues[i] / totalFlex) * totalWidth;
+          }
+          return left;
+        }
+
+        // Calculate width for a given tab index
+        double getTabWidth(int index) {
+          return (flexValues[index] / totalFlex) * totalWidth;
+        }
+
+        // Calculate highlight position and size based on whether it's at the edge
+        // First tab: flush with left edge, gap on right
+        // Last tab: gap on left, flush with right edge
+        // Middle tabs: gap on both sides
+        final leftInset = isFirstTab ? 0.0 : hInset;
+        final rightInset = isLastTab ? 0.0 : hInset;
+        final highlightLeft = getLeftPosition(selectedIndex) + leftInset;
+        final highlightWidth = getTabWidth(selectedIndex) - leftInset - rightInset;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Stack(
+            children: [
+              // Animated sliding highlight (pill shape with full border radius)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                left: highlightLeft,
+                width: highlightWidth,
+                top: 0,
+                bottom: 0,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  decoration: BoxDecoration(
+                    color: _getMediaTypeColor(colorScheme, _selectedMediaType),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
+              ),
+              // Tab buttons row (transparent, on top of highlight)
+              Row(
+                children: types.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final type = entry.value;
+                  final isSelected = _selectedMediaType == type;
+
+                  return Expanded(
+                    flex: flexValues[index],
+                    child: GestureDetector(
+                      onTap: () => _changeMediaType(type),
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              getMediaTypeIcon(type),
+                              size: 18,
+                              color: isSelected
+                                  ? colorScheme.onPrimaryContainer
+                                  : colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                getMediaTypeLabel(type),
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? colorScheme.onPrimaryContainer
+                                      : colorScheme.onSurface.withOpacity(0.7),
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                  fontSize: 14,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ],
           ),
@@ -809,101 +1346,214 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
-  // ============ MEDIA TYPE SELECTOR ============
-  Widget _buildMediaTypeSelector(ColorScheme colorScheme) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  // Inline action buttons for favorites and view mode (right side of row 2)
+  Widget _buildInlineActionButtons(ColorScheme colorScheme) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(width: 8),
+        // Favorites toggle (only for music and books)
+        if (_selectedMediaType == LibraryMediaType.music || _selectedMediaType == LibraryMediaType.books)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: Material(
+                color: _showFavoritesOnly ? Colors.red : colorScheme.background,
+                elevation: 2,
+                shadowColor: Colors.black26,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: () => _toggleFavoritesMode(!_showFavoritesOnly),
+                  customBorder: const CircleBorder(),
+                  child: Icon(
+                    _showFavoritesOnly ? Icons.favorite : Icons.favorite_border,
+                    size: 18,
+                    color: _showFavoritesOnly ? Colors.white : colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        // View mode toggle
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: Material(
+            color: colorScheme.background,
+            elevation: 2,
+            shadowColor: Colors.black26,
+            shape: const CircleBorder(),
+            child: InkWell(
+              onTap: _cycleCurrentViewMode,
+              customBorder: const CircleBorder(),
+              child: Icon(
+                _getViewModeIcon(_getCurrentViewMode()),
+                size: 18,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryChips(ColorScheme colorScheme, S l10n, int selectedIndex) {
+    final categories = _getCategoryLabels(l10n);
+
+    // Calculate flex values based on label length (same approach as media type bar)
+    final flexValues = categories.map((label) => 10 + label.length).toList();
+    final totalFlex = flexValues.reduce((a, b) => a + b);
+
+    // Estimate total width: base padding (28) + text width per label
+    final estimatedTotalWidth = categories.fold<double>(
+      0,
+      (sum, label) => sum + 28 + label.length * 8.5,
+    );
+
+    const double hInset = 2.0;
+    final isFirstTab = selectedIndex == 0;
+    final isLastTab = selectedIndex == categories.length - 1;
+
+    // Calculate left position for a given index
+    double getLeftPosition(int index) {
+      double left = 0;
+      for (int i = 0; i < index; i++) {
+        left += (flexValues[i] / totalFlex) * estimatedTotalWidth;
+      }
+      return left;
+    }
+
+    // Calculate width for a given index
+    double getTabWidth(int index) {
+      return (flexValues[index] / totalFlex) * estimatedTotalWidth;
+    }
+
+    // Calculate highlight position and size based on whether it's at the edge
+    // First tab: flush with left edge, gap on right
+    // Last tab: gap on left, flush with right edge
+    // Middle tabs: gap on both sides
+    final leftInset = isFirstTab ? 0.0 : hInset;
+    final rightInset = isLastTab ? 0.0 : hInset;
+    final highlightLeft = getLeftPosition(selectedIndex) + leftInset;
+    final highlightWidth = getTabWidth(selectedIndex) - leftInset - rightInset;
+
+    return Container(
+      width: estimatedTotalWidth,
+      height: _filterRowHeight,
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Stack(
         children: [
-          _buildMediaTypeSegment(
-            type: LibraryMediaType.music,
-            icon: MdiIcons.musicNote,
-            colorScheme: colorScheme,
+          // Animated sliding highlight
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            left: highlightLeft,
+            width: highlightWidth,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _getMediaTypeColor(colorScheme, _selectedMediaType),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
           ),
-          _buildMediaTypeSegment(
-            type: LibraryMediaType.books,
-            icon: MdiIcons.bookOutline,
-            colorScheme: colorScheme,
-          ),
-          _buildMediaTypeSegment(
-            type: LibraryMediaType.podcasts,
-            icon: MdiIcons.podcast,
-            colorScheme: colorScheme,
+          // Labels row
+          Row(
+            children: categories.asMap().entries.map((entry) {
+              final index = entry.key;
+              final label = entry.value;
+              final isSelected = selectedIndex == index;
+
+              return Expanded(
+                flex: flexValues[index],
+                child: GestureDetector(
+                  onTap: () => _animateToCategory(index),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    alignment: Alignment.center,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: isSelected
+                            ? colorScheme.onPrimaryContainer
+                            : colorScheme.onSurfaceVariant.withOpacity(0.8),
+                        fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMediaTypeSegment({
-    required LibraryMediaType type,
-    required IconData icon,
-    required ColorScheme colorScheme,
-  }) {
-    final isSelected = _selectedMediaType == type;
-    return Material(
-      color: isSelected
-          ? colorScheme.primaryContainer
-          : colorScheme.surfaceVariant.withOpacity(0.5),
-      child: InkWell(
-        onTap: () => _changeMediaType(type),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Icon(
-            icon,
-            color: isSelected
-                ? colorScheme.onPrimaryContainer
-                : colorScheme.onSurfaceVariant.withOpacity(0.7),
-            size: 20,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ============ CONTEXTUAL TABS ============
-  List<Tab> _buildTabs(S l10n) {
+  List<String> _getCategoryLabels(S l10n) {
     switch (_selectedMediaType) {
       case LibraryMediaType.music:
         return [
-          Tab(text: l10n.artists),
-          Tab(text: l10n.albums),
-          if (_showFavoritesOnly) Tab(text: l10n.tracks),
-          Tab(text: l10n.playlists),
+          l10n.artists,
+          l10n.albums,
+          if (_showFavoritesOnly) l10n.tracks,
+          l10n.playlists,
         ];
       case LibraryMediaType.books:
         return [
-          Tab(text: l10n.authors),
-          Tab(text: l10n.books),
-          Tab(text: l10n.series),
+          l10n.authors,
+          l10n.books,
+          l10n.series,
         ];
       case LibraryMediaType.podcasts:
-        return [
-          Tab(text: l10n.shows),
-        ];
+        return [l10n.shows];
+      case LibraryMediaType.radio:
+        return [l10n.stations];
     }
   }
 
-  List<Widget> _buildTabViews(BuildContext context, S l10n) {
+  // ============ PAGE VIEWS ============
+  /// PERF: Build only the requested tab (for PageView.builder)
+  Widget _buildTabAtIndex(BuildContext context, S l10n, int index) {
     switch (_selectedMediaType) {
       case LibraryMediaType.music:
-        return [
-          _buildArtistsTab(context, l10n),
-          _buildAlbumsTab(context, l10n),
-          if (_showFavoritesOnly) _buildTracksTab(context, l10n),
-          _buildPlaylistsTab(context, l10n),
-        ];
+        if (_showFavoritesOnly) {
+          // Artists, Albums, Tracks, Playlists
+          switch (index) {
+            case 0: return _buildArtistsTab(context, l10n);
+            case 1: return _buildAlbumsTab(context, l10n);
+            case 2: return _buildTracksTab(context, l10n);
+            case 3: return _buildPlaylistsTab(context, l10n);
+            default: return const SizedBox();
+          }
+        } else {
+          // Artists, Albums, Playlists (no Tracks)
+          switch (index) {
+            case 0: return _buildArtistsTab(context, l10n);
+            case 1: return _buildAlbumsTab(context, l10n);
+            case 2: return _buildPlaylistsTab(context, l10n);
+            default: return const SizedBox();
+          }
+        }
       case LibraryMediaType.books:
-        return [
-          _buildBooksAuthorsTab(context, l10n),
-          _buildAllBooksTab(context, l10n),
-          _buildSeriesTab(context, l10n),
-        ];
+        switch (index) {
+          case 0: return _buildBooksAuthorsTab(context, l10n);
+          case 1: return _buildAllBooksTab(context, l10n);
+          case 2: return _buildSeriesTab(context, l10n);
+          default: return const SizedBox();
+        }
       case LibraryMediaType.podcasts:
-        return [
-          _buildPodcastsComingSoonTab(context, l10n),
-        ];
+        return _buildPodcastsTab(context, l10n);
+      case LibraryMediaType.radio:
+        return _buildRadioStationsTab(context, l10n);
     }
   }
 
@@ -938,50 +1588,50 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       );
     }
 
-    // Group audiobooks by author
-    final authorMap = <String, List<Audiobook>>{};
-    for (final book in audiobooks) {
-      final authorName = book.authorsString;
-      authorMap.putIfAbsent(authorName, () => []).add(book);
-    }
-
-    // Sort authors alphabetically
-    final sortedAuthors = authorMap.keys.toList()..sort();
-
+    // PERF: Use pre-sorted and pre-grouped lists (computed once on load)
     // Match music artists tab layout - no header, direct list/grid
     return RefreshIndicator(
       color: colorScheme.primary,
-      backgroundColor: colorScheme.surface,
+      backgroundColor: colorScheme.background,
       onRefresh: () => _loadAudiobooks(favoriteOnly: _showFavoritesOnly ? true : null),
-      child: _authorsViewMode == 'list'
-          ? ListView.builder(
-              key: const PageStorageKey<String>('books_authors_list'),
-              cacheExtent: 500,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: false,
-              itemCount: sortedAuthors.length,
-              padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.withMiniPlayer),
-              itemBuilder: (context, index) {
-                return _buildAuthorListTile(sortedAuthors[index], authorMap[sortedAuthors[index]]!, l10n);
-              },
-            )
-          : GridView.builder(
-              key: const PageStorageKey<String>('books_authors_grid'),
-              cacheExtent: 500,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: false,
-              padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _authorsViewMode == 'grid3' ? 3 : 2,
-                childAspectRatio: _authorsViewMode == 'grid3' ? 0.75 : 0.80, // Match music artists
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+      child: LetterScrollbar(
+        controller: _authorsScrollController,
+        items: _sortedAuthorNames,
+        onDragStateChanged: _onLetterScrollbarDragChanged,
+        child: _authorsViewMode == 'list'
+            ? ListView.builder(
+                controller: _authorsScrollController,
+                key: const PageStorageKey<String>('books_authors_list'),
+                cacheExtent: 1000,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
+                itemCount: _sortedAuthorNames.length,
+                padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.withMiniPlayer),
+                itemBuilder: (context, index) {
+                  final authorName = _sortedAuthorNames[index];
+                  return _buildAuthorListTile(authorName, _groupedAudiobooksByAuthor[authorName]!, l10n);
+                },
+              )
+            : GridView.builder(
+                controller: _authorsScrollController,
+                key: const PageStorageKey<String>('books_authors_grid'),
+                cacheExtent: 1000,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
+                padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _authorsViewMode == 'grid3' ? 3 : 2,
+                  childAspectRatio: _authorsViewMode == 'grid3' ? 0.75 : 0.80, // Match music artists
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: _sortedAuthorNames.length,
+                itemBuilder: (context, index) {
+                  final authorName = _sortedAuthorNames[index];
+                  return _buildAuthorCard(authorName, _groupedAudiobooksByAuthor[authorName]!, l10n);
+                },
               ),
-              itemCount: sortedAuthors.length,
-              itemBuilder: (context, index) {
-                return _buildAuthorCard(sortedAuthors[index], authorMap[sortedAuthors[index]]!, l10n);
-              },
-            ),
+      ),
     );
   }
 
@@ -1005,6 +1655,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                     fit: BoxFit.cover,
                     width: 48,
                     height: 48,
+                    memCacheWidth: 128,
+                    memCacheHeight: 128,
                     fadeInDuration: Duration.zero,
                     fadeOutDuration: Duration.zero,
                     placeholder: (_, __) => Text(
@@ -1090,6 +1742,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                                 fit: BoxFit.cover,
                                 width: size,
                                 height: size,
+                                memCacheWidth: 256,
+                                memCacheHeight: 256,
                                 fadeInDuration: Duration.zero,
                                 fadeOutDuration: Duration.zero,
                                 placeholder: (_, __) => Center(
@@ -1180,6 +1834,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 ? CachedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
+                    memCacheWidth: 256,
+                    memCacheHeight: 256,
                     placeholder: (_, __) => const SizedBox(),
                     errorWidget: (_, __, ___) => Icon(
                       MdiIcons.bookOutline,
@@ -1275,52 +1931,48 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       );
     }
 
-    // Sort audiobooks
-    if (_audiobooksSortOrder == 'year') {
-      audiobooks.sort((a, b) {
-        if (a.year == null && b.year == null) return a.name.compareTo(b.name);
-        if (a.year == null) return 1;
-        if (b.year == null) return -1;
-        return a.year!.compareTo(b.year!);
-      });
-    } else {
-      audiobooks.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    }
-
+    // PERF: Use pre-sorted list (sorted once on load or when sort order changes)
     // Match music albums tab layout - no header, direct list/grid
     return RefreshIndicator(
       color: colorScheme.primary,
-      backgroundColor: colorScheme.surface,
+      backgroundColor: colorScheme.background,
       onRefresh: () => _loadAudiobooks(favoriteOnly: _showFavoritesOnly ? true : null),
-      child: _audiobooksViewMode == 'list'
-          ? ListView.builder(
-              key: PageStorageKey<String>('all_books_list_${_showFavoritesOnly ? 'fav' : 'all'}'),
-              cacheExtent: 500,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: false,
-              itemCount: audiobooks.length,
-              padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.withMiniPlayer),
-              itemBuilder: (context, index) {
-                return _buildAudiobookListTile(context, audiobooks[index], maProvider);
-              },
-            )
-          : GridView.builder(
-              key: PageStorageKey<String>('all_books_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_audiobooksViewMode'),
-              cacheExtent: 500,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: false,
-              padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _audiobooksViewMode == 'grid3' ? 3 : 2,
-                childAspectRatio: _audiobooksViewMode == 'grid3' ? 0.70 : 0.75, // Match music albums
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+      child: LetterScrollbar(
+        controller: _audiobooksScrollController,
+        items: _audiobookNames,
+        onDragStateChanged: _onLetterScrollbarDragChanged,
+        child: _audiobooksViewMode == 'list'
+            ? ListView.builder(
+                controller: _audiobooksScrollController,
+                key: PageStorageKey<String>('all_books_list_${_showFavoritesOnly ? 'fav' : 'all'}'),
+                cacheExtent: 1000,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
+                itemCount: _sortedAudiobooks.length,
+                padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.withMiniPlayer),
+                itemBuilder: (context, index) {
+                  return _buildAudiobookListTile(context, _sortedAudiobooks[index], maProvider);
+                },
+              )
+            : GridView.builder(
+                controller: _audiobooksScrollController,
+                key: PageStorageKey<String>('all_books_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_audiobooksViewMode'),
+                cacheExtent: 1000,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
+                padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _audiobooksViewMode == 'grid3' ? 3 : 2,
+                  childAspectRatio: _audiobooksViewMode == 'grid3' ? 0.70 : 0.75, // Match music albums
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: _sortedAudiobooks.length,
+                itemBuilder: (context, index) {
+                  return _buildAudiobookCard(context, _sortedAudiobooks[index], maProvider);
+                },
               ),
-              itemCount: audiobooks.length,
-              itemBuilder: (context, index) {
-                return _buildAudiobookCard(context, audiobooks[index], maProvider);
-              },
-            ),
+      ),
     );
   }
 
@@ -1352,6 +2004,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                           ? CachedNetworkImage(
                               imageUrl: imageUrl,
                               fit: BoxFit.cover,
+                              memCacheWidth: 512,
+                              memCacheHeight: 512,
                               fadeInDuration: Duration.zero,
                               fadeOutDuration: Duration.zero,
                               placeholder: (_, __) => const SizedBox(),
@@ -1501,36 +2155,44 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       );
     }
 
+    // PERF: Use pre-sorted list (sorted once on load)
     // Series view - supports grid2, grid3, and list modes
     return RefreshIndicator(
       onRefresh: _loadSeries,
-      child: _seriesViewMode == 'list'
-          ? ListView.builder(
-              key: const PageStorageKey<String>('series_list'),
-              cacheExtent: 500,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: false,
-              itemCount: _series.length,
-              padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.withMiniPlayer),
-              itemBuilder: (context, index) {
-                return _buildSeriesListTile(context, _series[index], maProvider, l10n);
-              },
-            )
-          : GridView.builder(
-              key: PageStorageKey<String>('series_grid_$_seriesViewMode'),
-              padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _seriesViewMode == 'grid3' ? 3 : 2,
-                childAspectRatio: _seriesViewMode == 'grid3' ? 0.70 : 0.75,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+      child: LetterScrollbar(
+        controller: _seriesScrollController,
+        items: _seriesNames,
+        onDragStateChanged: _onLetterScrollbarDragChanged,
+        child: _seriesViewMode == 'list'
+            ? ListView.builder(
+                controller: _seriesScrollController,
+                key: const PageStorageKey<String>('series_list'),
+                cacheExtent: 1000,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
+                itemCount: _sortedSeries.length,
+                padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.withMiniPlayer),
+                itemBuilder: (context, index) {
+                  return _buildSeriesListTile(context, _sortedSeries[index], maProvider, l10n);
+                },
+              )
+            : GridView.builder(
+                controller: _seriesScrollController,
+                key: PageStorageKey<String>('series_grid_$_seriesViewMode'),
+                padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _seriesViewMode == 'grid3' ? 3 : 2,
+                  childAspectRatio: _seriesViewMode == 'grid3' ? 0.70 : 0.75,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: _sortedSeries.length,
+                itemBuilder: (context, index) {
+                  final series = _sortedSeries[index];
+                  return _buildSeriesCard(context, series, maProvider, l10n, maxCoverGridSize: _seriesViewMode == 'grid3' ? 2 : 3);
+                },
               ),
-              itemCount: _series.length,
-              itemBuilder: (context, index) {
-                final series = _series[index];
-                return _buildSeriesCard(context, series, maProvider, l10n, maxCoverGridSize: _seriesViewMode == 'grid3' ? 2 : 3);
-              },
-            ),
+      ),
     );
   }
 
@@ -1563,6 +2225,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 ? CachedNetworkImage(
                     imageUrl: firstCover,
                     fit: BoxFit.cover,
+                    memCacheWidth: 256,
+                    memCacheHeight: 256,
                     placeholder: (_, __) => Icon(
                       Icons.collections_bookmark_rounded,
                       color: colorScheme.onSurfaceVariant,
@@ -1603,8 +2267,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _logger.log('📚 Tapped series: ${series.name}, path: ${series.id}');
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => AudiobookSeriesScreen(
+          FadeSlidePageRoute(
+            child: AudiobookSeriesScreen(
               series: series,
               heroTag: heroTag,
               initialCovers: covers,
@@ -1635,8 +2299,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
         _logger.log('📚 Tapped series: ${series.name}, path: ${series.id}');
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => AudiobookSeriesScreen(
+          FadeSlidePageRoute(
+            child: AudiobookSeriesScreen(
               series: series,
               heroTag: heroTag,
               initialCovers: cachedCovers,
@@ -1650,13 +2314,16 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           // Square cover grid with Hero animation
           Hero(
             tag: heroTag,
-            child: AspectRatio(
-              aspectRatio: 1.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  color: colorScheme.surfaceVariant,
-                  child: _buildSeriesCoverGrid(series, colorScheme, maProvider, maxGridSize: maxCoverGridSize),
+            // RepaintBoundary caches the rendered grid for smooth animation
+            child: RepaintBoundary(
+              child: AspectRatio(
+                aspectRatio: 1.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12), // Match detail screen
+                  child: Container(
+                    color: colorScheme.surfaceVariant,
+                    child: _buildSeriesCoverGrid(series, colorScheme, maProvider, maxGridSize: maxCoverGridSize),
+                  ),
                 ),
               ),
             ),
@@ -1848,33 +2515,194 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
-  // ============ PODCASTS TAB (Placeholder) ============
-  Widget _buildPodcastsComingSoonTab(BuildContext context, S l10n) {
+  // ============ PODCASTS TAB ============
+  Widget _buildPodcastsTab(BuildContext context, S l10n) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Center(
+    final textTheme = Theme.of(context).textTheme;
+    final maProvider = context.watch<MusicAssistantProvider>();
+    final podcasts = maProvider.podcasts;
+    final isLoading = maProvider.isLoadingPodcasts;
+
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator(color: colorScheme.primary));
+    }
+
+    if (podcasts.isEmpty) {
+      return EmptyState.custom(
+        context: context,
+        icon: MdiIcons.podcast,
+        title: l10n.noPodcasts,
+        subtitle: l10n.addPodcastsHint,
+        onRefresh: () => maProvider.loadPodcasts(),
+      );
+    }
+
+    // Pre-cache podcast images for smooth hero animations
+    _precachePodcastImages(podcasts, maProvider);
+
+    // PERF: Request larger images from API but decode at appropriate size for memory
+    // Use consistent 256 for all views to improve hero animation smoothness (matches detail screen)
+    const cacheSize = 256;
+
+    // Generate podcast names for letter scrollbar
+    final podcastNames = podcasts.map((p) => p.name).toList();
+
+    return RefreshIndicator(
+      color: colorScheme.primary,
+      backgroundColor: colorScheme.background,
+      onRefresh: () => maProvider.loadPodcasts(),
+      child: LetterScrollbar(
+        controller: _podcastsScrollController,
+        items: podcastNames,
+        onDragStateChanged: _onLetterScrollbarDragChanged,
+        child: _podcastsViewMode == 'list'
+          ? ListView.builder(
+              controller: _podcastsScrollController,
+              key: const PageStorageKey<String>('podcasts_list'),
+              cacheExtent: 1000,
+              padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.withMiniPlayer),
+              itemCount: podcasts.length,
+              itemBuilder: (context, index) {
+                final podcast = podcasts[index];
+                // iTunes URL from persisted cache (loaded on app start for instant high-res)
+                final imageUrl = maProvider.getPodcastImageUrl(podcast);
+
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  leading: Hero(
+                    tag: HeroTags.podcastCover + (podcast.uri ?? podcast.itemId) + '_library',
+                    // Match detail screen: ClipRRect(16) → Container → CachedNetworkImage
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        color: colorScheme.surfaceContainerHighest,
+                        child: imageUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: imageUrl,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                                // FIXED: Add memCacheWidth to ensure consistent decode size for smooth Hero
+                                memCacheWidth: 256,
+                                memCacheHeight: 256,
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
+                                placeholder: (_, __) => const SizedBox(),
+                                errorWidget: (_, __, ___) => Icon(
+                                  MdiIcons.podcast,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              )
+                            : Icon(
+                                MdiIcons.podcast,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    podcast.name,
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: podcast.metadata?['author'] != null
+                      ? Text(
+                          podcast.metadata!['author'] as String,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      : null,
+                  onTap: () => _openPodcastDetails(podcast, maProvider, imageUrl),
+                );
+              },
+            )
+          : GridView.builder(
+              controller: _podcastsScrollController,
+              key: PageStorageKey<String>('podcasts_grid_$_podcastsViewMode'),
+              cacheExtent: 1000,
+              padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _podcastsViewMode == 'grid3' ? 3 : 2,
+                childAspectRatio: _podcastsViewMode == 'grid3' ? 0.75 : 0.80,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: podcasts.length,
+              itemBuilder: (context, index) {
+                final podcast = podcasts[index];
+                return _buildPodcastCard(podcast, maProvider, cacheSize);
+              },
+            ),
+      ),
+    );
+  }
+
+  Widget _buildPodcastCard(MediaItem podcast, MusicAssistantProvider maProvider, int cacheSize) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    // iTunes URL from persisted cache (loaded on app start for instant high-res)
+    final imageUrl = maProvider.getPodcastImageUrl(podcast);
+
+    return GestureDetector(
+      onTap: () => _openPodcastDetails(podcast, maProvider, imageUrl),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(
-            Icons.podcasts_rounded,
-            size: 64,
-            color: colorScheme.primary.withOpacity(0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            l10n.podcasts,
-            style: TextStyle(
-              color: colorScheme.onSurface,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
+          AspectRatio(
+            aspectRatio: 1.0,
+            child: Hero(
+              tag: HeroTags.podcastCover + (podcast.uri ?? podcast.itemId) + '_library',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                // Match detail screen structure exactly
+                child: Container(
+                  color: colorScheme.surfaceContainerHighest,
+                  child: imageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.cover,
+                          // FIXED: Add memCacheWidth to ensure consistent decode size for smooth Hero
+                          memCacheWidth: 256,
+                          memCacheHeight: 256,
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
+                          placeholder: (_, __) => const SizedBox(),
+                          errorWidget: (_, __, ___) => Center(
+                            child: Icon(
+                              MdiIcons.podcast,
+                              size: 48,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Icon(
+                            MdiIcons.podcast,
+                            size: 48,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            l10n.podcastSupportComingSoon,
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.6),
-              fontSize: 14,
+            podcast.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w500,
+              height: 1.15,
             ),
           ),
         ],
@@ -1882,80 +2710,321 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     );
   }
 
+  void _openPodcastDetails(MediaItem podcast, MusicAssistantProvider maProvider, String? imageUrl) {
+    updateAdaptiveColorsFromImage(context, imageUrl);
+    Navigator.push(
+      context,
+      FadeSlidePageRoute(
+        child: PodcastDetailScreen(
+          podcast: podcast,
+          heroTagSuffix: 'library',
+          initialImageUrl: imageUrl,
+        ),
+      ),
+    );
+  }
+
+  /// Pre-cache podcast images so hero animations are smooth on first tap
+  void _precachePodcastImages(List<MediaItem> podcasts, MusicAssistantProvider maProvider) {
+    if (!mounted || _hasPrecachedPodcasts) return;
+    _hasPrecachedPodcasts = true;
+
+    // Only precache first ~10 visible items to avoid excessive network/memory use
+    final podcastsToCache = podcasts.take(10);
+
+    for (final podcast in podcastsToCache) {
+      // iTunes URL from persisted cache
+      final imageUrl = maProvider.getPodcastImageUrl(podcast);
+      if (imageUrl != null) {
+        // Use CachedNetworkImageProvider to warm the cache
+        precacheImage(
+          CachedNetworkImageProvider(imageUrl),
+          context,
+        ).catchError((_) {
+          // Silently ignore precache errors
+          return false;
+        });
+      }
+    }
+  }
+
+  // ============ RADIO TAB ============
+  Widget _buildRadioStationsTab(BuildContext context, S l10n) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final maProvider = context.watch<MusicAssistantProvider>();
+    final radioStations = maProvider.radioStations;
+    final isLoading = maProvider.isLoadingRadio;
+
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator(color: colorScheme.primary));
+    }
+
+    if (radioStations.isEmpty) {
+      return EmptyState.custom(
+        context: context,
+        icon: MdiIcons.radio,
+        title: l10n.noRadioStations,
+        subtitle: l10n.addRadioStationsHint,
+        onRefresh: () => maProvider.loadRadioStations(),
+      );
+    }
+
+    // PERF: Use appropriate cache size based on view mode
+    final cacheSize = _radioViewMode == 'grid3' ? 200 : 256;
+
+    // Generate radio station names for letter scrollbar
+    final radioNames = radioStations.map((s) => s.name).toList();
+
+    return RefreshIndicator(
+      color: colorScheme.primary,
+      backgroundColor: colorScheme.background,
+      onRefresh: () => maProvider.loadRadioStations(),
+      child: LetterScrollbar(
+        controller: _radioScrollController,
+        items: radioNames,
+        onDragStateChanged: _onLetterScrollbarDragChanged,
+        child: _radioViewMode == 'list'
+          ? ListView.builder(
+              controller: _radioScrollController,
+              key: const PageStorageKey<String>('radio_stations_list'),
+              cacheExtent: 1000,
+              padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.withMiniPlayer),
+              itemCount: radioStations.length,
+              itemBuilder: (context, index) {
+                final station = radioStations[index];
+                final imageUrl = maProvider.getImageUrl(station, size: cacheSize);
+
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            memCacheWidth: cacheSize,
+                            memCacheHeight: cacheSize,
+                            fadeInDuration: Duration.zero,
+                            fadeOutDuration: Duration.zero,
+                            placeholder: (context, url) => Container(
+                              width: 56,
+                              height: 56,
+                              color: colorScheme.surfaceVariant,
+                              child: Icon(MdiIcons.radio, color: colorScheme.onSurfaceVariant),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              width: 56,
+                              height: 56,
+                              color: colorScheme.surfaceVariant,
+                              child: Icon(MdiIcons.radio, color: colorScheme.onSurfaceVariant),
+                            ),
+                          )
+                        : Container(
+                            width: 56,
+                            height: 56,
+                            color: colorScheme.surfaceVariant,
+                            child: Icon(MdiIcons.radio, color: colorScheme.onSurfaceVariant),
+                          ),
+                  ),
+                  title: Text(
+                    station.name,
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: station.metadata?['description'] != null
+                      ? Text(
+                          station.metadata!['description'] as String,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      : null,
+                  onTap: () => _playRadioStation(maProvider, station),
+                );
+              },
+            )
+          : GridView.builder(
+              controller: _radioScrollController,
+              key: PageStorageKey<String>('radio_stations_grid_$_radioViewMode'),
+              cacheExtent: 1000,
+              padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.withMiniPlayer),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: _radioViewMode == 'grid3' ? 3 : 2,
+                childAspectRatio: _radioViewMode == 'grid3' ? 0.75 : 0.80,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: radioStations.length,
+              itemBuilder: (context, index) {
+                final station = radioStations[index];
+                return _buildRadioCard(station, maProvider, cacheSize);
+              },
+            ),
+      ),
+    );
+  }
+
+  Widget _buildRadioCard(MediaItem station, MusicAssistantProvider maProvider, int cacheSize) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final imageUrl = maProvider.getImageUrl(station, size: cacheSize);
+
+    return GestureDetector(
+      onTap: () => _playRadioStation(maProvider, station),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          AspectRatio(
+            aspectRatio: 1.0,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                color: colorScheme.surfaceVariant,
+                child: imageUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        memCacheWidth: cacheSize,
+                        memCacheHeight: cacheSize,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholder: (context, url) => const SizedBox(),
+                        errorWidget: (context, url, error) => Center(
+                          child: Icon(
+                            MdiIcons.radio,
+                            size: 48,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Icon(
+                          MdiIcons.radio,
+                          size: 48,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            station.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w500,
+              height: 1.15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _playRadioStation(MusicAssistantProvider maProvider, MediaItem station) {
+    final selectedPlayer = maProvider.selectedPlayer;
+    if (selectedPlayer != null) {
+      maProvider.api?.playRadioStation(selectedPlayer.playerId, station);
+    }
+  }
+
   // ============ ARTISTS TAB ============
   Widget _buildArtistsTab(BuildContext context, S l10n) {
     // Use Selector for targeted rebuilds - only rebuild when artists or loading state changes
+    // Artist filtering (albumArtistsOnly) is now done at API level in library_provider
     return Selector<MusicAssistantProvider, (List<Artist>, bool)>(
       selector: (_, provider) => (provider.artists, provider.isLoading),
       builder: (context, data, _) {
-        final (allArtists, isLoading) = data;
-        final colorScheme = Theme.of(context).colorScheme;
+            final (allArtists, isLoading) = data;
+            final colorScheme = Theme.of(context).colorScheme;
 
-        if (isLoading) {
-          return Center(child: CircularProgressIndicator(color: colorScheme.primary));
-        }
+            if (isLoading) {
+              return Center(child: CircularProgressIndicator(color: colorScheme.primary));
+            }
 
-        // Filter by favorites if enabled
-        final artists = _showFavoritesOnly
-            ? allArtists.where((a) => a.favorite == true).toList()
-            : allArtists;
+            // Filter by favorites if enabled (artist filter is done at API level)
+            final artists = _showFavoritesOnly
+                ? allArtists.where((a) => a.favorite == true).toList()
+                : allArtists;
 
-        if (artists.isEmpty) {
-          if (_showFavoritesOnly) {
-            return EmptyState.custom(
-              context: context,
-              icon: Icons.favorite_border,
-              title: l10n.noFavoriteArtists,
-              subtitle: l10n.tapHeartArtist,
+            if (artists.isEmpty) {
+              if (_showFavoritesOnly) {
+                return EmptyState.custom(
+                  context: context,
+                  icon: Icons.favorite_border,
+                  title: l10n.noFavoriteArtists,
+                  subtitle: l10n.tapHeartArtist,
+                );
+              }
+              return EmptyState.artists(
+                context: context,
+                onRefresh: () => context.read<MusicAssistantProvider>().loadLibrary(),
+              );
+            }
+
+            // Sort artists alphabetically for letter scrollbar
+            final sortedArtists = List<Artist>.from(artists)
+              ..sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+            final artistNames = sortedArtists.map((a) => a.name ?? '').toList();
+
+            return RefreshIndicator(
+              color: colorScheme.primary,
+              backgroundColor: colorScheme.background,
+              onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
+              child: LetterScrollbar(
+                controller: _artistsScrollController,
+                items: artistNames,
+                onDragStateChanged: _onLetterScrollbarDragChanged,
+                child: _artistsViewMode == 'list'
+                    ? ListView.builder(
+                        controller: _artistsScrollController,
+                        key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
+                        cacheExtent: 1000,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: false,
+                        itemCount: sortedArtists.length,
+                        padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.navBarOnly),
+                        itemBuilder: (context, index) {
+                          final artist = sortedArtists[index];
+                          return _buildArtistTile(
+                            context,
+                            artist,
+                            key: ValueKey(artist.uri ?? artist.itemId),
+                          );
+                        },
+                      )
+                    : GridView.builder(
+                        controller: _artistsScrollController,
+                        key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
+                        cacheExtent: 1000,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: false,
+                        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: _artistsViewMode == 'grid3' ? 3 : 2,
+                          childAspectRatio: _artistsViewMode == 'grid3' ? 0.75 : 0.80,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: sortedArtists.length,
+                        itemBuilder: (context, index) {
+                          final artist = sortedArtists[index];
+                          return _buildArtistGridCard(context, artist);
+                        },
+                      ),
+              ),
             );
-          }
-          return EmptyState.artists(
-            context: context,
-            onRefresh: () => context.read<MusicAssistantProvider>().loadLibrary(),
-          );
-        }
-
-        return RefreshIndicator(
-          color: colorScheme.primary,
-          backgroundColor: colorScheme.surface,
-          onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
-          child: _artistsViewMode == 'list'
-              ? ListView.builder(
-                  key: PageStorageKey<String>('library_artists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
-                  cacheExtent: 500,
-                  addAutomaticKeepAlives: false,
-                  addRepaintBoundaries: false,
-                  itemCount: artists.length,
-                  padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
-                  itemBuilder: (context, index) {
-                    final artist = artists[index];
-                    return _buildArtistTile(
-                      context,
-                      artist,
-                      key: ValueKey(artist.uri ?? artist.itemId),
-                    );
-                  },
-                )
-              : GridView.builder(
-                  key: PageStorageKey<String>('library_artists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_artistsViewMode'),
-                  cacheExtent: 500,
-                  addAutomaticKeepAlives: false,
-                  addRepaintBoundaries: false,
-                  padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: _artistsViewMode == 'grid3' ? 3 : 2,
-                    childAspectRatio: _artistsViewMode == 'grid3' ? 0.75 : 0.80,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: artists.length,
-                  itemBuilder: (context, index) {
-                    final artist = artists[index];
-                    return _buildArtistGridCard(context, artist);
-                  },
-                ),
-        );
-      },
+          },
     );
   }
 
@@ -2041,11 +3110,14 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
                 final size = constraints.maxWidth < constraints.maxHeight
                     ? constraints.maxWidth
                     : constraints.maxHeight;
+                // PERF: Use appropriate cache size based on grid columns
+                final cacheSize = _artistsViewMode == 'grid3' ? 200 : 300;
                 return Center(
                   child: ArtistAvatar(
                     artist: artist,
                     radius: size / 2,
-                    imageSize: 256,
+                    imageSize: cacheSize,
+                    heroTag: HeroTags.artistImage + (artist.uri ?? artist.itemId) + '_library_grid',
                   ),
                 );
               },
@@ -2100,45 +3172,60 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
           );
         }
 
+        // Sort albums alphabetically for letter scrollbar
+        final sortedAlbums = List<Album>.from(albums)
+          ..sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+        final albumNames = sortedAlbums.map((a) => a.name ?? '').toList();
+
         return RefreshIndicator(
           color: colorScheme.primary,
-          backgroundColor: colorScheme.surface,
+          backgroundColor: colorScheme.background,
           onRefresh: () async => context.read<MusicAssistantProvider>().loadLibrary(),
-          child: _albumsViewMode == 'list'
-              ? ListView.builder(
-                  key: PageStorageKey<String>('library_albums_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
-                  cacheExtent: 500,
-                  addAutomaticKeepAlives: false,
-                  addRepaintBoundaries: false,
-                  padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
-                  itemCount: albums.length,
-                  itemBuilder: (context, index) {
-                    final album = albums[index];
-                    return _buildAlbumListTile(context, album);
-                  },
-                )
-              : GridView.builder(
-                  key: PageStorageKey<String>('library_albums_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
-                  cacheExtent: 500,
-                  addAutomaticKeepAlives: false,
-                  addRepaintBoundaries: false,
-                  padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: _albumsViewMode == 'grid3' ? 3 : 2,
-                    childAspectRatio: _albumsViewMode == 'grid3' ? 0.70 : 0.75,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
+          child: LetterScrollbar(
+            controller: _albumsScrollController,
+            items: albumNames,
+            onDragStateChanged: _onLetterScrollbarDragChanged,
+            child: _albumsViewMode == 'list'
+                ? ListView.builder(
+                    controller: _albumsScrollController,
+                    key: PageStorageKey<String>('library_albums_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
+                    cacheExtent: 1000,
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: false,
+                    padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.navBarOnly),
+                    itemCount: sortedAlbums.length,
+                    itemBuilder: (context, index) {
+                      final album = sortedAlbums[index];
+                      return _buildAlbumListTile(context, album);
+                    },
+                  )
+                : GridView.builder(
+                    controller: _albumsScrollController,
+                    key: PageStorageKey<String>('library_albums_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_albumsViewMode'),
+                    cacheExtent: 1000,
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: false,
+                    padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: _albumsViewMode == 'grid3' ? 3 : 2,
+                      childAspectRatio: _albumsViewMode == 'grid3' ? 0.70 : 0.75,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
+                    itemCount: sortedAlbums.length,
+                    itemBuilder: (context, index) {
+                      final album = sortedAlbums[index];
+                      // PERF: Use appropriate cache size based on grid columns
+                      final cacheSize = _albumsViewMode == 'grid3' ? 200 : 300;
+                      return AlbumCard(
+                        key: ValueKey(album.uri ?? album.itemId),
+                        album: album,
+                        heroTagSuffix: 'library_grid',
+                        imageCacheSize: cacheSize,
+                      );
+                    },
                   ),
-                  itemCount: albums.length,
-                  itemBuilder: (context, index) {
-                    final album = albums[index];
-                    return AlbumCard(
-                      key: ValueKey(album.uri ?? album.itemId),
-                      album: album,
-                      heroTagSuffix: 'library_grid',
-                    );
-                  },
-                ),
+          ),
         );
       },
     );
@@ -2162,6 +3249,8 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
               ? CachedNetworkImage(
                   imageUrl: imageUrl,
                   fit: BoxFit.cover,
+                  memCacheWidth: 256,
+                  memCacheHeight: 256,
                   placeholder: (_, __) => const SizedBox(),
                   errorWidget: (_, __, ___) => Icon(
                     Icons.album_rounded,
@@ -2226,41 +3315,49 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       return EmptyState.playlists(context: context, onRefresh: () => _loadPlaylists());
     }
 
+    // PERF: Use pre-sorted lists (sorted once on load)
     return RefreshIndicator(
       color: colorScheme.primary,
-      backgroundColor: colorScheme.surface,
+      backgroundColor: colorScheme.background,
       onRefresh: () => _loadPlaylists(favoriteOnly: _showFavoritesOnly ? true : null),
-      child: _playlistsViewMode == 'list'
-          ? ListView.builder(
-              key: PageStorageKey<String>('library_playlists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
-              cacheExtent: 500,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: false,
-              itemCount: _playlists.length,
-              padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
-              itemBuilder: (context, index) {
-                final playlist = _playlists[index];
-                return _buildPlaylistTile(context, playlist, l10n);
-              },
-            )
-          : GridView.builder(
-              key: PageStorageKey<String>('library_playlists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
-              cacheExtent: 500,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: false,
-              padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _playlistsViewMode == 'grid3' ? 3 : 2,
-                childAspectRatio: _playlistsViewMode == 'grid3' ? 0.75 : 0.80,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+      child: LetterScrollbar(
+        controller: _playlistsScrollController,
+        items: _playlistNames,
+        onDragStateChanged: _onLetterScrollbarDragChanged,
+        child: _playlistsViewMode == 'list'
+            ? ListView.builder(
+                controller: _playlistsScrollController,
+                key: PageStorageKey<String>('library_playlists_list_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
+                cacheExtent: 1000,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
+                itemCount: _sortedPlaylists.length,
+                padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.navBarOnly),
+                itemBuilder: (context, index) {
+                  final playlist = _sortedPlaylists[index];
+                  return _buildPlaylistTile(context, playlist, l10n);
+                },
+              )
+            : GridView.builder(
+                controller: _playlistsScrollController,
+                key: PageStorageKey<String>('library_playlists_grid_${_showFavoritesOnly ? 'fav' : 'all'}_$_playlistsViewMode'),
+                cacheExtent: 1000,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
+                padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: BottomSpacing.navBarOnly),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _playlistsViewMode == 'grid3' ? 3 : 2,
+                  childAspectRatio: _playlistsViewMode == 'grid3' ? 0.75 : 0.80,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: _sortedPlaylists.length,
+                itemBuilder: (context, index) {
+                  final playlist = _sortedPlaylists[index];
+                  return _buildPlaylistGridCard(context, playlist, l10n);
+                },
               ),
-              itemCount: _playlists.length,
-              itemBuilder: (context, index) {
-                final playlist = _playlists[index];
-                return _buildPlaylistGridCard(context, playlist, l10n);
-              },
-            ),
+      ),
     );
   }
 
@@ -2270,51 +3367,76 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
+    // Unique suffix for list view context
+    const heroSuffix = '_library_list';
+
     return RepaintBoundary(
       child: ListTile(
         key: ValueKey(playlist.itemId),
-        leading: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(8),
-          image: imageUrl != null
-              ? DecorationImage(image: CachedNetworkImageProvider(imageUrl), fit: BoxFit.cover)
-              : null,
+        leading: Hero(
+          tag: HeroTags.playlistCover + (playlist.uri ?? playlist.itemId) + heroSuffix,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 48,
+              height: 48,
+              color: colorScheme.surfaceContainerHighest,
+              child: imageUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 96,
+                      memCacheHeight: 96,
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      placeholder: (_, __) => const SizedBox(),
+                      errorWidget: (_, __, ___) => Icon(
+                        Icons.playlist_play_rounded,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : Icon(
+                      Icons.playlist_play_rounded,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+            ),
+          ),
         ),
-        child: imageUrl == null
-            ? Icon(Icons.playlist_play_rounded, color: colorScheme.onSurfaceVariant)
-            : null,
-      ),
-      title: Text(
-        playlist.name,
-        style: textTheme.titleMedium?.copyWith(
-          color: colorScheme.onSurface,
-          fontWeight: FontWeight.w500,
+        title: Hero(
+          tag: HeroTags.playlistTitle + (playlist.uri ?? playlist.itemId) + heroSuffix,
+          child: Material(
+            color: Colors.transparent,
+            child: Text(
+              playlist.name,
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        playlist.trackCount != null
-            ? '${playlist.trackCount} ${l10n.tracks}'
-            : playlist.owner ?? l10n.playlist,
-        style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+        subtitle: Text(
+          playlist.trackCount != null
+              ? '${playlist.trackCount} ${l10n.tracks}'
+              : playlist.owner ?? l10n.playlist,
+          style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         trailing: playlist.favorite == true
             ? const Icon(Icons.favorite, color: Colors.red, size: 20)
             : null,
         onTap: () {
+          updateAdaptiveColorsFromImage(context, imageUrl);
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => PlaylistDetailsScreen(
+            FadeSlidePageRoute(
+              child: PlaylistDetailsScreen(
                 playlist: playlist,
-                provider: playlist.provider,
-                itemId: playlist.itemId,
+                heroTagSuffix: 'library_list',
+                initialImageUrl: imageUrl,
               ),
             ),
           );
@@ -2329,73 +3451,92 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PlaylistDetailsScreen(
-              playlist: playlist,
-              provider: playlist.provider,
-              itemId: playlist.itemId,
-            ),
-          ),
-        );
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                color: colorScheme.surfaceVariant,
-                child: imageUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        placeholder: (_, __) => const SizedBox(),
-                        errorWidget: (_, __, ___) => Center(
-                          child: Icon(
-                            Icons.playlist_play_rounded,
-                            size: 48,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Icon(
-                          Icons.playlist_play_rounded,
-                          size: 48,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
+    // Unique suffix for grid view context
+    const heroSuffix = '_library_grid';
+
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: () {
+          updateAdaptiveColorsFromImage(context, imageUrl);
+          Navigator.push(
+            context,
+            FadeSlidePageRoute(
+              child: PlaylistDetailsScreen(
+                playlist: playlist,
+                heroTagSuffix: 'library_grid',
+                initialImageUrl: imageUrl,
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            playlist.name,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface,
-              fontWeight: FontWeight.w500,
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Hero(
+                tag: HeroTags.playlistCover + (playlist.uri ?? playlist.itemId) + heroSuffix,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    color: colorScheme.surfaceContainerHighest,
+                    child: imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            memCacheWidth: 256,
+                            memCacheHeight: 256,
+                            fadeInDuration: Duration.zero,
+                            fadeOutDuration: Duration.zero,
+                            placeholder: (_, __) => const SizedBox(),
+                            errorWidget: (_, __, ___) => Center(
+                              child: Icon(
+                                Icons.playlist_play_rounded,
+                                size: 48,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Icon(
+                              Icons.playlist_play_rounded,
+                              size: 48,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            playlist.trackCount != null
-                ? '${playlist.trackCount} ${l10n.tracks}'
-                : playlist.owner ?? l10n.playlist,
-            style: textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurface.withOpacity(0.7),
+            const SizedBox(height: 8),
+            Hero(
+              tag: HeroTags.playlistTitle + (playlist.uri ?? playlist.itemId) + heroSuffix,
+              child: Material(
+                color: Colors.transparent,
+                child: Text(
+                  playlist.name,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+            Text(
+              playlist.trackCount != null
+                  ? '${playlist.trackCount} ${l10n.tracks}'
+                  : playlist.owner ?? l10n.playlist,
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurface.withOpacity(0.7),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2417,27 +3558,20 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       );
     }
 
-    // Sort tracks by artist name, then track name
-    final sortedTracks = List<Track>.from(_favoriteTracks)
-      ..sort((a, b) {
-        final artistCompare = a.artistsString.compareTo(b.artistsString);
-        if (artistCompare != 0) return artistCompare;
-        return a.name.compareTo(b.name);
-      });
-
+    // PERF: Use pre-sorted list (sorted once on load)
     return RefreshIndicator(
       color: colorScheme.primary,
-      backgroundColor: colorScheme.surface,
+      backgroundColor: colorScheme.background,
       onRefresh: _loadFavoriteTracks,
       child: ListView.builder(
         key: const PageStorageKey<String>('library_tracks_list'),
-        cacheExtent: 500,
+        cacheExtent: 1000,
         addAutomaticKeepAlives: false, // Tiles don't need individual keep-alive
         addRepaintBoundaries: false, // We add RepaintBoundary manually to tiles
-        padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: BottomSpacing.navBarOnly),
-        itemCount: sortedTracks.length,
+        padding: EdgeInsets.only(left: 8, right: 8, top: 16, bottom: BottomSpacing.navBarOnly),
+        itemCount: _sortedFavoriteTracks.length,
         itemBuilder: (context, index) {
-          final track = sortedTracks[index];
+          final track = _sortedFavoriteTracks[index];
           return _buildTrackTile(context, track);
         },
       ),
@@ -2518,4 +3652,22 @@ class _NewLibraryScreenState extends State<NewLibraryScreen>
       ),
     );
   }
+}
+
+/// Custom PageScrollPhysics with faster spring for quicker settling
+/// This allows vertical scrolling to work sooner after a horizontal swipe
+class _FastPageScrollPhysics extends PageScrollPhysics {
+  const _FastPageScrollPhysics({super.parent});
+
+  @override
+  _FastPageScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _FastPageScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  SpringDescription get spring => const SpringDescription(
+    mass: 50,      // Lower mass = faster movement
+    stiffness: 500, // Higher stiffness = snappier
+    damping: 1.0,   // Critical damping for no overshoot
+  );
 }

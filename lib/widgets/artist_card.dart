@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -14,14 +15,16 @@ class ArtistCard extends StatefulWidget {
   final Artist artist;
   final VoidCallback? onTap;
   final String? heroTagSuffix;
-  final double? imageSize;
+  /// Image decode size in pixels. Defaults to 256.
+  /// Use smaller values (e.g., 128) for list views, larger for grids.
+  final int? imageCacheSize;
 
   const ArtistCard({
     super.key,
     required this.artist,
     this.onTap,
     this.heroTagSuffix,
-    this.imageSize,
+    this.imageCacheSize,
   });
 
   @override
@@ -34,12 +37,22 @@ class _ArtistCardState extends State<ArtistCard> {
   bool _triedFallback = false;
   bool _maImageFailed = false;
   String? _cachedMaImageUrl;
+  Timer? _fallbackTimer;
+
+  /// Delay before fetching fallback images to avoid requests during fast scroll
+  static const _fallbackDelay = Duration(milliseconds: 200);
 
   @override
   void initState() {
     super.initState();
     // Fetch fallback image once in initState, not during build
     _initFallbackImage();
+  }
+
+  @override
+  void dispose() {
+    _fallbackTimer?.cancel();
+    super.dispose();
   }
 
   void _initFallbackImage() {
@@ -52,7 +65,17 @@ class _ArtistCardState extends State<ArtistCard> {
 
       if (maImageUrl == null && !_triedFallback) {
         _triedFallback = true;
-        _logger.debug('No MA image for "${widget.artist.name}", trying fallback', context: 'ArtistCard');
+        _logger.debug('No MA image for "${widget.artist.name}", scheduling fallback', context: 'ArtistCard');
+        _scheduleFallbackFetch();
+      }
+    });
+  }
+
+  /// Schedule fallback fetch with delay to avoid requests during fast scroll
+  void _scheduleFallbackFetch() {
+    _fallbackTimer?.cancel();
+    _fallbackTimer = Timer(_fallbackDelay, () {
+      if (mounted) {
         _fetchFallbackImage();
       }
     });
@@ -63,8 +86,8 @@ class _ArtistCardState extends State<ArtistCard> {
     if (!_triedFallback && !_maImageFailed) {
       _maImageFailed = true;
       _triedFallback = true;
-      _logger.debug('MA image failed for "${widget.artist.name}", trying fallback', context: 'ArtistCard');
-      _fetchFallbackImage();
+      _logger.debug('MA image failed for "${widget.artist.name}", scheduling fallback', context: 'ArtistCard');
+      _scheduleFallbackFetch();
     }
   }
 
@@ -80,6 +103,9 @@ class _ArtistCardState extends State<ArtistCard> {
 
     // Use fallback if MA image failed or wasn't available
     final imageUrl = (_maImageFailed || maImageUrl == null) ? _fallbackImageUrl : maImageUrl;
+
+    // PERF: Use appropriate cache size based on display size
+    final cacheSize = widget.imageCacheSize ?? 256;
 
     return RepaintBoundary(
       child: GestureDetector(
@@ -115,8 +141,8 @@ class _ArtistCardState extends State<ArtistCard> {
                         ? CachedNetworkImage(
                             imageUrl: imageUrl,
                             fit: BoxFit.cover,
-                            memCacheWidth: 256,
-                            memCacheHeight: 256,
+                            memCacheWidth: cacheSize,
+                            memCacheHeight: cacheSize,
                             fadeInDuration: Duration.zero,
                             fadeOutDuration: Duration.zero,
                             placeholder: (context, url) => const SizedBox(),
@@ -163,6 +189,7 @@ class _ArtistCardState extends State<ArtistCard> {
                   style: textTheme.titleSmall?.copyWith(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.w500,
+                    height: 1.15,
                   ),
                 ),
               ),

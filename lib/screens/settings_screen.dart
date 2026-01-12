@@ -29,6 +29,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showFavoriteAlbums = false;
   bool _showFavoriteArtists = false;
   bool _showFavoriteTracks = false;
+  bool _showFavoritePlaylists = false;
+  bool _showFavoriteRadioStations = false;
+  bool _showFavoritePodcasts = false;
   // Audiobook home rows (default off)
   bool _showContinueListeningAudiobooks = false;
   bool _showDiscoverAudiobooks = false;
@@ -41,8 +44,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Player settings
   bool _preferLocalPlayer = false;
   bool _smartSortPlayers = false;
+  bool _volumePrecisionMode = true;
   // Hint settings
   bool _showHints = true;
+  // Library settings
+  bool _showOnlyArtistsWithAlbums = false;
 
   @override
   void initState() {
@@ -68,6 +74,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final showFavAlbums = await SettingsService.getShowFavoriteAlbums();
     final showFavArtists = await SettingsService.getShowFavoriteArtists();
     final showFavTracks = await SettingsService.getShowFavoriteTracks();
+    final showFavPlaylists = await SettingsService.getShowFavoritePlaylists();
+    final showFavRadio = await SettingsService.getShowFavoriteRadioStations();
+    final showFavPodcasts = await SettingsService.getShowFavoritePodcasts();
 
     // Load audiobook home row settings
     final showContinueAudiobooks = await SettingsService.getShowContinueListeningAudiobooks();
@@ -90,9 +99,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Load player settings
     final preferLocal = await SettingsService.getPreferLocalPlayer();
     final smartSort = await SettingsService.getSmartSortPlayers();
+    final volumePrecision = await SettingsService.getVolumePrecisionMode();
 
     // Load hint settings
     final showHints = await SettingsService.getShowHints();
+
+    // Load library settings
+    final showOnlyArtistsWithAlbums = await SettingsService.getShowOnlyArtistsWithAlbums();
 
     if (mounted) {
       setState(() {
@@ -102,6 +115,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _showFavoriteAlbums = showFavAlbums;
         _showFavoriteArtists = showFavArtists;
         _showFavoriteTracks = showFavTracks;
+        _showFavoritePlaylists = showFavPlaylists;
+        _showFavoriteRadioStations = showFavRadio;
+        _showFavoritePodcasts = showFavPodcasts;
         _showContinueListeningAudiobooks = showContinueAudiobooks;
         _showDiscoverAudiobooks = showDiscAudiobooks;
         _showDiscoverSeries = showDiscSeries;
@@ -110,7 +126,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _libraryEnabled = libraryEnabled;
         _preferLocalPlayer = preferLocal;
         _smartSortPlayers = smartSort;
+        _volumePrecisionMode = volumePrecision;
         _showHints = showHints;
+        _showOnlyArtistsWithAlbums = showOnlyArtistsWithAlbums;
       });
     }
   }
@@ -144,6 +162,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return {'title': s.favoriteArtists, 'subtitle': s.showFavoriteArtists};
       case 'favorite-tracks':
         return {'title': s.favoriteTracks, 'subtitle': s.showFavoriteTracks};
+      case 'favorite-playlists':
+        return {'title': s.favoritePlaylists, 'subtitle': s.showFavoritePlaylists};
+      case 'favorite-radio-stations':
+        return {'title': s.favoriteRadioStations, 'subtitle': s.showFavoriteRadioStations};
+      case 'favorite-podcasts':
+        return {'title': s.favoritePodcasts, 'subtitle': s.showFavoritePodcasts};
       default:
         return {'title': rowId, 'subtitle': ''};
     }
@@ -170,6 +194,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return _showFavoriteArtists;
       case 'favorite-tracks':
         return _showFavoriteTracks;
+      case 'favorite-playlists':
+        return _showFavoritePlaylists;
+      case 'favorite-radio-stations':
+        return _showFavoriteRadioStations;
+      case 'favorite-podcasts':
+        return _showFavoritePodcasts;
       default:
         return false;
     }
@@ -214,6 +244,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         case 'favorite-tracks':
           _showFavoriteTracks = value;
           SettingsService.setShowFavoriteTracks(value);
+          break;
+        case 'favorite-playlists':
+          _showFavoritePlaylists = value;
+          SettingsService.setShowFavoritePlaylists(value);
+          break;
+        case 'favorite-radio-stations':
+          _showFavoriteRadioStations = value;
+          SettingsService.setShowFavoriteRadioStations(value);
+          break;
+        case 'favorite-podcasts':
+          _showFavoritePodcasts = value;
+          SettingsService.setShowFavoritePodcasts(value);
           break;
       }
     });
@@ -281,13 +323,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Logo - same size as login screen (50% of screen width)
+            // Use color filter to make logo dark in light theme
             Padding(
               padding: const EdgeInsets.only(top: 8.0, bottom: 48.0),
-              child: Image.asset(
-                'assets/images/ensemble_icon_transparent.png',
-                width: MediaQuery.of(context).size.width * 0.5,
-                fit: BoxFit.contain,
-              ),
+              child: Theme.of(context).brightness == Brightness.light
+                  ? ColorFiltered(
+                      colorFilter: const ColorFilter.mode(
+                        Color(0xFF1a1a1a), // Dark color for light theme
+                        BlendMode.srcIn,
+                      ),
+                      child: Image.asset(
+                        'assets/images/ensemble_icon_transparent.png',
+                        width: MediaQuery.of(context).size.width * 0.5,
+                        fit: BoxFit.contain,
+                      ),
+                    )
+                  : Image.asset(
+                      'assets/images/ensemble_icon_transparent.png',
+                      width: MediaQuery.of(context).size.width * 0.5,
+                      fit: BoxFit.contain,
+                    ),
             ),
 
             // Connection status box - centered with border radius like theme boxes
@@ -629,6 +684,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   Navigator.pop(dialogContext);
                                 },
                               ),
+                              RadioListTile<String?>(
+                                title: const Text('Français'),
+                                value: 'fr',
+                                groupValue: localeProvider.locale?.languageCode,
+                                onChanged: (value) {
+                                  localeProvider.setLocale(const Locale('fr'));
+                                  Navigator.pop(dialogContext);
+                                },
+                              ),
                             ],
                           ),
                         );
@@ -702,6 +766,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SwitchListTile(
+                title: Text(
+                  'Volume precision mode',
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                subtitle: Text(
+                  'Hold still while adjusting volume for fine control',
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
+                ),
+                value: _volumePrecisionMode,
+                onChanged: (value) {
+                  setState(() => _volumePrecisionMode = value);
+                  SettingsService.setVolumePrecisionMode(value);
+                },
+                activeColor: colorScheme.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
 
             const SizedBox(height: 32),
 
@@ -737,6 +826,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) {
                   setState(() => _showHints = value);
                   SettingsService.setShowHints(value);
+                },
+                activeColor: colorScheme.primary,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // Library section
+            Text(
+              S.of(context)!.library,
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onBackground,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SwitchListTile(
+                title: Text(
+                  'Show only artists with albums',
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                subtitle: Text(
+                  'Hide artists that have no albums in your library',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
+                  ),
+                ),
+                value: _showOnlyArtistsWithAlbums,
+                onChanged: (value) async {
+                  setState(() => _showOnlyArtistsWithAlbums = value);
+                  await SettingsService.setShowOnlyArtistsWithAlbums(value);
+                  // Force sync library to apply the new filter at API level
+                  if (mounted) {
+                    context.read<MusicAssistantProvider>().forceLibrarySync();
+                  }
                 },
                 activeColor: colorScheme.primary,
                 contentPadding: EdgeInsets.zero,

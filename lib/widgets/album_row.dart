@@ -38,6 +38,12 @@ class _AlbumRowState extends State<AlbumRow> with AutomaticKeepAliveClientMixin 
   @override
   void initState() {
     super.initState();
+    // Get cached data synchronously BEFORE first build (no spinner flash)
+    final cached = widget.getCachedAlbums?.call();
+    if (cached != null && cached.isNotEmpty) {
+      _albums = cached;
+      _isLoading = false;
+    }
     _loadAlbums();
   }
 
@@ -45,18 +51,7 @@ class _AlbumRowState extends State<AlbumRow> with AutomaticKeepAliveClientMixin 
     if (_hasLoaded) return;
     _hasLoaded = true;
 
-    // 1. Try to get cached data synchronously for instant display
-    final cachedAlbums = widget.getCachedAlbums?.call();
-    if (cachedAlbums != null && cachedAlbums.isNotEmpty) {
-      if (mounted) {
-        setState(() {
-          _albums = cachedAlbums;
-          _isLoading = false;
-        });
-      }
-    }
-
-    // 2. Load fresh data (always update - fresh data may have images that cached data lacks)
+    // Load fresh data (always update - fresh data may have images that cached data lacks)
     try {
       final freshAlbums = await widget.loadAlbums();
       if (mounted && freshAlbums.isNotEmpty) {
@@ -126,6 +121,7 @@ class _AlbumRowState extends State<AlbumRow> with AutomaticKeepAliveClientMixin 
     return ScrollConfiguration(
       behavior: const _StretchScrollBehavior(),
       child: ListView.builder(
+        clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12.0),
         itemCount: _albums.length,
@@ -135,13 +131,16 @@ class _AlbumRowState extends State<AlbumRow> with AutomaticKeepAliveClientMixin 
         addRepaintBoundaries: false, // Cards already have RepaintBoundary
         itemBuilder: (context, index) {
           final album = _albums[index];
-          return Container(
-            key: ValueKey(album.uri ?? album.itemId),
-            width: cardWidth,
-            margin: const EdgeInsets.symmetric(horizontal: 6.0),
-            child: AlbumCard(
-              album: album,
-              heroTagSuffix: widget.heroTagSuffix,
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: Container(
+              key: ValueKey(album.uri ?? album.itemId),
+              width: cardWidth,
+              margin: const EdgeInsets.symmetric(horizontal: 6.0),
+              child: AlbumCard(
+                album: album,
+                heroTagSuffix: widget.heroTagSuffix,
+              ),
             ),
           );
         },

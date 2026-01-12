@@ -10,6 +10,7 @@ import '../services/metadata_service.dart';
 import '../services/debug_logger.dart';
 import '../services/recently_played_service.dart';
 import '../widgets/global_player_overlay.dart';
+import '../widgets/player_picker_sheet.dart';
 import '../l10n/app_localizations.dart';
 import 'artist_details_screen.dart';
 
@@ -35,6 +36,7 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
   List<Track> _tracks = [];
   bool _isLoading = true;
   bool _isFavorite = false;
+  bool _isInLibrary = false;
   ColorScheme? _lightColorScheme;
   ColorScheme? _darkColorScheme;
   int? _expandedTrackIndex;
@@ -51,6 +53,7 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
   void initState() {
     super.initState();
     _isFavorite = widget.album.favorite ?? false;
+    _isInLibrary = widget.album.inLibrary;
     _loadTracks();
     _loadAlbumDescription();
 
@@ -139,7 +142,8 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
               orElse: () => widget.album.providerMappings!.first,
             ),
           );
-          actualProvider = mapping.providerInstance;
+          // Use providerDomain (e.g., "spotify") not providerInstance (e.g., "spotify--xyz")
+          actualProvider = mapping.providerDomain;
           actualItemId = mapping.itemId;
         }
 
@@ -170,7 +174,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
           throw Exception('Could not determine library ID for this album');
         }
 
-        _logger.log('Removing from favorites: libraryItemId=$libraryItemId');
         success = await maProvider.removeFromFavorites(
           mediaType: 'album',
           libraryItemId: libraryItemId,
@@ -206,6 +209,104 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(S.of(context)!.failedToUpdateFavorite(e.toString())),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Toggle library status
+  Future<void> _toggleLibrary() async {
+    final maProvider = context.read<MusicAssistantProvider>();
+
+    try {
+      final newState = !_isInLibrary;
+      bool success;
+
+      if (newState) {
+        // Add to library - MUST use non-library provider
+        String? actualProvider;
+        String? actualItemId;
+
+        if (widget.album.providerMappings != null && widget.album.providerMappings!.isNotEmpty) {
+          // For adding to library, we MUST use a non-library provider
+          final nonLibraryMapping = widget.album.providerMappings!.where(
+            (m) => m.providerInstance != 'library' && m.providerDomain != 'library',
+          ).firstOrNull;
+
+          if (nonLibraryMapping != null) {
+            actualProvider = nonLibraryMapping.providerDomain;
+            actualItemId = nonLibraryMapping.itemId;
+          }
+        }
+
+        // Fallback to item's own provider if no non-library mapping found
+        if (actualProvider == null || actualItemId == null) {
+          if (widget.album.provider != 'library') {
+            actualProvider = widget.album.provider;
+            actualItemId = widget.album.itemId;
+          } else {
+            // Item is library-only, can't add
+            _logger.log('Cannot add to library: album is library-only');
+            return;
+          }
+        }
+
+        _logger.log('Adding album to library: provider=$actualProvider, itemId=$actualItemId');
+        success = await maProvider.addToLibrary(
+          mediaType: 'album',
+          provider: actualProvider,
+          itemId: actualItemId,
+        );
+      } else {
+        // Remove from library
+        int? libraryItemId;
+        if (widget.album.provider == 'library') {
+          libraryItemId = int.tryParse(widget.album.itemId);
+        } else if (widget.album.providerMappings != null) {
+          final libraryMapping = widget.album.providerMappings!.firstWhere(
+            (m) => m.providerInstance == 'library',
+            orElse: () => widget.album.providerMappings!.first,
+          );
+          if (libraryMapping.providerInstance == 'library') {
+            libraryItemId = int.tryParse(libraryMapping.itemId);
+          }
+        }
+
+        if (libraryItemId == null) {
+          _logger.log('Cannot remove from library: no library ID found');
+          return;
+        }
+
+        success = await maProvider.removeFromLibrary(
+          mediaType: 'album',
+          libraryItemId: libraryItemId,
+        );
+      }
+
+      if (success) {
+        setState(() {
+          _isInLibrary = newState;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _isInLibrary ? S.of(context)!.addedToLibrary : S.of(context)!.removedFromLibrary,
+              ),
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      _logger.log('Error toggling album library: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update library: $e'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -259,7 +360,8 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
               orElse: () => track.providerMappings!.first,
             ),
           );
-          actualProvider = mapping.providerInstance;
+          // Use providerDomain (e.g., "spotify") not providerInstance (e.g., "spotify--xyz")
+          actualProvider = mapping.providerDomain;
           actualItemId = mapping.itemId;
         }
 
@@ -705,8 +807,8 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
         backgroundColor: colorScheme.background,
         body: LayoutBuilder(
           builder: (context, constraints) {
-            // Responsive cover size: 50% of screen width, clamped between 200-320
-            final coverSize = (constraints.maxWidth * 0.5).clamp(200.0, 320.0);
+            // Responsive cover size: 70% of screen width, clamped between 200-320
+            final coverSize = (constraints.maxWidth * 0.7).clamp(200.0, 320.0);
             final expandedHeight = coverSize + 70;
 
             return CustomScrollView(
@@ -730,35 +832,50 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
                   const SizedBox(height: 60),
                   GestureDetector(
                     onTap: () => _showFullscreenArt(imageUrl),
-                    child: Hero(
-                      tag: HeroTags.albumCover + (widget.album.uri ?? widget.album.itemId) + _heroTagSuffix,
-                      child: Container(
-                        width: coverSize,
-                        height: coverSize,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceVariant,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                          image: imageUrl != null
-                              ? DecorationImage(
-                                  image: CachedNetworkImageProvider(imageUrl),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
+                    // Shadow container (outside Hero for correct clipping)
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Hero(
+                        tag: HeroTags.albumCover + (widget.album.uri ?? widget.album.itemId) + _heroTagSuffix,
+                        // FIXED: Match source structure - ClipRRect(12) → Container → CachedNetworkImage
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            width: coverSize,
+                            height: coverSize,
+                            color: colorScheme.surfaceVariant,
+                            child: imageUrl != null
+                                ? CachedNetworkImage(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.cover,
+                                    // Match source memCacheWidth for smooth Hero
+                                    memCacheWidth: 256,
+                                    memCacheHeight: 256,
+                                    fadeInDuration: Duration.zero,
+                                    fadeOutDuration: Duration.zero,
+                                    placeholder: (_, __) => const SizedBox(),
+                                    errorWidget: (_, __, ___) => Icon(
+                                      Icons.album_rounded,
+                                      size: coverSize * 0.43,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.album_rounded,
+                                    size: coverSize * 0.43,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                          ),
                         ),
-                        child: imageUrl == null
-                            ? Icon(
-                                Icons.album_rounded,
-                                size: coverSize * 0.43,
-                                color: colorScheme.onSurfaceVariant,
-                              )
-                            : null,
                       ),
                     ),
                   ),
@@ -768,7 +885,7 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.fromLTRB(24.0, 24.0, 24.0, 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -909,17 +1026,32 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
                           ),
                         ),
                       ),
+
+                      const SizedBox(width: 12),
+
+                      // Library Button
+                      SizedBox(
+                        height: 50,
+                        width: 50,
+                        child: FilledButton.tonal(
+                          onPressed: _toggleLibrary,
+                          style: FilledButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Icon(
+                            _isInLibrary ? Icons.library_add_check : Icons.library_add,
+                            color: _isInLibrary
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    S.of(context)!.tracks,
-                    style: textTheme.titleLarge?.copyWith(
-                      color: colorScheme.onBackground,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -1095,109 +1227,62 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> with SingleTick
 
   void _showPlayAlbumFromHereMenu(BuildContext context, int startIndex) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final players = maProvider.availablePlayers;
 
-    _showPlayOnSheet(
-      context,
-      players,
-      onPlayerSelected: (player) {
+    GlobalPlayerOverlay.hidePlayer();
+
+    showPlayerPickerSheet(
+      context: context,
+      title: S.of(context)!.playOn,
+      players: maProvider.availablePlayers,
+      selectedPlayer: maProvider.selectedPlayer,
+      onPlayerSelected: (player) async {
         maProvider.selectPlayer(player);
-        maProvider.playTracks(
+        await maProvider.playTracks(
           player.playerId,
           _tracks,
           startIndex: startIndex,
         );
       },
-    );
+    ).whenComplete(() {
+      GlobalPlayerOverlay.showPlayer();
+    });
   }
 
   void _showPlayRadioMenu(BuildContext context, int trackIndex) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final players = maProvider.availablePlayers;
     final track = _tracks[trackIndex];
 
-    _showPlayOnSheet(
-      context,
-      players,
-      onPlayerSelected: (player) {
+    GlobalPlayerOverlay.hidePlayer();
+
+    showPlayerPickerSheet(
+      context: context,
+      title: S.of(context)!.playOn,
+      players: maProvider.availablePlayers,
+      selectedPlayer: maProvider.selectedPlayer,
+      onPlayerSelected: (player) async {
         maProvider.selectPlayer(player);
-        maProvider.playRadio(player.playerId, track);
+        await maProvider.playRadio(player.playerId, track);
       },
-    );
+    ).whenComplete(() {
+      GlobalPlayerOverlay.showPlayer();
+    });
   }
 
   void _showPlayOnMenu(BuildContext context) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final players = maProvider.availablePlayers;
 
-    _showPlayOnSheet(
-      context,
-      players,
-      onPlayerSelected: (player) {
-        maProvider.selectPlayer(player);
-        maProvider.playTracks(player.playerId, _tracks);
-      },
-    );
-  }
-
-  /// Shared "Play on..." bottom sheet that sizes to content
-  void _showPlayOnSheet(
-    BuildContext context,
-    List players, {
-    required void Function(dynamic player) onPlayerSelected,
-  }) {
-    // Slide mini player down out of the way
     GlobalPlayerOverlay.hidePlayer();
 
-    showModalBottomSheet(
+    showPlayerPickerSheet(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 16),
-            Text(
-              S.of(context)!.playOn,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            if (players.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Text(S.of(context)!.noPlayersAvailable),
-              )
-            else
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: players.length,
-                  itemBuilder: (context, index) {
-                    final player = players[index];
-                    return ListTile(
-                      leading: Icon(
-                        Icons.speaker,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      title: Text(player.name),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onPlayerSelected(player);
-                      },
-                    );
-                  },
-                ),
-              ),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-          ],
-        ),
-      ),
+      title: S.of(context)!.playOn,
+      players: maProvider.availablePlayers,
+      selectedPlayer: maProvider.selectedPlayer,
+      onPlayerSelected: (player) async {
+        maProvider.selectPlayer(player);
+        await maProvider.playTracks(player.playerId, _tracks);
+      },
     ).whenComplete(() {
-      // Slide mini player back up when sheet is dismissed
       GlobalPlayerOverlay.showPlayer();
     });
   }

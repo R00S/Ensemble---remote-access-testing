@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -11,6 +12,7 @@ import '../services/animation_debugger.dart';
 import '../theme/palette_helper.dart';
 import '../theme/theme_provider.dart';
 import '../l10n/app_localizations.dart';
+import '../services/settings_service.dart';
 import 'animated_icon_button.dart';
 import 'global_player_overlay.dart';
 import 'volume_control.dart';
@@ -61,6 +63,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   // Queue panel slide animation
   late AnimationController _queuePanelController;
   late Animation<double> _queuePanelAnimation;
+  // Cached slide position animation (avoids recreating Tween.animate every frame)
+  late Animation<Offset> _queueSlideAnimation;
 
   // Adaptive theme colors extracted from album art
   ColorScheme? _lightColorScheme;
@@ -70,17 +74,32 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   // Queue state
   PlayerQueue? _queue;
   bool _isLoadingQueue = false;
+  bool _isQueueDragging = false; // True while queue item is being dragged
+  bool _queuePanelTargetOpen = false; // Target state for queue panel (separate from animation value)
 
   // Progress tracking - uses PositionTracker stream as single source of truth
   StreamSubscription<Duration>? _positionSubscription;
+  // Queue items subscription - refreshes queue when MA pushes updates (e.g., radio mode adds tracks)
+  StreamSubscription<Map<String, dynamic>>? _queueItemsSubscription;
   final ValueNotifier<int> _progressNotifier = ValueNotifier<int>(0);
   final ValueNotifier<double?> _seekPositionNotifier = ValueNotifier<double?>(null);
 
+  // Pre-computed static colors to avoid object creation during animation frames
+  static const Color _shadowColor = Color(0x4D000000); // Colors.black.withOpacity(0.3)
+
+  // PERF Phase 1: Cached SliderThemeData - created once, reused every frame
+  static const SliderThemeData _sliderTheme = SliderThemeData(
+    trackHeight: 4,
+    thumbShape: RoundSliderThumbShape(enabledThumbRadius: 7),
+    overlayShape: RoundSliderOverlayShape(overlayRadius: 20),
+    trackShape: RoundedRectSliderTrackShape(),
+  );
+
   // Dimensions
-  static const double _collapsedHeight = 64.0;
+  static double get _collapsedHeight => MiniPlayerLayout.height;
   static const double _collapsedMargin = 12.0; // Increased from 8 to 12 (4px more gap above nav bar)
   static const double _collapsedBorderRadius = 16.0;
-  static const double _collapsedArtSize = 64.0;
+  static double get _collapsedArtSize => MiniPlayerLayout.artSize;
   static const double _bottomNavHeight = 56.0;
   static const double _edgeDeadZone = 40.0; // Dead zone for Android back gesture
 
@@ -92,7 +111,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
   // Slide animation for device switching - now supports finger-following
   late AnimationController _slideController;
-  double _slideOffset = 0.0; // -1 to 1, negative = sliding left, positive = sliding right
+  // ValueNotifier avoids setState during high-frequency drag updates
+  final ValueNotifier<double> _slideOffsetNotifier = ValueNotifier(0.0);
+  double get _slideOffset => _slideOffsetNotifier.value;
+  set _slideOffset(double value) => _slideOffsetNotifier.value = value;
   bool _isSliding = false;
   bool _isDragging = false; // True while finger is actively dragging
 
@@ -104,14 +126,58 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   // When true, we hide main content and show peek content at center
   bool _inTransition = false;
 
+  // Volume swipe state (only active when device reveal is visible)
+  bool _isDraggingVolume = false;
+  double _dragVolumeLevel = 0.0;
+  int _lastVolumeUpdateTime = 0;
+  int _lastVolumeDragEndTime = 0; // Track when last drag ended for consecutive swipes
+  bool _hasLocalVolumeOverride = false; // True if we've set volume locally
+  static const int _volumeThrottleMs = 150; // Only send volume updates every 150ms
+  static const int _precisionThrottleMs = 50; // Faster updates in precision mode
+  static const int _consecutiveSwipeWindowMs = 5000; // 5 seconds - extended window for consecutive swipes
+
+  // Volume precision mode state
+  bool _inVolumePrecisionMode = false;
+  Timer? _volumePrecisionTimer;
+  Offset? _lastVolumeDragPosition;
+  double _lastVolumeLocalX = 0.0; // Last local X position during drag
+  bool _volumePrecisionModeEnabled = true; // From settings
+  double _volumePrecisionZoomCenter = 0.0; // Volume level when precision mode started
+  double _volumePrecisionStartX = 0.0; // Finger X position when precision mode started
+  static const int _precisionTriggerMs = 800; // Hold still for 800ms to enter precision mode
+  static const double _precisionStillnessThreshold = 5.0; // Max pixels of movement considered "still"
+  static const double _precisionSensitivity = 0.1; // Zoomed range (10% = left edge to right edge)
+
   // Track favorite state for current track
   bool _isCurrentTrackFavorite = false;
   String? _lastTrackUri; // Track which track we last checked favorite status for
 
   // Cached title height to avoid TextPainter.layout() every animation frame
+  // Only invalidate when track name changes (screen width doesn't change during animation)
   double? _cachedExpandedTitleHeight;
   String? _lastMeasuredTrackName;
-  double? _lastMeasuredTitleWidth;
+
+  // PERF: Cached MaterialRectCenterArcTween for art animation
+  // Recreated only when screen dimensions change, not every frame
+  MaterialRectCenterArcTween? _artRectTween;
+  Size? _lastScreenSize;
+  double? _lastTopPadding;
+
+  // PERF: Pre-cached BoxShadow objects to avoid allocation per frame
+  static const BoxShadow _miniPlayerShadow = BoxShadow(
+    color: Color(0x4D000000), // 30% black
+    blurRadius: 8,
+    offset: Offset(0, 2),
+  );
+  static const BoxShadow _artShadowExpanded = BoxShadow(
+    color: Color(0x40000000), // 25% black
+    blurRadius: 20,
+    offset: Offset(0, 8),
+  );
+
+  // PERF Phase 5: Cached fade animations - created once, reused every frame
+  // These replace inline .drive(Tween().chain(CurveTween())) which created new objects per frame
+  late Animation<double> _fadeIn50to100;  // Fades in during second half of animation
 
   // Gesture-driven expansion state
   bool _isVerticalDragging = false;
@@ -140,22 +206,34 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       reverseCurve: Curves.easeInCubic,
     );
 
+    // PERF Phase 5: Cache fade animation - avoids creating Tween/CurveTween objects every frame
+    // Used for elements that fade in during second half of expansion (t=0.5 to t=1.0)
+    _fadeIn50to100 = _expandAnimation.drive(
+      Tween<double>(begin: 0.0, end: 1.0).chain(
+        CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.easeIn)),
+      ),
+    );
+
     // Notify listeners of expansion progress changes
     _controller.addListener(_notifyExpansionProgress);
 
     // Animation debugging - record every frame
     _controller.addListener(_recordAnimationFrame);
 
-    // Queue panel animation
+    // Queue panel animation - uses spring physics directly (no CurvedAnimation)
+    // Spring simulation already provides natural physics-based easing
+    // CurvedAnimation would distort the spring output and cause jerky motion during swipe
     _queuePanelController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _queuePanelAnimation = CurvedAnimation(
-      parent: _queuePanelController,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
+    // Use controller directly - spring physics provide the easing
+    _queuePanelAnimation = _queuePanelController;
+    // Cache the slide animation to avoid recreating Tween.animate() every frame
+    _queueSlideAnimation = Tween<Offset>(
+      begin: const Offset(1, 0),
+      end: Offset.zero,
+    ).animate(_queuePanelController);
 
     // Slide animation for device switching - used for snap/spring animations
     _slideController = AnimationController(
@@ -170,12 +248,17 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
         _loadQueue();
       } else if (status == AnimationStatus.dismissed) {
         // Close queue panel when player collapses
+        _queuePanelController.duration = _queueCloseDuration;
         _queuePanelController.reverse();
       }
     });
 
     // Subscribe to position tracker stream - single source of truth for playback position
     _subscribeToPositionTracker();
+
+    // Subscribe to queue_items_updated events from Music Assistant
+    // This keeps queue in sync when MA pushes changes (e.g., radio mode adds tracks)
+    _subscribeToQueueEvents();
 
     // Auto-refresh queue when panel is open
     _queuePanelController.addStatusListener((status) {
@@ -184,6 +267,35 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       } else if (status == AnimationStatus.dismissed) {
         _stopQueueRefreshTimer();
       }
+    });
+
+    // Load precision mode setting
+    _loadVolumePrecisionModeSetting();
+  }
+
+  Future<void> _loadVolumePrecisionModeSetting() async {
+    final enabled = await SettingsService.getVolumePrecisionMode();
+    if (mounted) {
+      _volumePrecisionModeEnabled = enabled;
+    }
+  }
+
+  void _enterVolumePrecisionMode() {
+    if (_inVolumePrecisionMode) return;
+    HapticFeedback.mediumImpact(); // Vibrate to indicate precision mode
+    setState(() {
+      _inVolumePrecisionMode = true;
+      _volumePrecisionZoomCenter = _dragVolumeLevel; // Capture current volume as zoom center
+      _volumePrecisionStartX = _lastVolumeLocalX; // Capture finger position at entry
+    });
+  }
+
+  void _exitVolumePrecisionMode() {
+    _volumePrecisionTimer?.cancel();
+    _volumePrecisionTimer = null;
+    if (!_inVolumePrecisionMode) return;
+    setState(() {
+      _inVolumePrecisionMode = false;
     });
   }
 
@@ -209,8 +321,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     _controller.dispose();
     _queuePanelController.dispose();
     _slideController.dispose();
+    _slideOffsetNotifier.dispose();
     _positionSubscription?.cancel();
+    _queueItemsSubscription?.cancel();
     _queueRefreshTimer?.cancel();
+    _volumePrecisionTimer?.cancel();
     _progressNotifier.dispose();
     _seekPositionNotifier.dispose();
     super.dispose();
@@ -223,6 +338,19 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   // Animation durations - asymmetric for snappier collapse
   static const Duration _expandDuration = Duration(milliseconds: 280);
   static const Duration _collapseDuration = Duration(milliseconds: 200);
+  static const Duration _queueOpenDuration = Duration(milliseconds: 320);
+  static const Duration _queueCloseDuration = Duration(milliseconds: 220);
+
+  // Spring description for queue panel animations
+  // Higher damping ratio prevents oscillation and ensures clean settling
+  // Critical damping = 2 * sqrt(stiffness * mass) = 2 * sqrt(550) ≈ 47
+  // Using damping slightly above critical for overdamped (no bounce) behavior
+  // PERF: Increased stiffness from 400→550 for snappier animation
+  static const SpringDescription _queueSpring = SpringDescription(
+    mass: 1.0,
+    stiffness: 550.0,
+    damping: 50.0, // Overdamped - no oscillation, clean settle
+  );
 
   void expand() {
     if (_isVerticalDragging) return;
@@ -235,10 +363,17 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
   void collapse() {
     if (_isVerticalDragging) return;
+    // If queue panel is open, close it first instead of collapsing player
+    // This prevents both from closing on a single back press
+    if (isQueuePanelOpen) {
+      closeQueuePanel();
+      return;
+    }
     AnimationDebugger.startSession('playerCollapse');
     // Instantly hide queue panel when collapsing to avoid visual glitches
-    // during Android's predictive back gesture
+    // during Android's predictive back gesture (only reached if queue already closed)
     _queuePanelController.value = 0;
+    _queuePanelTargetOpen = false;
     _controller.duration = _collapseDuration;
     _controller.reverse().then((_) {
       AnimationDebugger.endSession();
@@ -300,6 +435,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       if (currentValue > 0.0) {
         AnimationDebugger.startSession('playerCollapse');
         _queuePanelController.value = 0;
+        _queuePanelTargetOpen = false;
         _controller.duration = _collapseDuration;
         _controller.reverse().then((_) {
           AnimationDebugger.endSession();
@@ -314,12 +450,24 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
   Color? _currentExpandedBgColor;
   Color? get currentExpandedBgColor => _currentExpandedBgColor;
+  Color? _currentExpandedPrimaryColor;
+
+  // PERF Phase 4: Track last notified value to avoid unnecessary object creation
+  double _lastNotifiedProgress = -1;
 
   void _notifyExpansionProgress() {
-    playerExpansionNotifier.value = PlayerExpansionState(
-      _controller.value,
-      _currentExpandedBgColor,
-    );
+    final progress = _controller.value;
+    // PERF Phase 4: Only notify when progress changes by at least 0.01 (1%)
+    // This reduces object allocation while maintaining smooth visual transitions
+    if ((progress - _lastNotifiedProgress).abs() >= 0.01 ||
+        progress == 0.0 || progress == 1.0) {
+      _lastNotifiedProgress = progress;
+      playerExpansionNotifier.value = PlayerExpansionState(
+        progress,
+        _currentExpandedBgColor,
+        _currentExpandedPrimaryColor,
+      );
+    }
   }
 
   void _subscribeToPositionTracker() {
@@ -330,6 +478,26 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     _positionSubscription = maProvider.positionTracker.positionStream.listen((position) {
       if (!mounted) return;
       _progressNotifier.value = position.inSeconds;
+    });
+  }
+
+  void _subscribeToQueueEvents() {
+    _queueItemsSubscription?.cancel();
+    final maProvider = context.read<MusicAssistantProvider>();
+    final api = maProvider.api;
+    if (api == null) return;
+
+    // Subscribe to queue_items_updated events from Music Assistant
+    // This keeps queue UI in sync when MA adds/removes items (e.g., radio mode)
+    _queueItemsSubscription = api.queueItemsUpdatedEvents.listen((event) {
+      if (!mounted) return;
+      final playerId = event['queue_id'] as String?;
+      final selectedPlayer = maProvider.selectedPlayer;
+      // Only refresh if the event is for our current player
+      if (playerId != null && selectedPlayer != null && playerId == selectedPlayer.playerId) {
+        debugPrint('QueuePanel: Received queue_items_updated event, refreshing queue');
+        _loadQueue();
+      }
     });
   }
 
@@ -507,14 +675,76 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
   void _toggleQueuePanel() {
     if (_queuePanelController.isAnimating) return;
-    if (_queuePanelController.value == 0) {
-      _queuePanelController.forward();
+    // Use threshold check instead of exact equality (spring may not land exactly at 0/1)
+    if (_queuePanelController.value < 0.1) {
+      _openQueuePanelWithSpring();
     } else {
-      _queuePanelController.reverse();
+      _closeQueuePanelWithSpring();
     }
   }
 
+  /// Open queue panel with spring physics for natural feel
+  void _openQueuePanelWithSpring() {
+    HapticFeedback.lightImpact();
+    // setState ensures PopScope rebuilds with correct canPop value
+    setState(() {
+      _queuePanelTargetOpen = true;
+    });
+    // Use overdamped spring - settles cleanly without oscillation or snap
+    final simulation = SpringSimulation(
+      _queueSpring,
+      _queuePanelController.value,
+      1.0,
+      0.0, // velocity
+    );
+    _queuePanelController.animateWith(simulation);
+  }
+
+  /// Close queue panel with spring physics
+  /// [withHaptic]: Set to false for Android back gesture (system provides haptic)
+  void _closeQueuePanelWithSpring({double velocity = 0.0, bool withHaptic = true}) {
+    // setState ensures PopScope rebuilds with correct canPop value
+    setState(() {
+      _queuePanelTargetOpen = false;
+    });
+    if (withHaptic) {
+      HapticFeedback.lightImpact();
+    }
+    // Use overdamped spring for snappy close without oscillation
+    // Slightly stiffer than open spring for quicker settle
+    // PERF: Increased stiffness from 450→600 for snappier close
+    const closeSpring = SpringDescription(
+      mass: 1.0,
+      stiffness: 600.0,
+      damping: 52.0, // Overdamped - no bounce, clean settle
+    );
+    final simulation = SpringSimulation(
+      closeSpring,
+      _queuePanelController.value,
+      0.0,
+      velocity,
+    );
+    _queuePanelController.animateWith(simulation);
+  }
+
   bool get isQueuePanelOpen => _queuePanelController.value > 0.5;
+
+  /// Whether queue panel is intended to be open (target state, not animation value)
+  /// Use this for back gesture handling to avoid timing issues during animations
+  bool get isQueuePanelTargetOpen => _queuePanelTargetOpen;
+
+  /// Close queue panel if open (for external access via GlobalPlayerOverlay)
+  /// [withHaptic]: Set to false for Android back gesture (system provides haptic)
+  void closeQueuePanel({bool withHaptic = true}) {
+    // Use target state, not animation value, to handle rapid open-close
+    // Allow closing even during animation by stopping it first
+    if (_queuePanelTargetOpen) {
+      if (_queuePanelController.isAnimating) {
+        _queuePanelController.stop();
+      }
+      _closeQueuePanelWithSpring(withHaptic: withHaptic);
+    }
+  }
 
   /// Update favorite status when track changes
   void _updateFavoriteStatus(dynamic currentTrack) {
@@ -577,9 +807,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           final mappings = currentTrack.providerMappings as List<dynamic>?;
           if (mappings != null && mappings.isNotEmpty) {
             // Find a non-library provider mapping
+            // Use providerDomain (e.g., "spotify") not providerInstance (e.g., "spotify--xyz")
             for (final mapping in mappings) {
               if (mapping.available == true && mapping.providerInstance != 'library') {
-                actualProvider = mapping.providerInstance;
+                actualProvider = mapping.providerDomain;
                 actualItemId = mapping.itemId;
                 break;
               }
@@ -588,7 +819,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
             if (actualProvider == 'library') {
               for (final mapping in mappings) {
                 if (mapping.available == true) {
-                  actualProvider = mapping.providerInstance;
+                  actualProvider = mapping.providerDomain;
                   actualItemId = mapping.itemId;
                   break;
                 }
@@ -764,32 +995,35 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final normalizedDelta = delta / containerWidth;
     final newSlideOffset = (_slideOffset + normalizedDelta).clamp(-1.0, 1.0);
 
-    // Update peek player based on drag direction (must be inside setState to trigger rebuild)
-    setState(() {
-      _slideOffset = newSlideOffset;
-      if (_slideOffset != 0) {
-        _updatePeekPlayerState(maProvider, _slideOffset);
-      }
-    });
+    // Update slideOffset via ValueNotifier (no setState needed - avoids 60fps rebuilds)
+    _slideOffset = newSlideOffset;
+
+    // Only trigger setState when peek player changes (not every frame)
+    if (_slideOffset != 0) {
+      _updatePeekPlayerState(maProvider, _slideOffset);
+    }
   }
 
-  /// Update peek player state variables (called inside setState)
+  /// Update peek player state variables - only calls setState when peek player changes
   void _updatePeekPlayerState(MusicAssistantProvider maProvider, double dragDirection) {
     // dragDirection < 0 means swiping left (next player)
     // dragDirection > 0 means swiping right (previous player)
     final isNext = dragDirection < 0;
     final newPeekPlayer = _getAdjacentPlayer(maProvider, next: isNext);
 
+    // Only setState when peek player actually changes (prevents unnecessary rebuilds)
     if (newPeekPlayer?.playerId != _peekPlayer?.playerId) {
-      _peekPlayer = newPeekPlayer;
-      // Get the peek player's current track image if available
-      if (_peekPlayer != null) {
-        _peekTrack = maProvider.getCachedTrackForPlayer(_peekPlayer.playerId);
-        _peekImageUrl = _peekTrack != null ? maProvider.getImageUrl(_peekTrack, size: 512) : null;
-      } else {
-        _peekTrack = null;
-        _peekImageUrl = null;
-      }
+      setState(() {
+        _peekPlayer = newPeekPlayer;
+        // Get the peek player's current track image if available
+        if (_peekPlayer != null) {
+          _peekTrack = maProvider.getCachedTrackForPlayer(_peekPlayer.playerId);
+          _peekImageUrl = _peekTrack != null ? maProvider.getImageUrl(_peekTrack, size: 512) : null;
+        } else {
+          _peekTrack = null;
+          _peekImageUrl = null;
+        }
+      });
     }
   }
 
@@ -844,9 +1078,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     void animateToTarget() {
       if (!mounted) return;
       final curvedValue = Curves.easeOutCubic.transform(_slideController.value);
-      setState(() {
-        _slideOffset = startOffset + (targetOffset - startOffset) * curvedValue;
-      });
+      // ValueNotifier triggers AnimatedBuilder rebuild - no setState needed
+      _slideOffset = startOffset + (targetOffset - startOffset) * curvedValue;
     }
 
     _slideController.addListener(animateToTarget);
@@ -872,8 +1105,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       // Move peek content to center position (slideOffset = 0) while keeping it visible.
       // The main content is hidden via _inTransition flag.
       // This creates a seamless visual - peek content is already at center.
+      _slideOffset = 0.0; // ValueNotifier triggers AnimatedBuilder rebuild
       setState(() {
-        _slideOffset = 0.0;
         _isSliding = false;
         // Keep _inTransition = true and peek data intact
       });
@@ -967,19 +1200,20 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     void animateBack() {
       if (!mounted) return;
       final curvedValue = Curves.easeOutBack.transform(_slideController.value);
-      setState(() {
-        _slideOffset = startOffset * (1.0 - curvedValue);
-      });
+      // ValueNotifier triggers AnimatedBuilder rebuild - no setState needed
+      _slideOffset = startOffset * (1.0 - curvedValue);
     }
 
     _slideController.addListener(animateBack);
-    _slideController.duration = const Duration(milliseconds: 300);
+    _slideController.duration = const Duration(milliseconds: 220); // Snappier snap-back
 
     _slideController.forward().then((_) {
       if (!mounted) return;
       _slideController.removeListener(animateBack);
+      // Update slideOffset via ValueNotifier (triggers rebuild)
+      _slideOffset = 0.0;
+      // Other state changes still need setState
       setState(() {
-        _slideOffset = 0.0;
         _isSliding = false;
         _peekPlayer = null;
         _peekImageUrl = null;
@@ -1033,22 +1267,48 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           });
         }
 
-        return AnimatedBuilder(
-          animation: Listenable.merge([_expandAnimation, _queuePanelAnimation]),
-          builder: (context, _) {
-            // If no track is playing, show device selector bar
-            if (currentTrack == null) {
-              return _buildDeviceSelectorBar(context, maProvider, selectedPlayer, themeProvider);
+        // Handle Android back button - close queue panel first, then collapse player
+        // Use _queuePanelTargetOpen (intent) instead of animation value for reliable back handling
+        // This prevents race conditions where animation value crosses threshold during gesture
+        return PopScope(
+          canPop: !_queuePanelTargetOpen && !isExpanded,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) {
+              if (_queuePanelTargetOpen) {
+                // Always close queue panel on back, even if animating
+                // Stop any existing animation and start close
+                if (_queuePanelController.isAnimating) {
+                  _queuePanelController.stop();
+                }
+                // No haptic - Android back gesture provides its own haptic feedback
+                _closeQueuePanelWithSpring(withHaptic: false);
+              } else if (isExpanded) {
+                // Only collapse if not already animating
+                if (!_controller.isAnimating) {
+                  collapse();
+                }
+              }
             }
-            return _buildMorphingPlayer(
-              context,
-              maProvider,
-              selectedPlayer,
-              currentTrack,
-              imageUrl,
-              themeProvider,
-            );
           },
+          child: AnimatedBuilder(
+            // PERF: Only include _expandAnimation and _slideOffsetNotifier
+            // Queue panel has its own AnimatedBuilder - don't rebuild entire player on queue animation
+            animation: Listenable.merge([_expandAnimation, _slideOffsetNotifier]),
+            builder: (context, _) {
+              // If no track is playing, show device selector bar
+              if (currentTrack == null) {
+                return _buildDeviceSelectorBar(context, maProvider, selectedPlayer, themeProvider);
+              }
+              return _buildMorphingPlayer(
+                context,
+                maProvider,
+                selectedPlayer,
+                currentTrack,
+                imageUrl,
+                themeProvider,
+              );
+            },
+          ),
         );
       },
     );
@@ -1061,10 +1321,14 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     dynamic selectedPlayer,
     ThemeProvider themeProvider,
   ) {
-    final screenSize = MediaQuery.of(context).size;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // PERF Phase 1: Batch MediaQuery and Theme lookups
+    final mediaQuery = MediaQuery.of(context);
+    final screenSize = mediaQuery.size;
+    // Use viewPadding to match BottomNavigationBar's height calculation
+    final bottomPadding = mediaQuery.viewPadding.bottom;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     // Get adaptive colors if available
     final adaptiveScheme = themeProvider.adaptiveTheme
@@ -1095,6 +1359,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       right: _collapsedMargin,
       bottom: adjustedBottomOffset,
       child: GestureDetector(
+        // Tap to dismiss player reveal (matching _buildMorphingPlayer behavior)
+        onTap: widget.isDeviceRevealVisible ? GlobalPlayerOverlay.dismissPlayerReveal : null,
         onVerticalDragUpdate: (details) {
           if (details.primaryDelta! > 5 && widget.onRevealPlayers != null) {
             widget.onRevealPlayers!();
@@ -1135,6 +1401,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
 
           _handleHorizontalDragEnd(details, maProvider);
         },
+        onPowerToggle: () => maProvider.togglePower(selectedPlayer.playerId),
       ),
       ),
     );
@@ -1148,11 +1415,17 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     String? imageUrl,
     ThemeProvider themeProvider,
   ) {
-    final screenSize = MediaQuery.of(context).size;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final topPadding = MediaQuery.of(context).padding.top;
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // PERF Phase 1: Batch MediaQuery lookups - single InheritedWidget lookup
+    final mediaQuery = MediaQuery.of(context);
+    final screenSize = mediaQuery.size;
+    // Use viewPadding (not padding) to match BottomNavigationBar's height calculation
+    // viewPadding represents permanent system UI, padding can change (e.g., keyboard)
+    final bottomPadding = mediaQuery.viewPadding.bottom;
+    final topPadding = mediaQuery.padding.top;
+    // PERF Phase 1: Batch Theme lookups
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     // Animation progress
     final t = _expandAnimation.value;
@@ -1169,12 +1442,10 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     // Create a darker shade for the "unplayed" portion of progress bar
     final collapsedBgUnplayed = Color.lerp(collapsedBg, Colors.black, 0.3)!;
     final expandedBg = adaptiveScheme?.surface ?? const Color(0xFF121212);
-    // Only update if we have adaptive colors, otherwise keep previous value
-    if (adaptiveScheme != null) {
-      _currentExpandedBgColor = expandedBg;
-    } else if (_currentExpandedBgColor == null) {
-      _currentExpandedBgColor = expandedBg; // First time fallback
-    }
+    final expandedPrimary = adaptiveScheme?.primary;
+    // Always update to current value - don't preserve stale adaptive colors
+    _currentExpandedBgColor = expandedBg;
+    _currentExpandedPrimaryColor = expandedPrimary;
     // When collapsed, use the darker unplayed color as base (progress bar will overlay the played portion)
     // When expanded, transition to the normal background
     final backgroundColor = Color.lerp(t < 0.5 ? collapsedBgUnplayed : collapsedBg, expandedBg, t)!;
@@ -1182,16 +1453,33 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final collapsedTextColor = themeProvider.adaptiveTheme && adaptiveScheme != null
         ? adaptiveScheme.onPrimaryContainer
         : colorScheme.onPrimaryContainer;
-    final expandedTextColor = adaptiveScheme?.onSurface ?? Colors.white;
+    // Use colorScheme.onSurface as fallback instead of Colors.white for light theme support
+    final expandedTextColor = adaptiveScheme?.onSurface ?? colorScheme.onSurface;
     final textColor = Color.lerp(collapsedTextColor, expandedTextColor, t)!;
 
-    final primaryColor = adaptiveScheme?.primary ?? Colors.white;
+    // Use colorScheme.primary as fallback instead of Colors.white for light theme support
+    final primaryColor = adaptiveScheme?.primary ?? colorScheme.primary;
+
+    // PERF Phase 4: Pre-compute commonly used color opacities to reduce withOpacity() allocations per frame
+    // These are used multiple times throughout the widget tree during animation
+    final textColor50 = textColor.withOpacity(0.5);
+    final textColor60 = textColor.withOpacity(MiniPlayerLayout.secondaryTextOpacity);
+    final textColor70 = textColor.withOpacity(0.7);
+    final textColor45 = textColor.withOpacity(0.45);
+    final primaryColor20 = primaryColor.withOpacity(0.2);
+    final primaryColor70 = primaryColor.withOpacity(0.7);
+
+    // PERF Phase 5: Pre-compute Alignment and FontWeight to avoid lerp calls per text element
+    // These are used by title, artist, and player name text elements
+    final textAlignment = Alignment.lerp(Alignment.centerLeft, Alignment.center, t)!;
+    final titleFontWeight = FontWeight.lerp(MiniPlayerLayout.primaryFontWeight, FontWeight.w600, t);
 
     // Always position above bottom nav bar
+    // Overlap by 2px when expanded to eliminate any subpixel rendering gaps
     final bottomNavSpace = _bottomNavHeight + bottomPadding;
     final collapsedBottomOffset = bottomNavSpace + _collapsedMargin;
-    final expandedBottomOffset = bottomNavSpace;
-    final expandedHeight = screenSize.height - bottomNavSpace;
+    final expandedBottomOffset = bottomNavSpace - 2;
+    final expandedHeight = screenSize.height - bottomNavSpace + 2;
 
     // Apply slide offset to hide mini player (slides down off-screen)
     // Apply bounce offset for reveal animation (small downward movement)
@@ -1228,22 +1516,33 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     // Art sizing - larger on bigger screens, max 85% of width
     final maxArtSize = screenSize.width - (contentPadding * 2);
     final expandedArtSize = (maxArtSize * 0.92).clamp(280.0, 400.0);
-    final artSize = _lerpDouble(_collapsedArtSize, expandedArtSize, t);
     final artBorderRadius = _lerpDouble(0, 12, t); // Square in mini player, rounded when expanded
 
-    // Art position
+    // Art position - uses MaterialRectCenterArcTween for Hero-like curved arc path
+    // This creates a natural arc trajectory instead of straight diagonal movement
+    // PERF: Cache the tween - only recreate when screen dimensions change
     final collapsedArtLeft = 0.0;
+    final collapsedArtTop = (_collapsedHeight - _collapsedArtSize) / 2;
     final expandedArtLeft = (screenSize.width - expandedArtSize) / 2;
-    final artLeft = _lerpDouble(collapsedArtLeft, expandedArtLeft, t);
-
-    final collapsedArtTop = 0.0;
     final expandedArtTop = topPadding + headerHeight + 16;
-    final artTop = _lerpDouble(collapsedArtTop, expandedArtTop, t);
+
+    if (_artRectTween == null || _lastScreenSize != screenSize || _lastTopPadding != topPadding) {
+      final collapsedArtRect = Rect.fromLTWH(collapsedArtLeft, collapsedArtTop, _collapsedArtSize, _collapsedArtSize);
+      final expandedArtRect = Rect.fromLTWH(expandedArtLeft, expandedArtTop, expandedArtSize, expandedArtSize);
+      _artRectTween = MaterialRectCenterArcTween(begin: collapsedArtRect, end: expandedArtRect);
+      _lastScreenSize = screenSize;
+      _lastTopPadding = topPadding;
+    }
+    final artRect = _artRectTween!.lerp(t)!;
+    final artLeft = artRect.left;
+    final artTop = artRect.top;
+    final artSize = artRect.width;
 
     // Typography - uses shared MiniPlayerLayout constants for collapsed state
     final titleFontSize = _lerpDouble(MiniPlayerLayout.primaryFontSize, 24.0, t);
     final artistFontSize = _lerpDouble(MiniPlayerLayout.secondaryFontSize, 18.0, t);
 
+    // Text position - left edge position (alignment handles centering smoothly)
     final expandedTitleLeft = contentPadding;
     final titleLeft = _lerpDouble(MiniPlayerLayout.textLeft, expandedTitleLeft, t);
 
@@ -1262,9 +1561,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       letterSpacing: -0.5,
       height: 1.2,
     );
-    // Only recalculate if track name or width changed
+    // Only recalculate when track changes (screen width doesn't change during animation)
     if (_lastMeasuredTrackName != currentTrack.name ||
-        _lastMeasuredTitleWidth != expandedTitleWidth ||
         _cachedExpandedTitleHeight == null) {
       final titlePainter = TextPainter(
         text: TextSpan(text: currentTrack.name, style: titleStyle),
@@ -1273,7 +1571,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       )..layout(maxWidth: expandedTitleWidth);
       _cachedExpandedTitleHeight = titlePainter.height;
       _lastMeasuredTrackName = currentTrack.name;
-      _lastMeasuredTitleWidth = expandedTitleWidth;
     }
     final expandedTitleHeight = _cachedExpandedTitleHeight!;
 
@@ -1281,9 +1578,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final titleToArtistGap = 12.0;
     final artistToAlbumGap = 8.0;
     final artistHeight = 22.0; // Approximate height for 18px font
-    final albumHeight = currentTrack.album != null ? 20.0 : 0.0; // Album line or nothing
+    // Album/chapter line visibility must match render condition:
+    // Show when: (album exists OR audiobook) AND NOT podcast
+    final showAlbumLine = (currentTrack.album != null || maProvider.isPlayingAudiobook) && !maProvider.isPlayingPodcast;
+    final albumHeight = showAlbumLine ? 20.0 : 0.0;
     final trackInfoBlockHeight = expandedTitleHeight + titleToArtistGap + artistHeight +
-        (currentTrack.album != null ? artistToAlbumGap + albumHeight : 0.0);
+        (showAlbumLine ? artistToAlbumGap + albumHeight : 0.0);
 
     // Controls section heights (from bottom up):
     // - Volume slider: 48px
@@ -1293,7 +1593,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     // - Progress bar + times: ~70px
     // Total from bottom edge: ~48 + 40 + 70 + 64 = 222, plus safe area padding
     // Position progress bar so controls section is anchored at bottom
-    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+    // PERF Phase 1: Use already-batched bottomPadding instead of separate MediaQuery lookup
+    final bottomSafeArea = bottomPadding;
     final controlsSectionHeight = 222.0; // Total height of progress + controls + volume
     final playButtonHalfHeight = 36.0; // Half of the 72px play button container
     final expandedProgressTop = screenSize.height - bottomSafeArea - controlsSectionHeight - 24 - playButtonHalfHeight;
@@ -1311,6 +1612,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final collapsedArtistTop = MiniPlayerLayout.secondaryTop;
     final expandedArtistTop = expandedTitleTop + expandedTitleHeight + titleToArtistGap;
     final artistTop = _lerpDouble(collapsedArtistTop, expandedArtistTop, t);
+
+    // Player name - animated to move with other text elements
+    // Starts at tertiary position, animates toward artist position as it fades out
+    final collapsedPlayerNameTop = MiniPlayerLayout.tertiaryTop;
+    final expandedPlayerNameTop = expandedArtistTop; // Animates toward artist final position
+    final playerNameTop = _lerpDouble(collapsedPlayerNameTop, expandedPlayerNameTop, t);
 
     // Album - subtle, below artist
     final expandedAlbumTop = expandedArtistTop + artistHeight + artistToAlbumGap;
@@ -1331,9 +1638,6 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     // Volume - anchored near bottom with breathing room
     final volumeTop = expandedControlsTop + 88;
 
-    // Queue panel slide amount (0 = hidden, 1 = fully visible)
-    final queueT = _queuePanelAnimation.value;
-
     // Check if we have multiple players for swipe gesture
     final availablePlayers = _getAvailablePlayersSorted(maProvider);
     final hasMultiplePlayers = availablePlayers.length > 1;
@@ -1350,9 +1654,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
       child: GestureDetector(
         // Use translucent to allow child widgets (like buttons) to receive taps
         behavior: HitTestBehavior.translucent,
-        // Only handle tap when collapsed - when expanded, let children handle their own taps
-        onTap: isExpanded ? null : expand,
+        // Handle tap: when device list is visible, dismiss it; when collapsed, expand
+        onTap: isExpanded ? null : (widget.isDeviceRevealVisible ? GlobalPlayerOverlay.dismissPlayerReveal : expand),
         onVerticalDragStart: (details) {
+          // Ignore while queue item is being dragged
+          if (_isQueueDragging) return;
           // For expanded player or queue panel: start tracking immediately
           // For collapsed player: defer decision until we know swipe direction
           if (isExpanded || isQueuePanelOpen) {
@@ -1360,6 +1666,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           }
         },
         onVerticalDragUpdate: (details) {
+          // Ignore while queue item is being dragged
+          if (_isQueueDragging) return;
+
           final delta = details.primaryDelta ?? 0;
 
           // Handle queue panel close
@@ -1390,14 +1699,99 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           _handleVerticalDragUpdate(details);
         },
         onVerticalDragEnd: (details) {
+          // Ignore while queue item is being dragged
+          if (_isQueueDragging) return;
           // Finish gesture-driven expansion
           _handleVerticalDragEnd(details);
         },
+        onVerticalDragCancel: () {
+          // Reset state if gesture is cancelled (e.g., system takes over)
+          _isVerticalDragging = false;
+        },
         onHorizontalDragStart: (details) {
           _horizontalDragStartX = details.globalPosition.dx;
+          // Queue panel swipe is handled by QueuePanel's Listener (bypasses gesture arena)
+          // Start volume drag if device reveal is visible
+          if (widget.isDeviceRevealVisible && !isExpanded) {
+            // For consecutive swipes, use local volume (API may not have updated player state yet)
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final timeSinceLastDrag = now - _lastVolumeDragEndTime;
+            final isWithinWindow = timeSinceLastDrag < _consecutiveSwipeWindowMs;
+
+            // Use local volume if we have an override AND within window
+            final useLocalVolume = _hasLocalVolumeOverride && isWithinWindow;
+
+            final startVolume = useLocalVolume
+                ? _dragVolumeLevel // Continue from where last swipe ended
+                : (selectedPlayer.volumeLevel ?? 0).toDouble() / 100.0; // Fresh from player
+
+            setState(() {
+              _isDraggingVolume = true;
+              _dragVolumeLevel = startVolume;
+            });
+            _lastVolumeDragPosition = details.globalPosition;
+            HapticFeedback.lightImpact();
+          }
         },
         onHorizontalDragUpdate: (details) {
-          // Only handle in collapsed mode with multiple players
+          // Queue panel swipe is handled by QueuePanel's Listener (bypasses gesture arena)
+          // Volume swipe when device reveal is visible
+          if (widget.isDeviceRevealVisible && _isDraggingVolume && !isExpanded) {
+            // Check for stillness to trigger precision mode (only if enabled in settings)
+            final currentPosition = details.globalPosition;
+            if (_volumePrecisionModeEnabled && _lastVolumeDragPosition != null) {
+              final movement = (currentPosition - _lastVolumeDragPosition!).distance;
+
+              if (movement < _precisionStillnessThreshold) {
+                // Finger is still - start precision timer if not already running
+                if (_volumePrecisionTimer == null && !_inVolumePrecisionMode) {
+                  _volumePrecisionTimer = Timer(
+                    Duration(milliseconds: _precisionTriggerMs),
+                    _enterVolumePrecisionMode,
+                  );
+                }
+              } else {
+                // Finger moved - cancel timer (but don't exit precision mode if already in it)
+                _volumePrecisionTimer?.cancel();
+                _volumePrecisionTimer = null;
+              }
+            }
+            _lastVolumeDragPosition = currentPosition;
+            _lastVolumeLocalX = details.localPosition.dx;
+
+            double newVolume;
+
+            if (_inVolumePrecisionMode) {
+              // PRECISION MODE: Movement from entry point maps to zoomed range
+              // Full width of movement = precisionSensitivity (10%) change
+              // e.g., at 40% center: moving full width right = 50%, full width left = 30%
+              final offsetX = details.localPosition.dx - _volumePrecisionStartX;
+              final normalizedOffset = offsetX / collapsedWidth; // -1.0 to +1.0 range
+              final volumeChange = normalizedOffset * _precisionSensitivity;
+              newVolume = (_volumePrecisionZoomCenter + volumeChange).clamp(0.0, 1.0);
+            } else {
+              // NORMAL MODE: Delta-based movement (full width = 100%)
+              final dragDelta = details.delta.dx;
+              final volumeDelta = dragDelta / collapsedWidth;
+              newVolume = (_dragVolumeLevel + volumeDelta).clamp(0.0, 1.0);
+            }
+
+            if ((newVolume - _dragVolumeLevel).abs() > 0.001) {
+              setState(() {
+                _dragVolumeLevel = newVolume;
+              });
+              // Throttle API calls to prevent flooding (faster in precision mode)
+              final now = DateTime.now().millisecondsSinceEpoch;
+              final throttleMs = _inVolumePrecisionMode ? _precisionThrottleMs : _volumeThrottleMs;
+              if (now - _lastVolumeUpdateTime >= throttleMs) {
+                _lastVolumeUpdateTime = now;
+                maProvider.setVolume(selectedPlayer.playerId, (newVolume * 100).round());
+              }
+            }
+            return;
+          }
+
+          // Only handle player swipe in collapsed mode with multiple players
           if (isExpanded || !hasMultiplePlayers) return;
 
           // Ignore drags that started in the edge dead zone
@@ -1410,6 +1804,23 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           _handleHorizontalDragUpdate(details, maProvider, collapsedWidth);
         },
         onHorizontalDragEnd: (details) {
+          // Queue panel swipe is handled by QueuePanel's Listener (bypasses gesture arena)
+          // End volume drag
+          if (_isDraggingVolume) {
+            // Send final volume on release
+            maProvider.setVolume(selectedPlayer.playerId, (_dragVolumeLevel * 100).round());
+            _lastVolumeDragEndTime = DateTime.now().millisecondsSinceEpoch; // Track for consecutive swipes
+            _hasLocalVolumeOverride = true; // Mark that we have a local volume value
+            _exitVolumePrecisionMode();
+            _lastVolumeDragPosition = null;
+            setState(() {
+              _isDraggingVolume = false;
+            });
+            HapticFeedback.lightImpact();
+            _horizontalDragStartX = null;
+            return;
+          }
+
           // Ignore swipes that started near the edges (Android back gesture zone)
           final screenWidth = MediaQuery.of(context).size.width;
           final startedInDeadZone = _horizontalDragStartX != null &&
@@ -1420,32 +1831,61 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           if (startedInDeadZone) return;
 
           if (isExpanded) {
-            // Expanded mode: swipe to open/close queue
+            // Expanded mode: swipe LEFT to open queue (swipe right to close is handled by QueuePanel's Listener)
             if (details.primaryVelocity != null) {
               if (details.primaryVelocity! < -300 && !isQueuePanelOpen) {
                 _toggleQueuePanel();
-              } else if (details.primaryVelocity! > 300 && isQueuePanelOpen) {
-                _toggleQueuePanel();
               }
+              // NOTE: Swipe right to close is NOT handled here - QueuePanel's Listener
+              // handles its own swipe-to-close via onSwipeEnd callback to avoid double-trigger
             }
           } else if (hasMultiplePlayers) {
             // Collapsed mode: use finger-following handler
             _handleHorizontalDragEnd(details, maProvider);
           }
         },
+        onHorizontalDragCancel: () {
+          // Reset state if gesture is cancelled (e.g., system takes over)
+          _horizontalDragStartX = null;
+          // Queue panel swipe is handled by QueuePanel's Listener
+          if (_isDraggingVolume) {
+            _exitVolumePrecisionMode();
+            _lastVolumeDragPosition = null;
+            setState(() => _isDraggingVolume = false);
+          }
+          if (_isDragging) {
+            _isDragging = false;
+            _slideOffset = 0.0;
+            setState(() {
+              _peekPlayer = null;
+              _peekImageUrl = null;
+              _peekTrack = null;
+            });
+          }
+        },
         child: Container(
-          decoration: BoxDecoration(
+          // PERF Phase 4: Only show shadow when meaningfully visible (t < 0.5)
+          // This avoids BoxDecoration allocation for majority of animation frames
+          // Shadow fades out quickly during first half of expansion
+          decoration: t < 0.5 ? BoxDecoration(
             borderRadius: BorderRadius.circular(borderRadius),
-            border: selectedPlayer.isGrouped && t < 0.5
-                ? Border.all(color: _groupBorderColor, width: 1.5)
-                : null,
-          ),
+            boxShadow: const [_miniPlayerShadow],
+          ) : null,
+          // Use foregroundDecoration for border so it renders ON TOP of content
+          // This prevents the album art from clipping the yellow synced border
+          foregroundDecoration: maProvider.isPlayerManuallySynced(selectedPlayer.playerId) && t < 0.5
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  border: Border.all(color: _groupBorderColor, width: 1.5),
+                )
+              : null,
           child: Material(
             color: backgroundColor,
             borderRadius: BorderRadius.circular(borderRadius),
-            elevation: _lerpDouble(4, 0, t),
-            shadowColor: Colors.black.withOpacity(0.3),
-            clipBehavior: Clip.antiAlias,
+            elevation: 0, // PERF Phase 3: Fixed elevation, shadow handled by Container
+            // Use hardEdge when fully expanded (no border radius) to avoid anti-alias artifacts
+            // Use antiAlias when collapsed/animating to smooth rounded corners
+            clipBehavior: borderRadius > 0.5 ? Clip.antiAlias : Clip.hardEdge,
             child: SizedBox(
             width: width,
             height: height,
@@ -1473,18 +1913,21 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                           // Fade out as we expand - use color alpha instead of Opacity widget
                           final progressOpacity = (1.0 - (t / 0.5)).clamp(0.0, 1.0);
                           final progressAreaWidth = width - _collapsedArtSize;
-                          return ClipRRect(
-                            borderRadius: BorderRadius.only(
-                              topRight: Radius.circular(borderRadius),
-                              bottomRight: Radius.circular(borderRadius),
-                            ),
-                            clipBehavior: Clip.hardEdge,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                width: progressAreaWidth * progress,
-                                height: height,
-                                color: collapsedBg.withOpacity(progressOpacity),
+                          // RepaintBoundary isolates frequent progress updates from parent animation
+                          return RepaintBoundary(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.only(
+                                topRight: Radius.circular(borderRadius),
+                                bottomRight: Radius.circular(borderRadius),
+                              ),
+                              clipBehavior: Clip.hardEdge,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Container(
+                                  width: progressAreaWidth * progress,
+                                  height: height,
+                                  color: collapsedBg.withOpacity(progressOpacity),
+                                ),
                               ),
                             ),
                           );
@@ -1511,49 +1954,46 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // FALLBACK: Show main content if transition is active but peek content unavailable
                 // This prevents showing only the progress bar with no content
                 // GPU PERF: Use conditional instead of Opacity to avoid saveLayer
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (!(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
-                    left: artLeft + miniPlayerSlideOffset,
+                    left: artLeft,
                     top: artTop,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      // Use onTapUp instead of onTap - resolves immediately and wins
-                      // the gesture arena against the outer vertical drag detector
-                      onTapUp: t > 0.5 ? (_) => _showFullscreenArt(context, imageUrl) : null,
-                      child: Container(
-                        width: artSize,
-                        height: artSize,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(artBorderRadius),
-                          // GPU PERF: Fixed blur/offset, only animate shadow opacity
-                          boxShadow: t > 0.3
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.25 * ((t - 0.3) / 0.7).clamp(0.0, 1.0)),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        // Use RepaintBoundary to isolate art repaints during animation
-                        child: RepaintBoundary(
-                          child: ClipRRect(
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        // Use onTapUp instead of onTap - resolves immediately and wins
+                        // the gesture arena against the outer vertical drag detector
+                        onTapUp: t > 0.5 ? (_) => _showFullscreenArt(context, imageUrl) : null,
+                        child: Container(
+                          width: artSize,
+                          height: artSize,
+                          decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(artBorderRadius),
-                            child: imageUrl != null
-                                ? CachedNetworkImage(
-                                    imageUrl: imageUrl,
-                                    fit: BoxFit.cover,
-                                    // Fixed cache size to avoid mid-animation cache thrashing
-                                    memCacheWidth: 512,
-                                    memCacheHeight: 512,
-                                    fadeInDuration: Duration.zero,
-                                    fadeOutDuration: Duration.zero,
-                                    placeholderFadeInDuration: Duration.zero,
-                                    placeholder: (_, __) => _buildPlaceholderArt(colorScheme, t),
-                                    errorWidget: (_, __, ___) => _buildPlaceholderArt(colorScheme, t),
-                                  )
-                                : _buildPlaceholderArt(colorScheme, t),
+                            // PERF Phase 4: Only show shadow when near-expanded (t > 0.7)
+                            // Avoids BoxShadow allocation during most of animation
+                            boxShadow: t > 0.7 ? const [_artShadowExpanded] : null,
+                          ),
+                          // Use RepaintBoundary to isolate art repaints during animation
+                          child: RepaintBoundary(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(artBorderRadius),
+                              child: imageUrl != null
+                                  ? CachedNetworkImage(
+                                      imageUrl: imageUrl,
+                                      fit: BoxFit.cover,
+                                      // Fixed cache size to avoid mid-animation cache thrashing
+                                      memCacheWidth: 512,
+                                      memCacheHeight: 512,
+                                      fadeInDuration: Duration.zero,
+                                      fadeOutDuration: Duration.zero,
+                                      placeholderFadeInDuration: Duration.zero,
+                                      placeholder: (_, __) => _buildPlaceholderArt(colorScheme, t),
+                                      errorWidget: (_, __, ___) => _buildPlaceholderArt(colorScheme, t),
+                                    )
+                                  : _buildPlaceholderArt(colorScheme, t),
+                            ),
                           ),
                         ),
                       ),
@@ -1567,63 +2007,77 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // FALLBACK: Show if transition active but no peek content available
                 // GPU PERF: Use conditional instead of Opacity to avoid saveLayer
                 // Hint text - vertically centered in mini player
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (widget.isHintVisible && t < 0.5 && !(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
-                    left: titleLeft + miniPlayerSlideOffset,
+                    left: titleLeft,
                     // Center vertically: (64 - ~20) / 2 = 22
                     top: (MiniPlayerLayout.height - 20) / 2,
-                    child: SizedBox(
-                      width: titleWidth,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.lightbulb_outline,
-                            size: 16,
-                            color: textColor,
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              S.of(context)!.pullToSelectPlayers,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: titleFontSize,
-                                fontWeight: MiniPlayerLayout.primaryFontWeight,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: SizedBox(
+                        width: titleWidth,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.lightbulb_outline,
+                              size: 16,
+                              color: textColor,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                S.of(context)!.pullToSelectPlayers,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: titleFontSize,
+                                  fontWeight: MiniPlayerLayout.primaryFontWeight,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
 
                 // Track title - with slide animation when collapsed
                 // Hidden when hint is visible
+                // Uses Align.lerp for smooth left-to-center transition (textAlign can't be animated)
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (!(widget.isHintVisible && t < 0.5) && !(_inTransition && t < 0.1 && _peekPlayer != null))
                   Positioned(
-                    left: titleLeft + miniPlayerSlideOffset,
+                    left: titleLeft,
                     top: titleTop,
-                    child: SizedBox(
-                      width: titleWidth,
-                      child: Text(
-                        // Show player name when device reveal visible and collapsed
-                        (widget.isDeviceRevealVisible && t < 0.5)
-                            ? selectedPlayer.name
-                            : currentTrack.name,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: titleFontSize,
-                          fontWeight: t > 0.5 ? FontWeight.w600 : MiniPlayerLayout.primaryFontWeight,
-                          letterSpacing: t > 0.5 ? -0.5 : 0,
-                          height: t > 0.5 ? 1.2 : null, // Only use line height when expanded
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: SizedBox(
+                        width: titleWidth,
+                        child: Align(
+                          // PERF Phase 5: Use pre-computed alignment
+                          alignment: textAlignment,
+                          child: Text(
+                            currentTrack.name,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: titleFontSize,
+                              // PERF Phase 5: Use pre-computed font weight
+                              fontWeight: titleFontWeight,
+                              // Lerp letter spacing smoothly (0 to -0.5)
+                              letterSpacing: _lerpDouble(0, -0.5, t),
+                              // Lerp line height smoothly (1.0 default to 1.2)
+                              height: _lerpDouble(1.0, 1.2, t),
+                            ),
+                            textAlign: TextAlign.left, // Keep static, Align handles centering
+                            // Use 1 line when collapsed to prevent overlap with artist line,
+                            // expand to 2 lines during animation for long titles
+                            maxLines: t > 0.3 ? 2 : 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        textAlign: t > 0.5 ? TextAlign.center : TextAlign.left,
-                        maxLines: t > 0.5 ? 2 : 1,
-                        softWrap: t > 0.5, // false in collapsed to ensure ellipsis truncation
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -1634,27 +2088,67 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // For audiobooks: show author from audiobook context
                 // Hidden during transition to prevent flash
                 // FALLBACK: Show if transition active but no peek content available
-                // GPU PERF: Use conditional instead of Opacity to avoid saveLayer
+                // Uses Align.lerp for smooth left-to-center transition
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
                 if (!(_inTransition && t < 0.1 && _peekPlayer != null) && !(widget.isHintVisible && t < 0.5))
                   Positioned(
-                    left: titleLeft + miniPlayerSlideOffset,
+                    left: titleLeft,
                     top: artistTop,
-                    child: SizedBox(
-                      width: titleWidth,
-                      child: Text(
-                        // Always show artist/author (was showing "Now Playing" when device reveal visible)
-                        maProvider.isPlayingAudiobook
-                            ? (maProvider.currentAudiobook?.authorsString ?? S.of(context)!.unknownAuthor)
-                            : currentTrack.artistsString,
-                        style: TextStyle(
-                          color: textColor.withOpacity(t > 0.5 ? 0.7 : MiniPlayerLayout.secondaryTextOpacity),
-                          fontSize: artistFontSize,
-                          fontWeight: t > 0.5 ? FontWeight.w400 : FontWeight.normal,
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: SizedBox(
+                        width: titleWidth,
+                        child: Align(
+                          // PERF Phase 5: Use pre-computed alignment
+                          alignment: textAlignment,
+                          child: Text(
+                            // Always show artist/author/podcast name (was showing "Now Playing" when device reveal visible)
+                            maProvider.isPlayingAudiobook
+                                ? (maProvider.currentAudiobook?.authorsString ?? S.of(context)!.unknownAuthor)
+                                : maProvider.isPlayingPodcast
+                                    ? (maProvider.currentPodcastName ?? S.of(context)!.podcasts)
+                                    : currentTrack.artistsString,
+                            style: TextStyle(
+                              // PERF Phase 4: Use Color.lerp between pre-computed colors
+                              color: Color.lerp(textColor60, textColor70, t),
+                              fontSize: artistFontSize,
+                            ),
+                            textAlign: TextAlign.left, // Keep static, Align handles centering
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        textAlign: t > 0.5 ? TextAlign.center : TextAlign.left,
-                        maxLines: 1,
-                        softWrap: t > 0.5, // false in collapsed to ensure ellipsis truncation
-                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+
+                // Player name - third line, fades out during first half of expansion
+                // Uses staggered opacity: fully visible at t=0, fully faded at t=0.4
+                // Position animates smoothly throughout
+                // PERF Phase 4: Use Transform.translate for slide offset (GPU-accelerated)
+                if (t < 0.5 && !(_inTransition && t < 0.1 && _peekPlayer != null) && !(widget.isHintVisible && t < 0.5))
+                  Positioned(
+                    left: titleLeft,
+                    top: playerNameTop,
+                    child: Transform.translate(
+                      offset: Offset(miniPlayerSlideOffset, 0),
+                      child: SizedBox(
+                        width: titleWidth,
+                        child: Align(
+                          // PERF Phase 5: Use pre-computed alignment
+                          alignment: textAlignment,
+                          child: Text(
+                            selectedPlayer.name,
+                            style: TextStyle(
+                              // Staggered fade: 1.0 at t=0, 0.0 at t=0.4
+                              color: textColor.withOpacity((1.0 - t / 0.4).clamp(0.0, 1.0)),
+                              fontSize: MiniPlayerLayout.tertiaryFontSize,
+                            ),
+                            textAlign: TextAlign.left, // Keep static, Align handles centering
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1662,7 +2156,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Album name OR Chapter name (expanded only)
                 // GPU PERF: Use color alpha instead of Opacity widget
                 // For audiobooks: show current chapter; for music: show album
-                if (t > 0.3 && (currentTrack.album != null || maProvider.isPlayingAudiobook))
+                // For podcasts: hide album line since podcast name is already shown in artist position
+                if (t > 0.3 && (currentTrack.album != null || maProvider.isPlayingAudiobook) && !maProvider.isPlayingPodcast)
                   Positioned(
                     left: contentPadding,
                     right: contentPadding,
@@ -1688,26 +2183,23 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   Positioned(
                     left: contentPadding,
                     right: contentPadding,
-                    top: expandedAlbumTop + (currentTrack.album != null ? 24 : 0),
+                    top: expandedAlbumTop + (maProvider.isPlayingAudiobook ? 24 : (currentTrack.album != null ? 24 : 0)),
                     child: FadeTransition(
-                      opacity: _expandAnimation.drive(
-                        Tween(begin: 0.0, end: 1.0).chain(
-                          CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.easeIn)),
-                        ),
-                      ),
+                      // PERF Phase 5: Use cached animation instead of creating new Tween every frame
+                      opacity: _fadeIn50to100,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
                             Icons.graphic_eq_rounded,
                             size: 14,
-                            color: primaryColor.withOpacity(0.7),
+                            color: primaryColor70, // PERF: Use cached color
                           ),
                           const SizedBox(width: 6),
                           Text(
                             maProvider.currentAudioFormat ?? S.of(context)!.pcmAudio,
                             style: TextStyle(
-                              color: primaryColor.withOpacity(0.7),
+                              color: primaryColor70, // PERF: Use cached color
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
                               letterSpacing: 0.3,
@@ -1726,11 +2218,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     right: contentPadding,
                     top: expandedProgressTop,
                     child: FadeTransition(
-                      opacity: _expandAnimation.drive(
-                        Tween(begin: 0.0, end: 1.0).chain(
-                          CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.easeIn)),
-                        ),
-                      ),
+                      // PERF Phase 5: Use cached animation instead of creating new Tween every frame
+                      opacity: _fadeIn50to100,
                       child: ValueListenableBuilder<int>(
                         valueListenable: _progressNotifier,
                         builder: (context, elapsedTime, child) {
@@ -1742,13 +2231,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                                 children: [
                                   SizedBox(
                                     height: 48, // Increase touch target height
+                                    // PERF Phase 1: Use cached SliderThemeData
                                     child: SliderTheme(
-                                      data: SliderThemeData(
-                                        trackHeight: 4,
-                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
-                                        trackShape: const RoundedRectSliderTrackShape(),
-                                      ),
+                                      data: _sliderTheme,
                                       child: Slider(
                                         value: currentProgress.clamp(0.0, currentTrack.duration!.inSeconds.toDouble()).toDouble(),
                                         max: currentTrack.duration!.inSeconds.toDouble(),
@@ -1771,7 +2256,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                                           }
                                         },
                                         activeColor: primaryColor,
-                                        inactiveColor: primaryColor.withOpacity(0.2),
+                                        inactiveColor: primaryColor20, // PERF: Use cached color
                                       ),
                                     ),
                                   ),
@@ -1783,7 +2268,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                                         Text(
                                           _formatDuration(currentProgress.toInt()),
                                           style: TextStyle(
-                                            color: textColor.withOpacity(0.5),
+                                            color: textColor50, // PERF: Use cached color
                                             fontSize: 13, // Increased from 11 to 13
                                             fontWeight: FontWeight.w500,
                                             fontFeatures: const [FontFeature.tabularFigures()],
@@ -1792,7 +2277,7 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                                         Text(
                                           _formatDuration(currentTrack.duration!.inSeconds),
                                           style: TextStyle(
-                                            color: textColor.withOpacity(0.5),
+                                            color: textColor50, // PERF: Use cached color
                                             fontSize: 13, // Increased from 11 to 13
                                             fontWeight: FontWeight.w500,
                                             fontFeatures: const [FontFeature.tabularFigures()],
@@ -1811,37 +2296,157 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                   ),
 
                 // Playback controls - with slide animation when collapsed
+                // Uses curved interpolation to smoothly transition from right-aligned to centered
+                // Use skip 30s controls for audiobooks and podcasts
                 Positioned(
-                  left: t > 0.5 ? 0 : null,
-                  right: t > 0.5 ? 0 : collapsedControlsRight - miniPlayerSlideOffset,
+                  // Full width positioning, alignment handled by child Align widget
+                  left: 0,
+                  right: 0,
                   top: controlsTop,
-                  child: maProvider.isPlayingAudiobook
-                      ? _buildAudiobookControls(
-                          maProvider: maProvider,
-                          selectedPlayer: selectedPlayer,
-                          textColor: textColor,
-                          primaryColor: primaryColor,
-                          backgroundColor: backgroundColor,
-                          skipButtonSize: skipButtonSize,
-                          playButtonSize: playButtonSize,
-                          playButtonContainerSize: playButtonContainerSize,
-                          t: t,
-                          expandedElementsOpacity: expandedElementsOpacity,
-                        )
-                      : Row(
+                  child: (maProvider.isPlayingAudiobook || maProvider.isPlayingPodcast)
+                      // When device reveal is visible (player list shown), use compact controls
+                      // for audiobooks/podcasts: Play, Forward 30, Power
+                      ? widget.isDeviceRevealVisible && t < 0.5
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                // Play/Pause - compact like PlayerCard
+                                Transform.translate(
+                                  offset: const Offset(3, 0),
+                                  child: SizedBox(
+                                    width: 44,
+                                    height: 44,
+                                    child: IconButton(
+                                      icon: Icon(
+                                        selectedPlayer.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                        color: textColor,
+                                        size: 28,
+                                      ),
+                                      onPressed: () => maProvider.playPauseSelectedPlayer(),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ),
+                                // Forward 30 seconds
+                                Transform.translate(
+                                  offset: const Offset(6, 0),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      Icons.forward_30_rounded,
+                                      color: textColor,
+                                      size: 28,
+                                    ),
+                                    onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, 30),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ),
+                                // Power button
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.power_settings_new_rounded,
+                                    color: selectedPlayer.powered ? textColor : textColor50,
+                                    size: 20,
+                                  ),
+                                  onPressed: () => maProvider.togglePower(selectedPlayer.playerId),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                            )
+                          : _buildAudiobookControls(
+                              maProvider: maProvider,
+                              selectedPlayer: selectedPlayer,
+                              textColor: textColor,
+                              primaryColor: primaryColor,
+                              backgroundColor: backgroundColor,
+                              skipButtonSize: skipButtonSize,
+                              playButtonSize: playButtonSize,
+                              playButtonContainerSize: playButtonContainerSize,
+                              t: t,
+                              expandedElementsOpacity: expandedElementsOpacity,
+                            )
+                      // When device reveal is visible (player list shown), use compact controls
+                      // like PlayerCard: Play, Next, Power - matching other players in the list
+                      : widget.isDeviceRevealVisible && t < 0.5
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                // Play/Pause - compact like PlayerCard
+                                // Touch target increased to 44dp for accessibility
+                                Transform.translate(
+                                  offset: const Offset(3, 0),
+                                  child: SizedBox(
+                                    width: 44,
+                                    height: 44,
+                                    child: IconButton(
+                                      icon: Icon(
+                                        selectedPlayer.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                        color: textColor,
+                                        size: 28,
+                                      ),
+                                      onPressed: () => maProvider.playPauseSelectedPlayer(),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ),
+                                // Skip next - nudged right like PlayerCard
+                                Transform.translate(
+                                  offset: const Offset(6, 0),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      Icons.skip_next_rounded,
+                                      color: textColor,
+                                      size: 28,
+                                    ),
+                                    onPressed: () => maProvider.nextTrackSelectedPlayer(),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ),
+                                // Power button - smallest, like PlayerCard
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.power_settings_new_rounded,
+                                    color: selectedPlayer.powered ? textColor : textColor50,
+                                    size: 20,
+                                  ),
+                                  onPressed: () => maProvider.togglePower(selectedPlayer.playerId),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                            )
+                          // Wrap in Align for smooth transition from right to center
+                          : Align(
+                    // Smooth alignment: lerp from right (1.0) to center (0.0)
+                    alignment: Alignment.lerp(
+                      Alignment(1.0 - (collapsedControlsRight / (width / 2)), 0), // Right with margin
+                      Alignment.center,
+                      t,
+                    )!,
+                    child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: t > 0.5 ? MainAxisAlignment.center : MainAxisAlignment.end,
                     children: [
-                      // Shuffle (expanded only)
-                      // GPU PERF: Use color alpha instead of Opacity
-                      if (t > 0.5 && expandedElementsOpacity > 0.1)
-                        _buildSecondaryButton(
-                          icon: Icons.shuffle_rounded,
-                          color: (_queue?.shuffle == true ? primaryColor : textColor.withOpacity(0.5))
-                              .withOpacity(expandedElementsOpacity),
-                          onPressed: _isLoadingQueue ? null : _toggleShuffle,
-                        ),
-                      if (t > 0.5) SizedBox(width: _lerpDouble(0, 20, t)),
+                      // Shuffle - animate size from 0 to prevent jerk when appearing
+                      // Always render but with animated width to smoothly grow into place
+                      SizedBox(
+                        width: _lerpDouble(0, 44, t), // Animate width from 0 to 44
+                        height: 44,
+                        child: t > 0.3 ? Opacity(
+                          opacity: expandedElementsOpacity,
+                          child: _buildSecondaryButton(
+                            icon: Icons.shuffle_rounded,
+                            color: _queue?.shuffle == true ? primaryColor : textColor50,
+                            onPressed: _isLoadingQueue ? null : _toggleShuffle,
+                          ),
+                        ) : null,
+                      ),
+                      SizedBox(width: _lerpDouble(0, 20, t)),
 
                       // Previous
                       _buildControlButton(
@@ -1876,20 +2481,25 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                         useAnimation: t > 0.5,
                       ),
 
-                      // Repeat (expanded only)
-                      // GPU PERF: Use color alpha instead of Opacity
-                      if (t > 0.5) SizedBox(width: _lerpDouble(0, 20, t)),
-                      if (t > 0.5 && expandedElementsOpacity > 0.1)
-                        _buildSecondaryButton(
-                          icon: _queue?.repeatMode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                          color: (_queue?.repeatMode != null && _queue!.repeatMode != 'off'
-                                  ? primaryColor
-                                  : textColor.withOpacity(0.5))
-                              .withOpacity(expandedElementsOpacity),
-                          onPressed: _isLoadingQueue ? null : _cycleRepeat,
-                        ),
+                      // Repeat - animate size from 0 to prevent jerk when appearing
+                      SizedBox(width: _lerpDouble(0, 20, t)),
+                      SizedBox(
+                        width: _lerpDouble(0, 44, t), // Animate width from 0 to 44
+                        height: 44,
+                        child: t > 0.3 ? Opacity(
+                          opacity: expandedElementsOpacity,
+                          child: _buildSecondaryButton(
+                            icon: _queue?.repeatMode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                            color: _queue?.repeatMode != null && _queue!.repeatMode != 'off'
+                                ? primaryColor
+                                : textColor50,
+                            onPressed: _isLoadingQueue ? null : _cycleRepeat,
+                          ),
+                        ) : null,
+                      ),
                     ],
                   ),
+                ),
                 ),
 
                 // Volume control (expanded only)
@@ -1900,12 +2510,9 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     right: 48,
                     top: volumeTop,
                     child: FadeTransition(
-                      opacity: _expandAnimation.drive(
-                        Tween(begin: 0.0, end: 1.0).chain(
-                          CurveTween(curve: const Interval(0.5, 1.0, curve: Curves.easeIn)),
-                        ),
-                      ),
-                      child: const VolumeControl(compact: false),
+                      // PERF Phase 5: Use cached animation instead of creating new Tween every frame
+                      opacity: _fadeIn50to100,
+                      child: VolumeControl(compact: false, accentColor: primaryColor),
                     ),
                   ),
 
@@ -1926,39 +2533,61 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                     ),
                   ),
 
-                // Favorite button (expanded only) - hide when queue panel is open
-                // GPU PERF: Use icon color alpha instead of Opacity
-                if (t > 0.3 && queueT < 0.5)
-                  Positioned(
-                    top: topPadding + 4,
-                    right: 52,
-                    child: IconButton(
-                      icon: Icon(
-                        _isCurrentTrackFavorite ? Icons.favorite : Icons.favorite_border,
-                        color: (_isCurrentTrackFavorite ? Colors.red : textColor)
-                            .withOpacity(((t - 0.3) / 0.7).clamp(0.0, 1.0) * (1 - queueT * 2).clamp(0.0, 1.0)),
-                        size: 24,
-                      ),
-                      onPressed: () => _toggleCurrentTrackFavorite(currentTrack),
-                      padding: const EdgeInsets.all(12),
-                    ),
-                  ),
-
-                // Queue button (expanded only) - hide when queue panel is open
-                // GPU PERF: Use icon color alpha instead of Opacity
-                if (t > 0.3 && queueT < 0.5)
-                  Positioned(
-                    top: topPadding + 4,
-                    right: 4,
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.queue_music_rounded,
-                        color: textColor.withOpacity(((t - 0.3) / 0.7).clamp(0.0, 1.0) * (1 - queueT * 2).clamp(0.0, 1.0)),
-                        size: 24,
-                      ),
-                      onPressed: _toggleQueuePanel,
-                      padding: const EdgeInsets.all(12),
-                    ),
+                // Favorite + Queue buttons (expanded only) - fade when queue panel opens
+                // PERF: Own AnimatedBuilder - only rebuilds these 2 buttons on queue animation
+                if (t > 0.3)
+                  AnimatedBuilder(
+                    animation: _queuePanelAnimation,
+                    builder: (context, _) {
+                      final queueFade = _queuePanelAnimation.value;
+                      // Hide completely when queue > 0.5
+                      if (queueFade >= 0.5) return const SizedBox.shrink();
+                      final fadeOpacity = (1 - queueFade * 2).clamp(0.0, 1.0);
+                      final expandOpacity = ((t - 0.3) / 0.7).clamp(0.0, 1.0);
+                      return Stack(
+                        children: [
+                          // Favorite button
+                          Positioned(
+                            top: topPadding + 4,
+                            right: 52,
+                            child: TweenAnimationBuilder<double>(
+                              key: ValueKey(_isCurrentTrackFavorite),
+                              tween: Tween(begin: 1.3, end: 1.0),
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutBack,
+                              builder: (context, scale, child) => Transform.scale(
+                                scale: scale,
+                                child: child,
+                              ),
+                              child: IconButton(
+                                icon: Icon(
+                                  _isCurrentTrackFavorite ? Icons.favorite : Icons.favorite_border,
+                                  color: (_isCurrentTrackFavorite ? Colors.red : textColor)
+                                      .withOpacity(expandOpacity * fadeOpacity),
+                                  size: 24,
+                                ),
+                                onPressed: () => _toggleCurrentTrackFavorite(currentTrack),
+                                padding: const EdgeInsets.all(12),
+                              ),
+                            ),
+                          ),
+                          // Queue button
+                          Positioned(
+                            top: topPadding + 4,
+                            right: 4,
+                            child: IconButton(
+                              icon: Icon(
+                                Icons.queue_music_rounded,
+                                color: textColor.withOpacity(expandOpacity * fadeOpacity),
+                                size: 24,
+                              ),
+                              onPressed: _toggleQueuePanel,
+                              padding: const EdgeInsets.all(12),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
 
                 // Player name (expanded only)
@@ -1987,38 +2616,105 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
                 // Queue/Chapters panel (slides in from right)
                 // For audiobooks: show chapters panel
                 // For music: show queue panel
-                if (t > 0.5 && queueT > 0)
+                // PERF: Own AnimatedBuilder - only rebuilds queue panel section on queue animation
+                // Main player doesn't rebuild when queue slides in/out
+                if (t > 0.5)
                   Positioned.fill(
-                    child: RepaintBoundary(
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(1, 0),
-                          end: Offset.zero,
-                        ).animate(_queuePanelAnimation),
-                        child: maProvider.isPlayingAudiobook
-                            ? ChaptersPanel(
-                                maProvider: maProvider,
-                                audiobook: maProvider.currentAudiobook,
-                                textColor: textColor,
-                                primaryColor: primaryColor,
-                                backgroundColor: expandedBg,
-                                topPadding: topPadding,
-                                onClose: _toggleQueuePanel,
-                              )
-                            : QueuePanel(
-                                maProvider: maProvider,
-                                queue: _queue,
-                                isLoading: _isLoadingQueue,
-                                textColor: textColor,
-                                primaryColor: primaryColor,
-                                backgroundColor: expandedBg,
-                                topPadding: topPadding,
-                                onClose: _toggleQueuePanel,
-                                onRefresh: _loadQueue,
-                              ),
+                    child: AnimatedBuilder(
+                      animation: _queuePanelAnimation,
+                      builder: (context, child) {
+                        final queueProgress = _queuePanelAnimation.value;
+                        return Offstage(
+                          offstage: queueProgress == 0,
+                          child: child,
+                        );
+                      },
+                      // PERF: Child is not rebuilt - only Offstage wrapper updates
+                      child: RepaintBoundary(
+                        child: SlideTransition(
+                          // PERF: Use cached animation instead of Tween.animate() every frame
+                          position: _queueSlideAnimation,
+                          child: maProvider.isPlayingAudiobook
+                              ? ChaptersPanel(
+                                  maProvider: maProvider,
+                                  audiobook: maProvider.currentAudiobook,
+                                  textColor: textColor,
+                                  primaryColor: primaryColor,
+                                  backgroundColor: expandedBg,
+                                  topPadding: topPadding,
+                                  onClose: _toggleQueuePanel,
+                                )
+                              : QueuePanel(
+                                  maProvider: maProvider,
+                                  queue: _queue,
+                                  isLoading: _isLoadingQueue,
+                                  textColor: textColor,
+                                  primaryColor: primaryColor,
+                                  backgroundColor: expandedBg,
+                                  topPadding: topPadding,
+                                  onClose: _toggleQueuePanel,
+                                  onRefresh: _loadQueue,
+                                  onDraggingChanged: (isDragging) {
+                                    _isQueueDragging = isDragging;
+                                  },
+                                  onSwipeStart: () {
+                                    // Haptic feedback when swipe gesture recognized
+                                    HapticFeedback.selectionClick();
+                                  },
+                                  onSwipeUpdate: (_) {
+                                    // No finger tracking - just wait for swipe end
+                                    // This avoids jank from direct value manipulation
+                                  },
+                                  onSwipeEnd: (velocity, totalDx) {
+                                    // Decide based on velocity and total displacement
+                                    final screenWidth = MediaQuery.of(context).size.width;
+                                    final swipeProgress = totalDx / screenWidth;
+                                    final shouldClose = velocity > 150 || swipeProgress > 0.25;
+
+                                    if (shouldClose) {
+                                      _closeQueuePanelWithSpring();
+                                    }
+                                    // If not closing, panel stays open (no snap-back needed since we didn't move it)
+                                  },
+                                ),
+                        ),
                       ),
                     ),
                   ),
+
+                // Volume swipe overlay (covers entire mini player when dragging volume)
+                // Only visible when device reveal is open and user is dragging
+                // Positioned last in Stack so it renders ON TOP of all content
+                // Uses AnimatedOpacity for smooth fade in/out transition
+                if (t < 0.5)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      ignoring: !_isDraggingVolume,
+                      child: AnimatedOpacity(
+                        opacity: _isDraggingVolume ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 120),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(borderRadius),
+                          child: Stack(
+                            children: [
+                              // Unfilled (darker) background
+                              Container(color: collapsedBgUnplayed),
+                              // Filled (lighter) portion based on volume
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: FractionallySizedBox(
+                                  widthFactor: _dragVolumeLevel.clamp(0.0, 1.0),
+                                  heightFactor: 1.0,
+                                  child: Container(color: collapsedBg),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
               ],
             ),
           ),
@@ -2056,12 +2752,15 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     final hasTrack = _peekTrack != null && peekImageUrl != null;
     final peekTrackName = hasTrack ? _peekTrack!.name : (peekPlayer?.name ?? S.of(context)!.unknown);
     final peekArtistName = hasTrack ? (_peekTrack!.artistsString ?? '') : S.of(context)!.swipeToSwitchDevice;
+    // Show player name as third line only when playing
+    final peekPlayerName = hasTrack ? (peekPlayer?.name ?? '') : null;
 
     return Transform.translate(
       offset: Offset(peekBaseOffset, 0),
       child: MiniPlayerContent(
         primaryText: peekTrackName,
         secondaryText: peekArtistName,
+        tertiaryText: peekPlayerName,
         imageUrl: hasTrack ? peekImageUrl : null,
         playerName: peekPlayer?.name ?? '',
         backgroundColor: backgroundColor,
@@ -2124,11 +2823,14 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   }
 
   Widget _buildPlaceholderArt(ColorScheme colorScheme, double t) {
+    // Use theme-aware colors for both collapsed and expanded states
+    final expandedBgColor = colorScheme.surfaceContainerHighest;
+    final expandedIconColor = colorScheme.onSurface.withOpacity(0.24);
     return Container(
-      color: Color.lerp(colorScheme.surfaceVariant, const Color(0xFF2a2a2a), t),
+      color: Color.lerp(colorScheme.surfaceVariant, expandedBgColor, t),
       child: Icon(
         Icons.music_note_rounded,
-        color: Color.lerp(colorScheme.onSurfaceVariant, Colors.white24, t),
+        color: Color.lerp(colorScheme.onSurfaceVariant, expandedIconColor, t),
         size: _lerpDouble(24, 120, t),
       ),
     );
@@ -2176,7 +2878,8 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
   }
 
   /// Build audiobook-specific playback controls
-  /// Layout: [Prev Chapter] [-30s] [Play/Pause] [+30s] [Next Chapter]
+  /// Collapsed: [-30s] [Play/Pause] [+30s]
+  /// Expanded: [Prev Chapter] [-30s] [-10s] [Play/Pause] [+10s] [+30s] [Next Chapter]
   Widget _buildAudiobookControls({
     required MusicAssistantProvider maProvider,
     required dynamic selectedPlayer,
@@ -2190,19 +2893,20 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     required double expandedElementsOpacity,
   }) {
     final hasChapters = maProvider.currentAudiobook?.chapters?.isNotEmpty ?? false;
+    final isExpanded = t > 0.5;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: t > 0.5 ? MainAxisAlignment.center : MainAxisAlignment.end,
+      mainAxisAlignment: isExpanded ? MainAxisAlignment.center : MainAxisAlignment.end,
       children: [
         // Previous Chapter (expanded only, if chapters available)
-        if (t > 0.5 && expandedElementsOpacity > 0.1 && hasChapters)
+        if (isExpanded && expandedElementsOpacity > 0.1 && hasChapters)
           _buildSecondaryButton(
             icon: Icons.skip_previous_rounded,
             color: textColor.withOpacity(expandedElementsOpacity),
             onPressed: () => maProvider.seekToPreviousChapter(selectedPlayer.playerId),
           ),
-        if (t > 0.5 && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
+        if (isExpanded && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
 
         // Rewind 30 seconds
         _buildControlButton(
@@ -2210,9 +2914,21 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           color: textColor,
           size: skipButtonSize,
           onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, -30),
-          useAnimation: t > 0.5,
+          useAnimation: isExpanded,
         ),
-        SizedBox(width: _lerpDouble(0, 20, t)),
+
+        // Rewind 10 seconds (expanded only, same size as 30s)
+        if (isExpanded) ...[
+          SizedBox(width: _lerpDouble(0, 8, t)),
+          _buildControlButton(
+            icon: Icons.replay_10_rounded,
+            color: textColor,
+            size: skipButtonSize,
+            onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, -10),
+            useAnimation: true,
+          ),
+        ],
+        SizedBox(width: _lerpDouble(0, 12, t)),
 
         // Play/Pause
         _buildPlayButton(
@@ -2226,7 +2942,19 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           onPressed: () => maProvider.playPauseSelectedPlayer(),
           onLongPress: () => maProvider.stopPlayer(selectedPlayer.playerId),
         ),
-        SizedBox(width: _lerpDouble(0, 20, t)),
+        SizedBox(width: _lerpDouble(0, 12, t)),
+
+        // Forward 10 seconds (expanded only, same size as 30s)
+        if (isExpanded) ...[
+          _buildControlButton(
+            icon: Icons.forward_10_rounded,
+            color: textColor,
+            size: skipButtonSize,
+            onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, 10),
+            useAnimation: true,
+          ),
+          SizedBox(width: _lerpDouble(0, 8, t)),
+        ],
 
         // Forward 30 seconds
         _buildControlButton(
@@ -2234,12 +2962,12 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
           color: textColor,
           size: skipButtonSize,
           onPressed: () => maProvider.seekRelative(selectedPlayer.playerId, 30),
-          useAnimation: t > 0.5,
+          useAnimation: isExpanded,
         ),
 
         // Next Chapter (expanded only, if chapters available)
-        if (t > 0.5 && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
-        if (t > 0.5 && expandedElementsOpacity > 0.1 && hasChapters)
+        if (isExpanded && hasChapters) SizedBox(width: _lerpDouble(0, 12, t)),
+        if (isExpanded && expandedElementsOpacity > 0.1 && hasChapters)
           _buildSecondaryButton(
             icon: Icons.skip_next_rounded,
             color: textColor.withOpacity(expandedElementsOpacity),
@@ -2282,12 +3010,11 @@ class ExpandablePlayerState extends State<ExpandablePlayer>
     return SizedBox(
       width: 44,
       height: 44,
-      child: IconButton(
-        icon: Icon(icon),
+      child: AnimatedIconButton(
+        icon: icon,
         color: color,
         iconSize: 22,
         onPressed: onPressed,
-        padding: EdgeInsets.zero,
       ),
     );
   }

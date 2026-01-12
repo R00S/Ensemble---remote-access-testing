@@ -82,5 +82,9 @@ class HardwareVolumeService {
     } catch (e) {
       _logger.error('Failed to stop volume button listening', context: 'VolumeService', error: e);
     }
+
+    // Close StreamControllers to prevent memory leaks
+    await _volumeUpController.close();
+    await _volumeDownController.close();
   }
 }

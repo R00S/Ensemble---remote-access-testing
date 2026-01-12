@@ -5,6 +5,7 @@ import 'package:material_design_icons_flutter/material_design_icons_flutter.dart
 import '../models/media_item.dart';
 import '../providers/music_assistant_provider.dart';
 import '../widgets/global_player_overlay.dart';
+import '../widgets/player_picker_sheet.dart';
 import '../theme/palette_helper.dart';
 import '../theme/theme_provider.dart';
 import '../services/debug_logger.dart';
@@ -139,7 +140,8 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
               orElse: () => widget.audiobook.providerMappings!.first,
             ),
           );
-          actualProvider = mapping.providerInstance;
+          // Use providerDomain (e.g., "spotify") not providerInstance (e.g., "spotify--xyz")
+          actualProvider = mapping.providerDomain;
           actualItemId = mapping.itemId;
         }
 
@@ -168,7 +170,6 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
           throw Exception('Could not determine library ID for this audiobook');
         }
 
-        _logger.log('Removing audiobook from favorites: libraryItemId=$libraryItemId');
         success = await maProvider.removeFromFavorites(
           mediaType: 'audiobook',
           libraryItemId: libraryItemId,
@@ -209,65 +210,23 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
 
   void _showPlayOnMenu(BuildContext context) {
     final maProvider = context.read<MusicAssistantProvider>();
-    final players = maProvider.availablePlayers;
 
-    // Slide mini player down out of the way
     GlobalPlayerOverlay.hidePlayer();
 
-    showModalBottomSheet(
+    showPlayerPickerSheet(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 16),
-            Text(
-              S.of(context)!.playOn,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            if (players.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Text(S.of(context)!.noPlayersAvailable),
-              )
-            else
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: players.length,
-                  itemBuilder: (context, index) {
-                    final player = players[index];
-                    return ListTile(
-                      leading: Icon(
-                        Icons.speaker,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      title: Text(player.name),
-                      onTap: () async {
-                        Navigator.pop(context);
-                        maProvider.selectPlayer(player);
-                        maProvider.setCurrentAudiobook(_audiobook);
-                        await maProvider.api?.playAudiobook(
-                          player.playerId,
-                          widget.audiobook,
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-          ],
-        ),
-      ),
+      title: S.of(context)!.playOn,
+      players: maProvider.availablePlayers,
+      selectedPlayer: maProvider.selectedPlayer,
+      onPlayerSelected: (player) async {
+        maProvider.selectPlayer(player);
+        maProvider.setCurrentAudiobook(_audiobook);
+        await maProvider.api?.playAudiobook(
+          player.playerId,
+          widget.audiobook,
+        );
+      },
     ).whenComplete(() {
-      // Slide mini player back up when sheet is dismissed
       GlobalPlayerOverlay.showPlayer();
     });
   }
@@ -470,8 +429,8 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
         backgroundColor: colorScheme.surface,
         body: LayoutBuilder(
           builder: (context, constraints) {
-            // Responsive cover size: 50% of screen width, clamped between 200-320
-            final coverSize = (constraints.maxWidth * 0.5).clamp(200.0, 320.0);
+            // Responsive cover size: 70% of screen width, clamped between 200-320
+            final coverSize = (constraints.maxWidth * 0.7).clamp(200.0, 320.0);
             final expandedHeight = coverSize + 70;
 
             return CustomScrollView(
@@ -553,6 +512,9 @@ class _AudiobookDetailScreenState extends State<AudiobookDetailScreen> {
                               ? CachedNetworkImage(
                                   imageUrl: imageUrl,
                                   fit: BoxFit.cover,
+                                  // Match source memCacheWidth for smooth Hero animation
+                                  memCacheWidth: 256,
+                                  memCacheHeight: 256,
                                   fadeInDuration: Duration.zero,
                                   fadeOutDuration: Duration.zero,
                                   placeholder: (_, __) => Center(

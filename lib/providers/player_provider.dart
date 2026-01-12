@@ -559,29 +559,28 @@ class PlayerProvider with ChangeNotifier {
         if (playerToSelect == null) {
           final lastSelectedPlayerId = await SettingsService.getLastSelectedPlayerId();
 
+          // Priority 1: Last selected player
           if (lastSelectedPlayerId != null) {
-            try {
-              playerToSelect = _availablePlayers.firstWhere(
-                (p) => p.playerId == lastSelectedPlayerId && p.available,
-              );
-            } catch (e) {}
+            playerToSelect = _availablePlayers.cast<Player?>().firstWhere(
+              (p) => p!.playerId == lastSelectedPlayerId && p.available,
+              orElse: () => null,
+            );
           }
 
+          // Priority 2: Built-in (local) player
           if (playerToSelect == null && builtinPlayerId != null) {
-            try {
-              playerToSelect = _availablePlayers.firstWhere(
-                (p) => p.playerId == builtinPlayerId && p.available,
-              );
-            } catch (e) {}
+            playerToSelect = _availablePlayers.cast<Player?>().firstWhere(
+              (p) => p!.playerId == builtinPlayerId && p.available,
+              orElse: () => null,
+            );
           }
 
-          // Try playing player (exclude external sources - not playing MA content)
+          // Priority 3: Currently playing player (exclude external sources - not playing MA content)
           if (playerToSelect == null) {
-            try {
-              playerToSelect = _availablePlayers.firstWhere(
-                (p) => p.state == 'playing' && p.available && !p.isExternalSource,
-              );
-            } catch (e) {}
+            playerToSelect = _availablePlayers.cast<Player?>().firstWhere(
+              (p) => p!.state == 'playing' && p.available && !p.isExternalSource,
+              orElse: () => null,
+            );
           }
 
           if (playerToSelect == null) {

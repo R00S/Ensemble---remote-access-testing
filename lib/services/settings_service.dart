@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'device_id_service.dart';
+import 'secure_storage_service.dart';
 
 class SettingsService {
   static const String _keyServerUrl = 'server_url';
@@ -34,6 +35,10 @@ class SettingsService {
   static const String _keyShowFavoriteAlbums = 'show_favorite_albums';
   static const String _keyShowFavoriteArtists = 'show_favorite_artists';
   static const String _keyShowFavoriteTracks = 'show_favorite_tracks';
+  static const String _keyShowFavoritePlaylists = 'show_favorite_playlists';
+  static const String _keyShowFavoriteRadioStations = 'show_favorite_radio_stations';
+  static const String _keyShowFavoritePodcasts = 'show_favorite_podcasts';
+  static const String _keyShowOnlyArtistsWithAlbums = 'show_only_artists_with_albums'; // Library artists filter
   static const String _keyHomeRowOrder = 'home_row_order'; // JSON list of row IDs
 
   // Default row order
@@ -47,6 +52,9 @@ class SettingsService {
     'favorite-albums',
     'favorite-artists',
     'favorite-tracks',
+    'favorite-playlists',
+    'favorite-radio-stations',
+    'favorite-podcasts',
   ];
 
   // View Mode Settings
@@ -65,6 +73,8 @@ class SettingsService {
   static const String _keyLibrarySeriesViewMode = 'library_series_view_mode'; // 'grid2', 'grid3', 'list'
   static const String _keySeriesAudiobooksSortOrder = 'series_audiobooks_sort_order'; // 'alpha' or 'year'
   static const String _keySeriesAudiobooksViewMode = 'series_audiobooks_view_mode'; // 'grid2', 'grid3', 'list'
+  static const String _keyLibraryRadioViewMode = 'library_radio_view_mode'; // 'grid2', 'grid3', 'list'
+  static const String _keyLibraryPodcastsViewMode = 'library_podcasts_view_mode'; // 'grid2', 'grid3', 'list'
 
   // Audiobookshelf Direct Integration Settings
   static const String _keyAbsServerUrl = 'abs_server_url';
@@ -79,6 +89,12 @@ class SettingsService {
   static const String _keyShowHints = 'show_hints'; // Master toggle for hints
   static const String _keyHasUsedPlayerReveal = 'has_used_player_reveal'; // Track if user has pulled to reveal players
   static const String _keyHasCompletedOnboarding = 'has_completed_onboarding'; // Track if user has seen welcome screen
+
+  // Volume Precision Mode Settings
+  static const String _keyVolumePrecisionMode = 'volume_precision_mode'; // Enable hold-to-precision volume control
+
+  // Podcast Cover Cache (iTunes URLs for high-res artwork)
+  static const String _keyPodcastCoverCache = 'podcast_cover_cache';
 
   static Future<String?> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
@@ -127,66 +143,44 @@ class SettingsService {
     }
   }
 
-  // Get authentication token for stream requests
+  // Get authentication token for stream requests (securely stored)
   static Future<String?> getAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyAuthToken);
+    return await SecureStorageService.getAuthToken();
   }
 
-  // Set authentication token for stream requests
+  // Set authentication token for stream requests (securely stored)
   static Future<void> setAuthToken(String? token) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (token == null || token.isEmpty) {
-      await prefs.remove(_keyAuthToken);
-    } else {
-      await prefs.setString(_keyAuthToken, token);
-    }
+    await SecureStorageService.setAuthToken(token);
   }
 
-  // Get Music Assistant native auth token (long-lived token)
+  // Get Music Assistant native auth token (long-lived token, securely stored)
   static Future<String?> getMaAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyMaAuthToken);
+    return await SecureStorageService.getMaAuthToken();
   }
 
-  // Set Music Assistant native auth token (long-lived token)
+  // Set Music Assistant native auth token (long-lived token, securely stored)
   static Future<void> setMaAuthToken(String? token) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (token == null || token.isEmpty) {
-      await prefs.remove(_keyMaAuthToken);
-    } else {
-      await prefs.setString(_keyMaAuthToken, token);
-    }
+    await SecureStorageService.setMaAuthToken(token);
   }
 
   // Clear Music Assistant native auth token
   static Future<void> clearMaAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyMaAuthToken);
+    await SecureStorageService.clearMaAuthToken();
   }
 
-  // Get authentication credentials (serialized auth strategy credentials)
+  // Get authentication credentials (serialized auth strategy credentials, securely stored)
   static Future<Map<String, dynamic>?> getAuthCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = prefs.getString(_keyAuthCredentials);
-    if (json == null) return null;
-    try {
-      return jsonDecode(json) as Map<String, dynamic>;
-    } catch (e) {
-      return null;
-    }
+    return await SecureStorageService.getAuthCredentials();
   }
 
-  // Set authentication credentials (serialized auth strategy credentials)
+  // Set authentication credentials (serialized auth strategy credentials, securely stored)
   static Future<void> setAuthCredentials(Map<String, dynamic> credentials) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyAuthCredentials, jsonEncode(credentials));
+    await SecureStorageService.setAuthCredentials(credentials);
   }
 
   // Clear authentication credentials
   static Future<void> clearAuthCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyAuthCredentials);
+    await SecureStorageService.clearAuthCredentials();
   }
 
   // Get username for authentication
@@ -205,20 +199,14 @@ class SettingsService {
     }
   }
 
-  // Get password for authentication
+  // Get password for authentication (securely stored)
   static Future<String?> getPassword() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyPassword);
+    return await SecureStorageService.getPassword();
   }
 
-  // Set password for authentication
+  // Set password for authentication (securely stored)
   static Future<void> setPassword(String? password) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (password == null || password.isEmpty) {
-      await prefs.remove(_keyPassword);
-    } else {
-      await prefs.setString(_keyPassword, password);
-    }
+    await SecureStorageService.setPassword(password);
   }
 
   // Get built-in player ID (persistent UUID for this device)
@@ -409,6 +397,13 @@ class SettingsService {
   static Future<void> clearSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    await SecureStorageService.clearAll(); // Also clear secure storage
+  }
+
+  /// Migrate credentials from old SharedPreferences storage to secure storage.
+  /// Should be called once during app startup for existing users.
+  static Future<void> migrateToSecureStorage() async {
+    await SecureStorageService.migrateFromSharedPreferences();
   }
 
   // Home Screen Row Settings (Main rows - default on)
@@ -504,6 +499,47 @@ class SettingsService {
     await prefs.setBool(_keyShowFavoriteTracks, show);
   }
 
+  static Future<bool> getShowFavoritePlaylists() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowFavoritePlaylists) ?? false;
+  }
+
+  static Future<void> setShowFavoritePlaylists(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowFavoritePlaylists, show);
+  }
+
+  static Future<bool> getShowFavoriteRadioStations() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowFavoriteRadioStations) ?? false;
+  }
+
+  static Future<void> setShowFavoriteRadioStations(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowFavoriteRadioStations, show);
+  }
+
+  static Future<bool> getShowFavoritePodcasts() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowFavoritePodcasts) ?? false;
+  }
+
+  static Future<void> setShowFavoritePodcasts(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowFavoritePodcasts, show);
+  }
+
+  // Library Artists Filter - show only artists that have albums in library
+  static Future<bool> getShowOnlyArtistsWithAlbums() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowOnlyArtistsWithAlbums) ?? false;
+  }
+
+  static Future<void> setShowOnlyArtistsWithAlbums(bool show) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowOnlyArtistsWithAlbums, show);
+  }
+
   // Home Row Order
   static Future<List<String>> getHomeRowOrder() async {
     final prefs = await SharedPreferences.getInstance();
@@ -511,7 +547,17 @@ class SettingsService {
     if (json != null) {
       try {
         final List<dynamic> decoded = jsonDecode(json);
-        return decoded.cast<String>();
+        final savedOrder = decoded.cast<String>();
+
+        // Add any new rows from defaultHomeRowOrder that aren't in saved order
+        // This ensures new row types appear for existing users
+        final missingRows = defaultHomeRowOrder
+            .where((row) => !savedOrder.contains(row))
+            .toList();
+        if (missingRows.isNotEmpty) {
+          return [...savedOrder, ...missingRows];
+        }
+        return savedOrder;
       } catch (_) {
         return List.from(defaultHomeRowOrder);
       }
@@ -641,6 +687,26 @@ class SettingsService {
     await prefs.setString(_keyLibrarySeriesViewMode, mode);
   }
 
+  static Future<String> getLibraryRadioViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLibraryRadioViewMode) ?? 'list';
+  }
+
+  static Future<void> setLibraryRadioViewMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLibraryRadioViewMode, mode);
+  }
+
+  static Future<String> getLibraryPodcastsViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLibraryPodcastsViewMode) ?? 'grid2';
+  }
+
+  static Future<void> setLibraryPodcastsViewMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLibraryPodcastsViewMode, mode);
+  }
+
   // View Mode Settings - Series Audiobooks (series detail screen)
   static Future<String> getSeriesAudiobooksSortOrder() async {
     final prefs = await SharedPreferences.getInstance();
@@ -674,13 +740,11 @@ class SettingsService {
   }
 
   static Future<String?> getAbsApiToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyAbsApiToken);
+    return await SecureStorageService.getAbsApiToken();
   }
 
   static Future<void> setAbsApiToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyAbsApiToken, token);
+    await SecureStorageService.setAbsApiToken(token);
   }
 
   static Future<bool> getAbsEnabled() async {
@@ -696,8 +760,8 @@ class SettingsService {
   static Future<void> clearAbsSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyAbsServerUrl);
-    await prefs.remove(_keyAbsApiToken);
     await prefs.remove(_keyAbsEnabled);
+    await SecureStorageService.setAbsApiToken(null); // Clear from secure storage
   }
 
   // Audiobookshelf Library Settings (via MA browse API)
@@ -807,5 +871,50 @@ class SettingsService {
   static Future<void> setHasCompletedOnboarding(bool completed) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyHasCompletedOnboarding, completed);
+  }
+
+  // Volume Precision Mode Settings
+
+  /// Get whether volume precision mode is enabled (default: true)
+  /// When enabled, holding still while adjusting volume enters precision mode
+  /// for fine-grained control (10x more precise)
+  static Future<bool> getVolumePrecisionMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyVolumePrecisionMode) ?? true;
+  }
+
+  /// Set whether volume precision mode is enabled
+  static Future<void> setVolumePrecisionMode(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyVolumePrecisionMode, enabled);
+  }
+
+  // Podcast Cover Cache (iTunes URLs for high-res artwork)
+  // Stored as JSON: {"podcastId": "itunesUrl", ...}
+
+  /// Get cached podcast cover URLs (iTunes high-res)
+  static Future<Map<String, String>> getPodcastCoverCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_keyPodcastCoverCache);
+    if (json == null) return {};
+    try {
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, value as String));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Save podcast cover cache
+  static Future<void> setPodcastCoverCache(Map<String, String> cache) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyPodcastCoverCache, jsonEncode(cache));
+  }
+
+  /// Add a single podcast cover to cache (for incremental updates)
+  static Future<void> addPodcastCoverToCache(String podcastId, String url) async {
+    final cache = await getPodcastCoverCache();
+    cache[podcastId] = url;
+    await setPodcastCoverCache(cache);
   }
 }

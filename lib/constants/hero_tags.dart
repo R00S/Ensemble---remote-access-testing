@@ -25,4 +25,22 @@ class HeroTags {
 
   /// Audiobook author image hero tag prefix
   static const String authorImage = 'author_image_';
+
+  /// Podcast cover hero tag prefix
+  static const String podcastCover = 'podcast_cover_';
+
+  /// Podcast title hero tag prefix
+  static const String podcastTitle = 'podcast_title_';
+
+  /// Playlist cover hero tag prefix
+  static const String playlistCover = 'playlist_cover_';
+
+  /// Playlist title hero tag prefix
+  static const String playlistTitle = 'playlist_title_';
+
+  /// Radio station cover hero tag prefix
+  static const String radioCover = 'radio_cover_';
+
+  /// Radio station title hero tag prefix
+  static const String radioTitle = 'radio_title_';
 }

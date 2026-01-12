@@ -1,0 +1,197 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../models/media_item.dart';
+import '../providers/music_assistant_provider.dart';
+import '../services/debug_logger.dart';
+import 'playlist_card.dart';
+
+class PlaylistRow extends StatefulWidget {
+  final String title;
+  final Future<List<Playlist>> Function() loadPlaylists;
+  final String? heroTagSuffix;
+  final double? rowHeight;
+  final List<Playlist>? Function()? getCachedPlaylists;
+
+  const PlaylistRow({
+    super.key,
+    required this.title,
+    required this.loadPlaylists,
+    this.heroTagSuffix,
+    this.rowHeight,
+    this.getCachedPlaylists,
+  });
+
+  @override
+  State<PlaylistRow> createState() => _PlaylistRowState();
+}
+
+class _PlaylistRowState extends State<PlaylistRow> with AutomaticKeepAliveClientMixin {
+  List<Playlist> _playlists = [];
+  bool _isLoading = true;
+  bool _hasLoaded = false;
+
+  static final _logger = DebugLogger();
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Get cached data synchronously BEFORE first build (no spinner flash)
+    final cached = widget.getCachedPlaylists?.call();
+    if (cached != null && cached.isNotEmpty) {
+      _playlists = cached;
+      _isLoading = false;
+    }
+    _loadPlaylists();
+  }
+
+  Future<void> _loadPlaylists() async {
+    if (_hasLoaded) return;
+    _hasLoaded = true;
+
+    // Load fresh data
+    try {
+      final freshPlaylists = await widget.loadPlaylists();
+      if (mounted && freshPlaylists.isNotEmpty) {
+        setState(() {
+          _playlists = freshPlaylists;
+          _isLoading = false;
+        });
+        // Pre-cache images for smooth hero animations
+        _precachePlaylistImages(freshPlaylists);
+      }
+    } catch (e) {
+      // Silent failure - keep showing cached data
+    }
+
+    if (mounted && _isLoading) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _precachePlaylistImages(List<Playlist> playlists) {
+    if (!mounted) return;
+    final maProvider = context.read<MusicAssistantProvider>();
+
+    final playlistsToCache = playlists.take(10);
+
+    for (final playlist in playlistsToCache) {
+      final imageUrl = maProvider.api?.getImageUrl(playlist, size: 256);
+      if (imageUrl != null) {
+        precacheImage(
+          CachedNetworkImageProvider(imageUrl),
+          context,
+        ).catchError((_) => false);
+      }
+    }
+  }
+
+  Widget _buildContent(double contentHeight, ColorScheme colorScheme) {
+    // Only show loading if we have no data at all
+    if (_playlists.isEmpty && _isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_playlists.isEmpty) {
+      return Center(
+        child: Text(
+          'No playlists found',
+          style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+        ),
+      );
+    }
+
+    // Card layout: square artwork + text below (same as AlbumRow)
+    // Text area: 8px gap + ~18px title + ~18px owner = ~44px
+    const textAreaHeight = 44.0;
+    final artworkSize = contentHeight - textAreaHeight;
+    final cardWidth = artworkSize; // Card width = artwork width (square)
+    final itemExtent = cardWidth + 12; // width + horizontal margins
+
+    return ScrollConfiguration(
+      behavior: const _StretchScrollBehavior(),
+      child: ListView.builder(
+        clipBehavior: Clip.none,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        itemCount: _playlists.length,
+        itemExtent: itemExtent,
+        cacheExtent: 500, // Preload ~3 items ahead for smoother scrolling
+        addAutomaticKeepAlives: false, // Row already uses AutomaticKeepAliveClientMixin
+        addRepaintBoundaries: false, // Cards already have RepaintBoundary
+        itemBuilder: (context, index) {
+          final playlist = _playlists[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: Container(
+              key: ValueKey(playlist.uri ?? playlist.itemId),
+              width: cardWidth,
+              margin: const EdgeInsets.symmetric(horizontal: 6.0),
+              child: PlaylistCard(
+                playlist: playlist,
+                heroTagSuffix: widget.heroTagSuffix,
+                imageCacheSize: 256,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _logger.startBuild('PlaylistRow:${widget.title}');
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    // Total row height includes title + content (same as AlbumRow)
+    final totalHeight = widget.rowHeight ?? 237.0; // Default: 44 title + 193 content
+    const titleHeight = 44.0; // 12 top padding + ~24 text + 8 bottom padding
+    final contentHeight = totalHeight - titleHeight;
+
+    final result = RepaintBoundary(
+      child: SizedBox(
+        height: totalHeight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 8.0),
+              child: Text(
+                widget.title,
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onBackground,
+                ),
+              ),
+            ),
+            Expanded(
+              child: _buildContent(contentHeight, colorScheme),
+            ),
+          ],
+        ),
+      ),
+    );
+    _logger.endBuild('PlaylistRow:${widget.title}');
+    return result;
+  }
+}
+
+/// Custom scroll behavior that uses Android 12+ stretch overscroll effect
+class _StretchScrollBehavior extends ScrollBehavior {
+  const _StretchScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+      BuildContext context, Widget child, ScrollableDetails details) {
+    return StretchingOverscrollIndicator(
+      axisDirection: details.direction,
+      child: child,
+    );
+  }
+}

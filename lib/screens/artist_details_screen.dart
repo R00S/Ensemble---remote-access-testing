@@ -36,11 +36,13 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
   List<Album> _providerAlbums = [];
   bool _isLoading = true;
   bool _isFavorite = false;
+  bool _isInLibrary = false;
   ColorScheme? _lightColorScheme;
   ColorScheme? _darkColorScheme;
   bool _isDescriptionExpanded = false;
   String? _artistDescription;
   String? _artistImageUrl;
+  MusicAssistantProvider? _maProvider;
 
   // View preferences
   String _sortOrder = 'alpha'; // 'alpha' or 'year'
@@ -52,6 +54,7 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
   void initState() {
     super.initState();
     _isFavorite = widget.artist.favorite ?? false;
+    _isInLibrary = _checkIfInLibrary(widget.artist);
     // Use initial image URL immediately for smooth hero animation
     _artistImageUrl = widget.initialImageUrl;
     _loadViewPreferences();
@@ -66,9 +69,58 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
         if (mounted) {
           _loadArtistImage();
           // Note: _extractColors is called by _loadArtistImage after image loads
+
+          // CRITICAL FIX: Delay adding provider listener until AFTER Hero animation
+          // Adding it immediately causes rebuilds during animation (jank)
+          _maProvider = context.read<MusicAssistantProvider>();
+          _maProvider?.addListener(_onProviderChanged);
         }
       });
     });
+  }
+
+  void _onProviderChanged() {
+    if (!mounted) return;
+    // Re-check library status when provider data changes
+    final newIsInLibrary = _checkIfInLibraryFromProvider();
+    if (newIsInLibrary != _isInLibrary) {
+      setState(() {
+        _isInLibrary = newIsInLibrary;
+      });
+    }
+  }
+
+  /// Check if artist is in library using provider's artists list
+  bool _checkIfInLibraryFromProvider() {
+    if (_maProvider == null) return _checkIfInLibrary(widget.artist);
+
+    final artistName = widget.artist.name.toLowerCase();
+    final artistUri = widget.artist.uri;
+
+    // Check if this artist exists in the provider's library
+    return _maProvider!.artists.any((a) {
+      // Match by URI if available
+      if (artistUri != null && a.uri == artistUri) return true;
+      // Match by name as fallback
+      if (a.name.toLowerCase() == artistName) return true;
+      // Check provider mappings for matching URIs
+      if (widget.artist.providerMappings != null) {
+        for (final mapping in widget.artist.providerMappings!) {
+          if (a.providerMappings?.any((m) =>
+            m.providerInstance == mapping.providerInstance &&
+            m.itemId == mapping.itemId) == true) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _maProvider?.removeListener(_onProviderChanged);
+    super.dispose();
   }
 
   Future<void> _loadViewPreferences() async {
@@ -172,7 +224,8 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
               orElse: () => widget.artist.providerMappings!.first,
             ),
           );
-          actualProvider = mapping.providerInstance;
+          // Use providerDomain (e.g., "spotify") not providerInstance (e.g., "spotify--xyz")
+          actualProvider = mapping.providerDomain;
           actualItemId = mapping.itemId;
         }
 
@@ -202,7 +255,6 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
           throw Exception('Could not determine library ID for this artist');
         }
 
-        _logger.log('Removing artist from favorites: libraryItemId=$libraryItemId');
         success = await maProvider.removeFromFavorites(
           mediaType: 'artist',
           libraryItemId: libraryItemId,
@@ -236,6 +288,110 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(S.of(context)!.failedToUpdateFavorite(e.toString())),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Check if artist is in library
+  bool _checkIfInLibrary(Artist artist) {
+    if (artist.provider == 'library') return true;
+    return artist.providerMappings?.any((m) => m.providerInstance == 'library') ?? false;
+  }
+
+  /// Toggle library status
+  Future<void> _toggleLibrary() async {
+    final maProvider = context.read<MusicAssistantProvider>();
+
+    try {
+      final newState = !_isInLibrary;
+      bool success;
+
+      if (newState) {
+        // Add to library - MUST use non-library provider
+        String? actualProvider;
+        String? actualItemId;
+
+        if (widget.artist.providerMappings != null && widget.artist.providerMappings!.isNotEmpty) {
+          // For adding to library, we MUST use a non-library provider
+          final nonLibraryMapping = widget.artist.providerMappings!.where(
+            (m) => m.providerInstance != 'library' && m.providerDomain != 'library',
+          ).firstOrNull;
+
+          if (nonLibraryMapping != null) {
+            actualProvider = nonLibraryMapping.providerDomain;
+            actualItemId = nonLibraryMapping.itemId;
+          }
+        }
+
+        // Fallback to item's own provider if no non-library mapping found
+        if (actualProvider == null || actualItemId == null) {
+          if (widget.artist.provider != 'library') {
+            actualProvider = widget.artist.provider;
+            actualItemId = widget.artist.itemId;
+          } else {
+            // Item is library-only, can't add
+            _logger.log('Cannot add to library: artist is library-only');
+            return;
+          }
+        }
+
+        _logger.log('Adding artist to library: provider=$actualProvider, itemId=$actualItemId');
+        success = await maProvider.addToLibrary(
+          mediaType: 'artist',
+          provider: actualProvider,
+          itemId: actualItemId,
+        );
+      } else {
+        // Remove from library
+        int? libraryItemId;
+        if (widget.artist.provider == 'library') {
+          libraryItemId = int.tryParse(widget.artist.itemId);
+        } else if (widget.artist.providerMappings != null) {
+          final libraryMapping = widget.artist.providerMappings!.firstWhere(
+            (m) => m.providerInstance == 'library',
+            orElse: () => widget.artist.providerMappings!.first,
+          );
+          if (libraryMapping.providerInstance == 'library') {
+            libraryItemId = int.tryParse(libraryMapping.itemId);
+          }
+        }
+
+        if (libraryItemId == null) {
+          _logger.log('Cannot remove from library: no library ID found');
+          return;
+        }
+
+        success = await maProvider.removeFromLibrary(
+          mediaType: 'artist',
+          libraryItemId: libraryItemId,
+        );
+      }
+
+      if (success) {
+        setState(() {
+          _isInLibrary = newState;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _isInLibrary ? S.of(context)!.addedToLibrary : S.of(context)!.removedFromLibrary,
+              ),
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      _logger.log('Error toggling artist library: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update library: $e'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -553,8 +709,8 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
         backgroundColor: colorScheme.background,
         body: LayoutBuilder(
           builder: (context, constraints) {
-            // Responsive cover size: 40% of screen width, clamped between 160-280 (smaller for circular artist image)
-            final coverSize = (constraints.maxWidth * 0.4).clamp(160.0, 280.0);
+            // Responsive cover size: 70% of screen width, clamped between 160-280 (smaller for circular artist image)
+            final coverSize = (constraints.maxWidth * 0.7).clamp(160.0, 280.0);
             final expandedHeight = coverSize + 100;
 
             return CustomScrollView(
@@ -587,8 +743,12 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
                             ? CachedNetworkImage(
                                 imageUrl: imageUrl,
                                 fit: BoxFit.cover,
+                                // Match source memCacheWidth for smooth Hero animation
+                                memCacheWidth: 256,
+                                memCacheHeight: 256,
                                 fadeInDuration: Duration.zero,
                                 fadeOutDuration: Duration.zero,
+                                placeholder: (_, __) => const SizedBox(),
                                 errorWidget: (_, __, ___) => Icon(
                                   Icons.person_rounded,
                                   size: coverSize * 0.5,
@@ -708,6 +868,29 @@ class _ArtistDetailsScreenState extends State<ArtistDetailsScreen> {
                             _isFavorite ? Icons.favorite : Icons.favorite_border,
                             color: _isFavorite
                                 ? colorScheme.error
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      // Library Button
+                      SizedBox(
+                        height: 50,
+                        width: 50,
+                        child: FilledButton.tonal(
+                          onPressed: _toggleLibrary,
+                          style: FilledButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Icon(
+                            _isInLibrary ? Icons.library_add_check : Icons.library_add,
+                            color: _isInLibrary
+                                ? colorScheme.primary
                                 : colorScheme.onSurfaceVariant,
                           ),
                         ),

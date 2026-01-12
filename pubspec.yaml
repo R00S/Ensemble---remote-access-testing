@@ -1,7 +1,7 @@
 name: ensemble
 description: A minimalistic Music Assistant client built with Flutter
 publish_to: 'none'
-version: 2.7.3-beta
+version: 2.8.7-beta+45-remote-access
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -32,6 +32,7 @@ dependencies:
 
   # Storage
   shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.2.2
   drift: ^2.22.0
   drift_flutter: 0.2.0
   path_provider: ^2.1.5

@@ -81,10 +81,6 @@ class LocalPlayerService {
     return audioHandler.duration;
   }
 
-  bool get isInitialized {
-    return _isInitialized;
-  }
-
   Future<void> initialize() async {
     if (_isInitialized) return;
 

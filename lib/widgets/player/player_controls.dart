@@ -59,19 +59,25 @@ class PlayerControls extends StatelessWidget {
         if (isExpanded && expandedElementsOpacity > 0.1)
           _buildSecondaryButton(
             icon: Icons.shuffle_rounded,
-            color: (shuffle == true ? primaryColor : textColor.withOpacity(0.5))
-                .withOpacity(expandedElementsOpacity),
+            // Fix: compute final opacity once to avoid multiplicative opacity bug
+            color: shuffle == true
+                ? primaryColor.withOpacity(expandedElementsOpacity)
+                : textColor.withOpacity(0.5 * expandedElementsOpacity),
             onPressed: isLoadingQueue ? null : onToggleShuffle,
           ),
         if (isExpanded) SizedBox(width: _lerpDouble(0, 20, t)),
 
         // Previous
-        _buildControlButton(
-          icon: Icons.skip_previous_rounded,
-          color: textColor,
-          size: skipButtonSize,
-          onPressed: onPrevious,
-          useAnimation: isExpanded,
+        Semantics(
+          button: true,
+          label: 'Previous track',
+          child: _buildControlButton(
+            icon: Icons.skip_previous_rounded,
+            color: textColor,
+            size: skipButtonSize,
+            onPressed: onPrevious,
+            useAnimation: isExpanded,
+          ),
         ),
         SizedBox(width: _lerpDouble(0, 20, t)),
 
@@ -80,12 +86,16 @@ class PlayerControls extends StatelessWidget {
         SizedBox(width: _lerpDouble(0, 20, t)),
 
         // Next
-        _buildControlButton(
-          icon: Icons.skip_next_rounded,
-          color: textColor,
-          size: skipButtonSize,
-          onPressed: onNext,
-          useAnimation: isExpanded,
+        Semantics(
+          button: true,
+          label: 'Next track',
+          child: _buildControlButton(
+            icon: Icons.skip_next_rounded,
+            color: textColor,
+            size: skipButtonSize,
+            onPressed: onNext,
+            useAnimation: isExpanded,
+          ),
         ),
 
         // Repeat (expanded only)
@@ -94,10 +104,10 @@ class PlayerControls extends StatelessWidget {
         if (isExpanded && expandedElementsOpacity > 0.1)
           _buildSecondaryButton(
             icon: repeatMode == 'one' ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-            color: (repeatMode != null && repeatMode != 'off'
-                    ? primaryColor
-                    : textColor.withOpacity(0.5))
-                .withOpacity(expandedElementsOpacity),
+            // Fix: compute final opacity once to avoid multiplicative opacity bug
+            color: (repeatMode != null && repeatMode != 'off')
+                ? primaryColor.withOpacity(expandedElementsOpacity)
+                : textColor.withOpacity(0.5 * expandedElementsOpacity),
             onPressed: isLoadingQueue ? null : onCycleRepeat,
           ),
       ],
@@ -151,21 +161,26 @@ class PlayerControls extends StatelessWidget {
     final bgColor = Color.lerp(Colors.transparent, primaryColor, progress);
     final iconColor = Color.lerp(textColor, backgroundColor, progress);
 
-    return GestureDetector(
-      onLongPress: onStop,
-      child: Container(
-        width: playButtonContainerSize,
-        height: playButtonContainerSize,
-        decoration: BoxDecoration(
-          color: bgColor,
-          shape: BoxShape.circle,
-        ),
-        child: IconButton(
-          icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
-          color: iconColor,
-          iconSize: playButtonSize,
-          onPressed: onPlayPause,
-          padding: EdgeInsets.zero,
+    return Semantics(
+      button: true,
+      label: isPlaying ? 'Pause' : 'Play',
+      hint: 'Long press to stop',
+      child: GestureDetector(
+        onLongPress: onStop,
+        child: Container(
+          width: playButtonContainerSize,
+          height: playButtonContainerSize,
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+            color: iconColor,
+            iconSize: playButtonSize,
+            onPressed: onPlayPause,
+            padding: EdgeInsets.zero,
+          ),
         ),
       ),
     );

@@ -66,6 +66,12 @@
   "tracks": "Canciones",
   "playlists": "Listas de reproducción",
   "audiobooks": "Audiolibros",
+  "music": "Música",
+  "radio": "Radio",
+  "stations": "Emisoras",
+  "selectLibrary": "Seleccionar Biblioteca",
+  "noRadioStations": "No hay emisoras de radio",
+  "addRadioStationsHint": "Añade emisoras de radio en Music Assistant",
   "searchFailed": "Búsqueda fallida. Por favor, verifica tu conexión.",
   "queue": "Cola",
   "playerQueue": "Cola de {playerName}",
@@ -354,6 +360,7 @@
   "english": "Inglés",
   "german": "Alemán",
   "spanish": "Español",
+  "french": "Francés",
   "noTracksInPlaylist": "No hay canciones en la lista",
   "sortAlphabetically": "Ordenar alfabéticamente",
   "sortByYear": "Ordenar por año",
@@ -483,5 +490,6 @@
   "showHints": "Mostrar Sugerencias",
   "showHintsDescription": "Mostrar consejos útiles para descubrir funciones",
   "pullToSelectPlayers": "Desliza para seleccionar dispositivos",
-  "holdToSync": "Mantén presionado un dispositivo para sincronizar"
+  "holdToSync": "Mantén presionado para sync",
+  "swipeToAdjustVolume": "Desliza para ajustar volumen"
 }

@@ -40,6 +40,10 @@ Future<void> main() async {
   // Migrate existing ownerName to profile (one-time for existing users)
   await ProfileService.instance.migrateFromOwnerName();
 
+  // Migrate credentials to secure storage (one-time for existing users)
+  await SettingsService.migrateToSecureStorage();
+  _logger.log('🔐 Secure storage migration complete');
+
   // Load library from cache for instant startup
   await SyncService.instance.loadFromCache();
   _logger.log('📦 Library cache loaded');
@@ -67,13 +71,16 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Set system UI overlay style
+  // Set initial system UI overlay style based on platform brightness
+  // SystemUIWrapper will update this dynamically when theme changes
+  final platformBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  final isDark = platformBrightness == Brightness.dark;
   SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
+    SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF1a1a1a),
-      systemNavigationBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor: isDark ? const Color(0xFF1a1a1a) : const Color(0xFFF5F5F5),
+      systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
     ),
   );
 
@@ -172,11 +179,19 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
   @override
   Future<bool> didPopRoute() async {
     // Intercept back button at app level - runs BEFORE Navigator processes it
-    // Priority order: device list > expanded player > normal navigation
+    // Priority order: device list > queue panel > expanded player > normal navigation
 
     // Device list has highest priority - dismiss it first
     if (GlobalPlayerOverlay.isPlayerRevealVisible) {
       GlobalPlayerOverlay.dismissPlayerReveal();
+      return true; // We handled it, don't let Navigator process it
+    }
+
+    // Queue panel second - close it before collapsing player
+    // Use target state (not animation value) to handle rapid open-close timing
+    // Use withHaptic: false because Android back gesture provides system haptic
+    if (GlobalPlayerOverlay.isQueuePanelTargetOpen) {
+      GlobalPlayerOverlay.closeQueuePanel(withHaptic: false);
       return true; // We handled it, don't let Navigator process it
     }
 
@@ -225,10 +240,17 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
               ColorScheme? darkColorScheme;
 
               if (themeProvider.useMaterialTheme && snapshot.hasData && snapshot.data != null) {
-                // Use system color schemes
+                // Use system color schemes, but override background to match app design
+                // Material You doesn't set background consistently, causing black screen issues
                 final (light, dark) = snapshot.data!;
-                lightColorScheme = light;
-                darkColorScheme = dark;
+                lightColorScheme = light.copyWith(
+                  surface: light.surface,
+                  background: const Color(0xFFFAFAFA), // App's preferred light background
+                );
+                darkColorScheme = dark.copyWith(
+                  surface: const Color(0xFF2a2a2a), // App's preferred dark surface
+                  background: const Color(0xFF1a1a1a), // App's preferred dark background
+                );
               } else {
                 // Use custom color from theme provider
                 lightColorScheme = generateLightColorScheme(themeProvider.customColor);
@@ -252,6 +274,29 @@ class _MusicAssistantAppState extends State<MusicAssistantApp> with WidgetsBindi
                   ],
                   supportedLocales: S.supportedLocales,
                   locale: localeProvider.locale,
+                  // Fallback to English when locale is not supported
+                  localeListResolutionCallback: (locales, supportedLocales) {
+                    // If user has set a specific locale, try to use it
+                    if (localeProvider.locale != null) {
+                      for (final supported in supportedLocales) {
+                        if (supported.languageCode == localeProvider.locale!.languageCode) {
+                          return supported;
+                        }
+                      }
+                    }
+                    // Try to match system locales
+                    if (locales != null) {
+                      for (final locale in locales) {
+                        for (final supported in supportedLocales) {
+                          if (supported.languageCode == locale.languageCode) {
+                            return supported;
+                          }
+                        }
+                      }
+                    }
+                    // Fallback to English (not German)
+                    return const Locale('en');
+                  },
                   themeMode: themeProvider.themeMode,
                   theme: AppTheme.lightTheme(colorScheme: lightColorScheme),
                   darkTheme: AppTheme.darkTheme(colorScheme: darkColorScheme),
@@ -328,8 +373,8 @@ class _SystemUIWrapperState extends State<SystemUIWrapper> {
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
           systemNavigationBarColor: isDark
-              ? widget.darkColorScheme.background
-              : widget.lightColorScheme.background,
+              ? widget.darkColorScheme.surface
+              : widget.lightColorScheme.surface,
           systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         ),
       );

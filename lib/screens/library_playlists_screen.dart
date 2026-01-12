@@ -4,6 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/music_assistant_provider.dart';
 import '../models/media_item.dart';
 import '../widgets/common/empty_state.dart';
+import '../constants/hero_tags.dart';
+import '../theme/theme_provider.dart';
+import '../utils/page_transitions.dart';
 import 'playlist_details_screen.dart';
 import '../l10n/app_localizations.dart';
 
@@ -30,17 +33,11 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
     });
 
     final maProvider = context.read<MusicAssistantProvider>();
-    if (maProvider.api != null) {
-      final playlists = await maProvider.api!.getPlaylists(limit: 100);
-      setState(() {
-        _playlists = playlists;
-        _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _isLoading = false;
-      });
-    }
+    final playlists = await maProvider.getPlaylists(limit: 100);
+    setState(() {
+      _playlists = playlists;
+      _isLoading = false;
+    });
   }
 
   @override
@@ -89,7 +86,7 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
 
     return RefreshIndicator(
       color: colorScheme.primary,
-      backgroundColor: colorScheme.surface,
+      backgroundColor: colorScheme.background,
       onRefresh: _loadPlaylists,
       child: ListView.builder(
         itemCount: _playlists.length,
@@ -110,34 +107,55 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
+    // Unique suffix for this context to avoid hero tag conflicts
+    const heroSuffix = '_playlists';
+
     return RepaintBoundary(
       child: ListTile(
         key: ValueKey(playlist.itemId),
-        leading: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceVariant,
+        leading: Hero(
+          tag: HeroTags.playlistCover + (playlist.uri ?? playlist.itemId) + heroSuffix,
+          child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            image: imageUrl != null
-                ? DecorationImage(
-                    image: CachedNetworkImageProvider(imageUrl),
-                    fit: BoxFit.cover,
-                  )
-                : null,
+            child: Container(
+              width: 48,
+              height: 48,
+              color: colorScheme.surfaceContainerHighest,
+              child: imageUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 96,
+                      memCacheHeight: 96,
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      placeholder: (_, __) => const SizedBox(),
+                      errorWidget: (_, __, ___) => Icon(
+                        Icons.playlist_play_rounded,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : Icon(
+                      Icons.playlist_play_rounded,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+            ),
           ),
-          child: imageUrl == null
-              ? Icon(Icons.playlist_play_rounded, color: colorScheme.onSurfaceVariant)
-              : null,
         ),
-        title: Text(
-          playlist.name,
-          style: textTheme.titleMedium?.copyWith(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.w500,
+        title: Hero(
+          tag: HeroTags.playlistTitle + (playlist.uri ?? playlist.itemId) + heroSuffix,
+          child: Material(
+            color: Colors.transparent,
+            child: Text(
+              playlist.name,
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           playlist.trackCount != null
@@ -153,13 +171,14 @@ class _LibraryPlaylistsScreenState extends State<LibraryPlaylistsScreen> {
             ? const Icon(Icons.favorite, color: Colors.red, size: 20)
             : null,
         onTap: () {
+          updateAdaptiveColorsFromImage(context, imageUrl);
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => PlaylistDetailsScreen(
+            FadeSlidePageRoute(
+              child: PlaylistDetailsScreen(
                 playlist: playlist,
-                provider: playlist.provider,
-                itemId: playlist.itemId,
+                heroTagSuffix: 'playlists',
+                initialImageUrl: imageUrl,
               ),
             ),
           );

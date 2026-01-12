@@ -31,6 +31,10 @@ class LocaleProvider extends ChangeNotifier {
         return 'English';
       case 'de':
         return 'Deutsch';
+      case 'es':
+        return 'Español';
+      case 'fr':
+        return 'Français';
       case null:
         return 'System';
       default:

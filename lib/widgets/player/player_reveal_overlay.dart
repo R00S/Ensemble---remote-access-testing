@@ -54,6 +54,13 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
   // Hint system
   bool _showHints = true;
 
+  // PERF: Pre-cached static BoxShadow to avoid allocation per frame
+  static const BoxShadow _cardShadow = BoxShadow(
+    color: Color(0x33000000), // 20% black
+    blurRadius: 8,
+    offset: Offset(0, 2),
+  );
+
   @override
   void initState() {
     super.initState();
@@ -231,6 +238,9 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // PERF Phase 4: Pre-compute hint colors outside animation loop
+    final hintColor = colorScheme.onSurface.withOpacity(0.7);
+
     // Back gesture is handled at GlobalPlayerOverlay level
     return Consumer<MusicAssistantProvider>(
       builder: (context, maProvider, child) {
@@ -266,6 +276,31 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
             _isScrollable = needsScroll;
           }
         });
+
+        // PERF Phase 4: Pre-compute player card data OUTSIDE AnimatedBuilder
+        // This avoids re-gathering player data every animation frame
+        final playerDataList = players.map((player) {
+          final isPlaying = player.state == 'playing';
+          final playerTrack = maProvider.getCachedTrackForPlayer(player.playerId);
+          String? albumArtUrl;
+          if (playerTrack != null && player.available && player.powered) {
+            albumArtUrl = maProvider.getImageUrl(playerTrack, size: 128);
+          }
+          final playerColorScheme = _playerColors[player.playerId];
+          final cardBgColor = playerColorScheme?.primaryContainer ?? defaultBgColor;
+          final cardTextColor = playerColorScheme?.onPrimaryContainer ?? defaultTextColor;
+          final isGrouped = maProvider.isPlayerManuallySynced(player.playerId);
+
+          return _PlayerCardData(
+            player: player,
+            playerTrack: playerTrack,
+            albumArtUrl: albumArtUrl,
+            isPlaying: isPlaying,
+            isGrouped: isGrouped,
+            cardBgColor: cardBgColor,
+            cardTextColor: cardTextColor,
+          );
+        }).toList();
 
         return AnimatedBuilder(
           animation: _revealAnimation,
@@ -307,9 +342,29 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
 
                               // Show different hint for onboarding vs regular use
                               final isOnboarding = widget.showOnboardingHints;
-                              final hintText = isOnboarding
-                                  ? S.of(context)!.selectPlayerHint
-                                  : S.of(context)!.holdToSync;
+
+                              // PERF Phase 4: Use pre-computed hintColor
+                              Widget buildHintRow(IconData icon, String text) {
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      icon,
+                                      size: 18,
+                                      color: hintColor,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      text,
+                                      style: TextStyle(
+                                        color: hintColor,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }
 
                               return Transform.translate(
                                 offset: Offset(0, hintSlideOffset),
@@ -317,25 +372,16 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                                   padding: const EdgeInsets.only(bottom: 12),
                                   child: Material(
                                     type: MaterialType.transparency,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          isOnboarding ? Icons.touch_app_outlined : Icons.lightbulb_outline,
-                                          size: 18,
-                                          color: colorScheme.onSurface.withOpacity(0.7),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          hintText,
-                                          style: TextStyle(
-                                            color: colorScheme.onSurface.withOpacity(0.7),
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
+                                    child: isOnboarding
+                                        ? buildHintRow(Icons.touch_app_outlined, S.of(context)!.selectPlayerHint)
+                                        : Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              buildHintRow(Icons.lightbulb_outline, S.of(context)!.holdToSync),
+                                              const SizedBox(height: 4),
+                                              buildHintRow(Icons.lightbulb_outline, S.of(context)!.swipeToAdjustVolume),
+                                            ],
                                           ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
                                 ),
                               );
@@ -344,31 +390,23 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                         // Build player cards - scrollable when overflow, otherwise static
                         // Using ListView.builder for many players: only builds visible items
                         // This significantly improves animation performance with 10+ players
+                        // PERF Phase 4: Use pre-computed playerDataList
                         if (needsScroll)
                           ConstrainedBox(
                             constraints: BoxConstraints(maxHeight: maxListHeight),
                             child: ListView.builder(
                               controller: _scrollController,
                               physics: const ClampingScrollPhysics(),
-                              itemCount: players.length,
+                              itemCount: playerDataList.length,
                               // Fixed height per item for optimal scroll performance
                               itemExtent: cardHeight + cardSpacing,
                               itemBuilder: (context, index) {
-                                final player = players[index];
-                                final isPlaying = player.state == 'playing';
-                                final playerTrack = maProvider.getCachedTrackForPlayer(player.playerId);
-                                String? albumArtUrl;
-                                if (playerTrack != null && player.available && player.powered) {
-                                  albumArtUrl = maProvider.getImageUrl(playerTrack, size: 128);
-                                }
-                                final playerColorScheme = _playerColors[player.playerId];
-                                final cardBgColor = playerColorScheme?.primaryContainer ?? defaultBgColor;
-                                final cardTextColor = playerColorScheme?.onPrimaryContainer ?? defaultTextColor;
+                                final data = playerDataList[index];
 
                                 // Animation: slide from behind mini player
                                 // Only calculate for items that will be built (visible ones)
                                 const baseOffset = 80.0;
-                                final reverseIndex = players.length - 1 - index;
+                                final reverseIndex = playerDataList.length - 1 - index;
                                 final distanceToTravel = baseOffset + (reverseIndex * (cardHeight + cardSpacing));
                                 final slideOffset = distanceToTravel * (1.0 - t);
 
@@ -377,32 +415,33 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                                   child: Padding(
                                     padding: const EdgeInsets.only(bottom: cardSpacing),
                                     child: PlayerCard(
-                                      player: player,
-                                      trackInfo: playerTrack,
-                                      albumArtUrl: albumArtUrl,
+                                      player: data.player,
+                                      trackInfo: data.playerTrack,
+                                      albumArtUrl: data.albumArtUrl,
                                       isSelected: false,
-                                      isPlaying: isPlaying,
-                                      isGrouped: player.isGrouped,
-                                      backgroundColor: cardBgColor,
-                                      textColor: cardTextColor,
+                                      isPlaying: data.isPlaying,
+                                      isGrouped: data.isGrouped,
+                                      backgroundColor: data.cardBgColor,
+                                      textColor: data.cardTextColor,
                                       onTap: () {
                                         HapticFeedback.mediumImpact();
-                                        maProvider.selectPlayer(player);
+                                        maProvider.selectPlayer(data.player);
                                         dismiss();
                                       },
                                       onLongPress: () {
                                         HapticFeedback.mediumImpact();
-                                        maProvider.togglePlayerSync(player.playerId);
+                                        maProvider.togglePlayerSync(data.player.playerId);
                                       },
                                       onPlayPause: () {
-                                        if (isPlaying) {
-                                          maProvider.pausePlayer(player.playerId);
+                                        if (data.isPlaying) {
+                                          maProvider.pausePlayer(data.player.playerId);
                                         } else {
-                                          maProvider.resumePlayer(player.playerId);
+                                          maProvider.resumePlayer(data.player.playerId);
                                         }
                                       },
-                                      onSkipNext: () => maProvider.nextTrack(player.playerId),
-                                      onPower: () => maProvider.togglePower(player.playerId),
+                                      onSkipNext: () => maProvider.nextTrack(data.player.playerId),
+                                      onPower: () => maProvider.togglePower(data.player.playerId),
+                                      onVolumeChange: (volume) => maProvider.setVolume(data.player.playerId, (volume * 100).round()),
                                     ),
                                   ),
                                 );
@@ -411,28 +450,14 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                           )
                         else
                         // Non-scrollable list for when players fit
-                        ...List.generate(players.length, (index) {
-                          final player = players[index];
-                          final isPlaying = player.state == 'playing';
-
-                          // Get track info for this player
-                          final playerTrack = maProvider.getCachedTrackForPlayer(player.playerId);
-
-                          // Get album art URL - use track directly like mini player does
-                          String? albumArtUrl;
-                          if (playerTrack != null && player.available && player.powered) {
-                            albumArtUrl = maProvider.getImageUrl(playerTrack, size: 128);
-                          }
-
-                          // Use per-player colors if available, otherwise use defaults
-                          final playerColorScheme = _playerColors[player.playerId];
-                          final cardBgColor = playerColorScheme?.primaryContainer ?? defaultBgColor;
-                          final cardTextColor = playerColorScheme?.onPrimaryContainer ?? defaultTextColor;
+                        // PERF Phase 4: Use pre-computed playerDataList
+                        ...List.generate(playerDataList.length, (index) {
+                          final data = playerDataList[index];
 
                           // Animation: all cards start hidden behind mini player
                           // and fan out to their final positions with spring physics
                           const baseOffset = 80.0;
-                          final reverseIndex = players.length - 1 - index;
+                          final reverseIndex = playerDataList.length - 1 - index;
                           final distanceToTravel = baseOffset + (reverseIndex * (cardHeight + cardSpacing));
 
                           // Use the elastic animation value directly (already has bounce)
@@ -443,43 +468,33 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
                             child: Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: PlayerCard(
-                                player: player,
-                                trackInfo: playerTrack,
-                                albumArtUrl: albumArtUrl,
+                                player: data.player,
+                                trackInfo: data.playerTrack,
+                                albumArtUrl: data.albumArtUrl,
                                 isSelected: false,
-                                isPlaying: isPlaying,
-                                isGrouped: player.isGrouped,
-                                backgroundColor: cardBgColor,
-                                textColor: cardTextColor,
+                                isPlaying: data.isPlaying,
+                                isGrouped: data.isGrouped,
+                                backgroundColor: data.cardBgColor,
+                                textColor: data.cardTextColor,
                                 onTap: () {
                                   HapticFeedback.mediumImpact();
-                                  maProvider.selectPlayer(player);
+                                  maProvider.selectPlayer(data.player);
                                   dismiss();
                                 },
                                 onLongPress: () {
                                   HapticFeedback.mediumImpact();
-                                  debugPrint('🔗 Long-press on ${player.name} (${player.playerId})');
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Syncing ${player.name}...'),
-                                      duration: const Duration(seconds: 2),
-                                    ),
-                                  );
-                                  maProvider.togglePlayerSync(player.playerId);
+                                  maProvider.togglePlayerSync(data.player.playerId);
                                 },
                                 onPlayPause: () {
-                                  if (isPlaying) {
-                                    maProvider.pausePlayer(player.playerId);
+                                  if (data.isPlaying) {
+                                    maProvider.pausePlayer(data.player.playerId);
                                   } else {
-                                    maProvider.resumePlayer(player.playerId);
+                                    maProvider.resumePlayer(data.player.playerId);
                                   }
                                 },
-                                onSkipNext: () {
-                                  maProvider.nextTrack(player.playerId);
-                                },
-                                onPower: () {
-                                  maProvider.togglePower(player.playerId);
-                                },
+                                onSkipNext: () => maProvider.nextTrack(data.player.playerId),
+                                onPower: () => maProvider.togglePower(data.player.playerId),
+                                onVolumeChange: (volume) => maProvider.setVolume(data.player.playerId, (volume * 100).round()),
                               ),
                             ),
                           );
@@ -495,4 +510,25 @@ class PlayerRevealOverlayState extends State<PlayerRevealOverlay>
       },
     );
   }
+}
+
+/// PERF Phase 4: Pre-computed player card data to avoid gathering per animation frame
+class _PlayerCardData {
+  final dynamic player;
+  final dynamic playerTrack;
+  final String? albumArtUrl;
+  final bool isPlaying;
+  final bool isGrouped;
+  final Color cardBgColor;
+  final Color cardTextColor;
+
+  const _PlayerCardData({
+    required this.player,
+    required this.playerTrack,
+    required this.albumArtUrl,
+    required this.isPlaying,
+    required this.isGrouped,
+    required this.cardBgColor,
+    required this.cardTextColor,
+  });
 }

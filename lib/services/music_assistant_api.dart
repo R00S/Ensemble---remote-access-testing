@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
-import 'package:stream_channel/stream_channel.dart';
 import 'package:uuid/uuid.dart';
 import '../constants/network.dart';
 import '../constants/timings.dart' show Timings, LibraryConstants;
@@ -14,8 +13,6 @@ import 'settings_service.dart';
 import 'device_id_service.dart';
 import 'retry_helper.dart';
 import 'auth/auth_manager.dart';
-import 'remote/remote_access_manager.dart';
-import 'remote/transport.dart';
 
 enum MAConnectionState {
   disconnected,
@@ -92,18 +89,6 @@ class MusicAssistantAPI {
 
     try {
       _updateConnectionState(MAConnectionState.connecting);
-
-      // Check if RemoteAccessManager has an active WebRTC transport
-      // Don't rely on isRemoteMode state - check if transport exists and is connected
-      final remoteManager = RemoteAccessManager.instance;
-      if (remoteManager.transport != null && 
-          remoteManager.transport!.state == TransportState.connected) {
-        _logger.log('Connection: Using Remote Access WebRTC transport');
-        return await _connectViaRemoteTransport(remoteManager.transport!);
-      }
-
-      // Normal WebSocket connection flow
-      _logger.log('Connection: Using direct WebSocket connection');
 
       // Load and cache custom port setting
       _cachedCustomPort = await SettingsService.getWebSocketPort();
@@ -253,60 +238,6 @@ class MusicAssistantAPI {
     }
   }
 
-  /// Connect using RemoteAccess WebRTC transport
-  /// This is a minimal integration point that allows using WebRTC instead of WebSocket
-  Future<void> _connectViaRemoteTransport(ITransport transport) async {
-    try {
-      _logger.log('[Remote] Setting up WebRTC transport bridge');
-
-      // Create a custom channel that wraps the WebRTC transport
-      _channel = _TransportChannelAdapter(transport);
-
-      // Wait for server info message
-      _connectionCompleter = Completer<void>();
-
-      // Listen to messages from the transport
-      _channel!.stream.listen(
-        _handleMessage,
-        onError: (error) {
-          _logger.log('[Remote] Transport error: $error');
-          _updateConnectionState(MAConnectionState.error);
-          _reconnect();
-        },
-        onDone: () {
-          _logger.log('[Remote] Transport connection closed');
-          _updateConnectionState(MAConnectionState.disconnected);
-          if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
-            _connectionCompleter!.completeError(Exception('Connection closed'));
-          }
-          _reconnect();
-        },
-      );
-
-      // Wait for server info message with timeout
-      await _connectionCompleter!.future.timeout(
-        Timings.connectionTimeout,
-        onTimeout: () {
-          throw Exception('Connection timeout - no server info received');
-        },
-      );
-
-      _logger.log('[Remote] Connected via WebRTC transport');
-      if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
-        _connectionInProgress!.complete();
-      }
-      _connectionInProgress = null;
-    } catch (e) {
-      _logger.log('[Remote] Connection failed: $e');
-      _updateConnectionState(MAConnectionState.error);
-      if (_connectionInProgress != null && !_connectionInProgress!.isCompleted) {
-        _connectionInProgress!.completeError(e);
-      }
-      _connectionInProgress = null;
-      rethrow;
-    }
-  }
-
   void _handleMessage(dynamic message) {
     try {
       final data = jsonDecode(message as String) as Map<String, dynamic>;
@@ -362,16 +293,10 @@ class MusicAssistantAPI {
       // Handle event
       final eventType = data['event'] as String?;
       if (eventType != null) {
-        _logger.log('Event received: $eventType');
-
         // Get the object_id (player_id for player events)
         final objectId = data['object_id'] as String?;
         final eventData = data['data'] as Map<String, dynamic>? ?? {};
 
-        // Debug: Log full data for player events
-        if (eventType == 'player_added' || eventType == 'player_updated' || eventType == 'builtin_player') {
-           _logger.log('Event data: ${jsonEncode(eventData)} (player_id: $objectId)');
-        }
 
         // Include object_id in event data so listeners can filter by player
         final enrichedData = {
@@ -567,6 +492,227 @@ class MusicAssistantAPI {
     }
   }
 
+  Future<List<MediaItem>> getRadioStations({
+    int? limit,
+    int? offset,
+    bool? favoriteOnly,
+  }) async {
+    try {
+      final response = await _sendCommand(
+        'music/radios/library_items',
+        args: {
+          if (limit != null) 'limit': limit,
+          if (offset != null) 'offset': offset,
+          if (favoriteOnly != null) 'favorite': favoriteOnly,
+        },
+      );
+
+      final items = response['items'] as List<dynamic>? ?? response['result'] as List<dynamic>?;
+      if (items == null) return [];
+
+      return items
+          .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _logger.log('Error getting radio stations: $e');
+      return [];
+    }
+  }
+
+  /// Search for radio stations globally (across all providers like TuneIn)
+  Future<List<MediaItem>> searchRadioStations(String query, {int limit = 25}) async {
+    try {
+      final response = await _sendCommand(
+        'music/search',
+        args: {
+          'search_query': query,
+          'media_types': ['radio'],
+          'limit': limit,
+        },
+      );
+
+      final result = response['result'] as Map<String, dynamic>?;
+      if (result == null) return [];
+
+      // Radio results might be under 'radios' or 'radio' key
+      final radios = (result['radios'] as List<dynamic>?) ??
+                     (result['radio'] as List<dynamic>?) ??
+                     [];
+
+      return radios
+          .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _logger.log('Error searching radio stations: $e');
+      return [];
+    }
+  }
+
+  // ============ PODCASTS ============
+
+  /// Get all podcasts from the library
+  Future<List<MediaItem>> getPodcasts({
+    int? limit,
+    int? offset,
+    bool? favoriteOnly,
+  }) async {
+    try {
+      final response = await _sendCommand(
+        'music/podcasts/library_items',
+        args: {
+          if (limit != null) 'limit': limit,
+          if (offset != null) 'offset': offset,
+          if (favoriteOnly != null) 'favorite': favoriteOnly,
+        },
+      );
+
+      final items = response['items'] as List<dynamic>? ?? response['result'] as List<dynamic>?;
+      if (items == null) return [];
+
+      return items
+          .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _logger.log('Error getting podcasts: $e');
+      return [];
+    }
+  }
+
+  /// Get episodes for a specific podcast
+  Future<List<MediaItem>> getPodcastEpisodes(String podcastId, {
+    String? provider,
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final response = await _sendCommand(
+        'music/podcasts/podcast_episodes',
+        args: {
+          'item_id': podcastId,
+          if (provider != null) 'provider_instance_id_or_domain': provider,
+        },
+      );
+
+      final episodes = response['result'] as List<dynamic>?;
+      if (episodes != null && episodes.isNotEmpty) {
+        return episodes
+            .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+
+      return [];
+    } catch (e) {
+      _logger.log('Error getting podcast episodes: $e');
+      return [];
+    }
+  }
+
+  /// Get best available image URL for a podcast
+  /// Falls back to first episode's image if podcast image is unavailable or low quality
+  Future<String?> getPodcastCoverUrl(MediaItem podcast, {int size = 1024}) async {
+    // First try the podcast's own image
+    final podcastImage = getImageUrl(podcast, size: size);
+
+    // Check if podcast has images in metadata
+    final images = podcast.metadata?['images'] as List<dynamic>?;
+    if (images != null && images.isNotEmpty) {
+      // Podcast has images, use them
+      return podcastImage;
+    }
+
+    // No podcast image, try to get first episode's image
+    try {
+      final episodes = await getPodcastEpisodes(
+        podcast.itemId,
+        provider: podcast.provider,
+      );
+
+      if (episodes.isNotEmpty) {
+        final firstEpisode = episodes.first;
+        final episodeImage = getImageUrl(firstEpisode, size: size);
+        if (episodeImage != null) {
+          return episodeImage;
+        }
+      }
+    } catch (e) {
+      // Fall through to return podcast image
+    }
+
+    // Fall back to podcast image even if it might be low quality
+    return podcastImage;
+  }
+
+  /// Parse browse results into MediaItem episodes
+  List<MediaItem> _parseBrowseEpisodes(List<dynamic> items) {
+    final episodes = <MediaItem>[];
+    for (final item in items) {
+      if (item is Map<String, dynamic>) {
+        final name = item['name'] as String? ??
+                    item['label'] as String? ??
+                    'Episode';
+        final uri = item['uri'] as String? ?? item['path'] as String?;
+        final itemId = item['item_id'] as String? ?? uri ?? '';
+        final provider = item['provider'] as String? ?? 'library';
+
+        // Parse media type from string
+        final mediaTypeStr = item['media_type'] as String?;
+        MediaType mediaType = MediaType.track;
+        if (mediaTypeStr != null) {
+          mediaType = MediaType.values.firstWhere(
+            (e) => e.name == mediaTypeStr || e.name == mediaTypeStr.toLowerCase(),
+            orElse: () => MediaType.track,
+          );
+        }
+
+        // Get duration if available
+        Duration? duration;
+        final durationVal = item['duration'];
+        if (durationVal is int) {
+          duration = Duration(seconds: durationVal);
+        } else if (durationVal is double) {
+          duration = Duration(seconds: durationVal.toInt());
+        }
+
+        episodes.add(MediaItem(
+          itemId: itemId,
+          provider: provider,
+          name: name,
+          uri: uri,
+          metadata: item['metadata'] as Map<String, dynamic>?,
+          mediaType: mediaType,
+          duration: duration,
+        ));
+      }
+    }
+    return episodes;
+  }
+
+  /// Play a podcast episode
+  Future<void> playPodcastEpisode(String playerId, MediaItem episode) async {
+    try {
+      // Try episode.uri first, then construct from itemId
+      String uri;
+      if (episode.uri != null && episode.uri!.isNotEmpty) {
+        uri = episode.uri!;
+      } else {
+        // Construct URI based on media type
+        uri = 'library://podcast_episode/${episode.itemId}';
+      }
+
+      await _sendCommand(
+        'player_queues/play_media',
+        args: {
+          'queue_id': playerId,
+          'media': [uri],
+          'option': 'replace',
+        },
+      );
+    } catch (e) {
+      _logger.log('Error playing podcast episode: $e');
+      rethrow;
+    }
+  }
+
   Future<List<Audiobook>> getAudiobooks({
     int? limit,
     int? offset,
@@ -580,7 +726,6 @@ class MusicAssistantAPI {
 
       // If specific libraries are enabled, use browse API for filtering
       if (enabledLibraries != null && enabledLibraries.isNotEmpty) {
-        _logger.log('📚 Using browse API for library filtering (${enabledLibraries.length} libraries enabled)');
         return await _getAudiobooksFromBrowse(enabledLibraries, favoriteOnly: favoriteOnly);
       }
 
@@ -593,8 +738,6 @@ class MusicAssistantAPI {
         if (authorId != null) 'author_id': authorId,
       };
 
-      _logger.log('📚 Calling music/audiobooks/library_items with args: $args');
-
       final response = await _sendCommand(
         'music/audiobooks/library_items',
         args: args,
@@ -602,65 +745,21 @@ class MusicAssistantAPI {
 
       // Check for error in response
       if (response.containsKey('error_code')) {
-        _logger.log('📚 ERROR: ${response['error_code']} - ${response['details']}');
         return [];
       }
 
       final items = response['result'] as List<dynamic>?;
-      if (items == null) {
-        _logger.log('📚 Audiobooks: result is null');
-        return [];
-      }
-
-      _logger.log('📚 Audiobooks: found ${items.length} items from API');
-
-      // Log first item's structure including metadata to find chapters/series
-      if (items.isNotEmpty) {
-        final firstItem = items.first as Map<String, dynamic>;
-        _logger.log('📚 First item keys: ${firstItem.keys.toList()}');
-        _logger.log('📚 First item name: ${firstItem['name']}, media_type: ${firstItem['media_type']}');
-
-        // Log metadata contents - this is where chapters/series info likely lives
-        if (firstItem.containsKey('metadata')) {
-          final metadata = firstItem['metadata'] as Map<String, dynamic>?;
-          if (metadata != null) {
-            _logger.log('📚 METADATA keys: ${metadata.keys.toList()}');
-            for (final key in metadata.keys) {
-              final value = metadata[key];
-              if (value is List) {
-                _logger.log('📚   metadata[$key] (List, ${value.length}): ${value.take(2)}');
-              } else if (value is Map) {
-                _logger.log('📚   metadata[$key] (Map): ${(value as Map).keys.toList()}');
-              } else if (value != null) {
-                _logger.log('📚   metadata[$key]: $value');
-              }
-            }
-          }
-        }
-
-        // Check for chapters at top level too
-        if (firstItem.containsKey('chapters')) {
-          _logger.log('📚 CHAPTERS at top level: ${firstItem['chapters']}');
-        }
-      }
+      if (items == null) return [];
 
       final audiobooks = <Audiobook>[];
-      final parseErrors = <String>[];
-
       for (int i = 0; i < items.length; i++) {
         try {
           final book = Audiobook.fromJson(items[i] as Map<String, dynamic>);
           audiobooks.add(book);
         } catch (e) {
-          parseErrors.add('Item $i: $e');
+          // Skip items that fail to parse
         }
       }
-
-      if (parseErrors.isNotEmpty) {
-        _logger.log('📚 Parse errors (${parseErrors.length}): ${parseErrors.take(3).join(", ")}');
-      }
-
-      _logger.log('📚 Successfully parsed ${audiobooks.length}/${items.length} audiobooks');
       return audiobooks;
     } catch (e, stack) {
       _logger.log('Error getting audiobooks: $e');
@@ -756,6 +855,26 @@ class MusicAssistantAPI {
       );
     } catch (e) {
       _logger.log('Error playing audiobook: $e');
+      rethrow;
+    }
+  }
+
+  /// Play a radio station
+  Future<void> playRadioStation(String playerId, MediaItem station) async {
+    try {
+      final uri = station.uri ?? 'library://radio/${station.itemId}';
+      _logger.log('📻 Playing radio station: ${station.name} with URI: $uri');
+
+      await _sendCommand(
+        'player_queues/play_media',
+        args: {
+          'queue_id': playerId,
+          'media': [uri],
+          'option': 'replace',
+        },
+      );
+    } catch (e) {
+      _logger.log('Error playing radio station: $e');
       rethrow;
     }
   }
@@ -1120,6 +1239,7 @@ class MusicAssistantAPI {
       );
 
       final items = response['result'] as List<dynamic>?;
+      _logger.log('📋 recently_played_items returned ${items?.length ?? 0} items');
       if (items == null || items.isEmpty) {
         _logger.log('⚠️ No recently played tracks found');
         return [];
@@ -1129,6 +1249,8 @@ class MusicAssistantAPI {
       final trackUris = <String>[];
       for (final item in items) {
         final trackUri = (item as Map<String, dynamic>)['uri'] as String?;
+        final name = (item as Map<String, dynamic>)['name'] as String?;
+        _logger.log('  📀 Track: $name');
         if (trackUri != null) {
           trackUris.add(trackUri);
         }
@@ -1158,12 +1280,17 @@ class MusicAssistantAPI {
 
           try {
             final fullTrack = trackResponse['result'] as Map<String, dynamic>?;
+            final trackName = fullTrack?['name'] as String?;
             final albumData = fullTrack?['album'] as Map<String, dynamic>?;
             final albumUri = albumData?['uri'] as String?;
+            final albumName = albumData?['name'] as String?;
 
             if (albumUri != null && !seenAlbumUris.contains(albumUri)) {
               seenAlbumUris.add(albumUri);
               albumUris.add(albumUri);
+              _logger.log('  📀 Found album: $albumName from track: $trackName');
+            } else if (albumUri == null) {
+              _logger.log('  ⚠️ Track "$trackName" has no album');
             }
           } catch (_) {
             continue;
@@ -1432,20 +1559,38 @@ class MusicAssistantAPI {
   /// Remove item from favorites
   /// Requires the library_item_id (the numeric ID in the MA library)
   Future<void> removeFromFavorites(String mediaType, int libraryItemId) async {
-    try {
-      _logger.log('Removing from favorites: mediaType=$mediaType, libraryItemId=$libraryItemId');
+    await _sendCommand(
+      'music/favorites/remove_item',
+      args: {
+        'media_type': mediaType,
+        'library_item_id': libraryItemId,
+      },
+    );
+  }
 
-      await _sendCommand(
-        'music/favorites/remove_item',
-        args: {
-          'media_type': mediaType,
-          'library_item_id': libraryItemId,
-        },
-      );
-    } catch (e) {
-      _logger.log('Error removing from favorites: $e');
-      rethrow;
-    }
+  // Library
+  /// Add item to library using URI format
+  /// The item parameter should be a URI like "spotify://artist/4tZwfgrHOc3mvqYlEYSvVi"
+  Future<void> addItemToLibrary(String mediaType, String itemId, String provider) async {
+    final uri = '$provider://$mediaType/$itemId';
+    await _sendCommand(
+      'music/library/add_item',
+      args: {
+        'item': uri,
+      },
+    );
+  }
+
+  /// Remove item from library
+  /// Requires the library_item_id (the numeric ID in the MA library)
+  Future<void> removeItemFromLibrary(String mediaType, int libraryItemId) async {
+    await _sendCommand(
+      'music/library/remove_item',
+      args: {
+        'media_type': mediaType,
+        'library_item_id': libraryItemId,
+      },
+    );
   }
 
   // Search
@@ -1468,7 +1613,7 @@ class MusicAssistantAPI {
 
           final result = searchResponse['result'] as Map<String, dynamic>?;
           if (result == null) {
-            return <String, List<MediaItem>>{'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': []};
+            return <String, List<MediaItem>>{'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': [], 'radios': []};
           }
 
           // Parse results from the search response
@@ -1497,6 +1642,16 @@ class MusicAssistantAPI {
                   .toList() ??
               [];
 
+          final radios = (result['radios'] as List<dynamic>?)
+                  ?.map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+                  .toList() ??
+              [];
+
+          final podcasts = (result['podcasts'] as List<dynamic>?)
+                  ?.map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+                  .toList() ??
+              [];
+
           // Deduplicate results by name
           // MA returns both library items and provider items for the same content
           // Prefer library items (provider='library') as they have all provider mappings
@@ -1506,16 +1661,53 @@ class MusicAssistantAPI {
             'tracks': _deduplicateResults(tracks),
             'playlists': _deduplicateResults(playlists),
             'audiobooks': _deduplicateResults(audiobooks),
+            'radios': _deduplicateResults(radios),
+            'podcasts': _deduplicateResults(podcasts),
           };
         } catch (e) {
           _logger.log('Error searching: $e');
-          return <String, List<MediaItem>>{'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': []};
+          return <String, List<MediaItem>>{'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': [], 'radios': [], 'podcasts': []};
         }
       },
     ).catchError((e) {
       _logger.log('Error searching after retries: $e');
-      return <String, List<MediaItem>>{'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': []};
+      return <String, List<MediaItem>>{'artists': [], 'albums': [], 'tracks': [], 'playlists': [], 'audiobooks': [], 'radios': [], 'podcasts': []};
     });
+  }
+
+  /// Search for podcasts globally (across all providers)
+  Future<List<MediaItem>> searchPodcasts(String query, {int limit = 25}) async {
+    try {
+      _logger.log('🎙️ Searching podcasts for: $query');
+      final response = await _sendCommand(
+        'music/search',
+        args: {
+          'search_query': query,
+          'media_types': ['podcast'],
+          'limit': limit,
+        },
+      );
+
+      final result = response['result'] as Map<String, dynamic>?;
+      if (result == null) {
+        _logger.log('🎙️ Podcast search: no result');
+        return [];
+      }
+
+      // Podcast results might be under 'podcasts' or 'podcast' key
+      final podcasts = (result['podcasts'] as List<dynamic>?) ??
+                       (result['podcast'] as List<dynamic>?) ??
+                       [];
+
+      _logger.log('🎙️ Podcast search found ${podcasts.length} results');
+
+      return podcasts
+          .map((item) => MediaItem.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _logger.log('🎙️ Error searching podcasts: $e');
+      return [];
+    }
   }
 
   /// Deduplicate search results by name (case-insensitive)
@@ -1699,6 +1891,86 @@ class MusicAssistantAPI {
       );
     } catch (e) {
       _logger.log('Error adding track to queue: $e');
+      rethrow;
+    }
+  }
+
+  /// Play album on player
+  Future<void> playAlbum(String playerId, Album album) async {
+    try {
+      final uri = album.uri ?? 'library://album/${album.itemId}';
+      _logger.log('💿 Playing album: ${album.name} with URI: $uri');
+
+      await _sendCommand(
+        'player_queues/play_media',
+        args: {
+          'queue_id': playerId,
+          'media': [uri],
+          'option': 'replace',
+        },
+      );
+    } catch (e) {
+      _logger.log('Error playing album: $e');
+      rethrow;
+    }
+  }
+
+  /// Add album tracks to queue
+  Future<void> addAlbumToQueue(String playerId, Album album) async {
+    try {
+      final uri = album.uri ?? 'library://album/${album.itemId}';
+      _logger.log('💿 Adding album to queue: ${album.name} with URI: $uri');
+
+      await _sendCommand(
+        'player_queues/play_media',
+        args: {
+          'queue_id': playerId,
+          'media': [uri],
+          'option': 'add',
+        },
+      );
+    } catch (e) {
+      _logger.log('Error adding album to queue: $e');
+      rethrow;
+    }
+  }
+
+  /// Add artist tracks to queue
+  Future<void> addArtistToQueue(String playerId, Artist artist) async {
+    try {
+      final uri = artist.uri ?? 'library://artist/${artist.itemId}';
+      _logger.log('🎤 Adding artist to queue: ${artist.name} with URI: $uri');
+
+      await _sendCommand(
+        'player_queues/play_media',
+        args: {
+          'queue_id': playerId,
+          'media': [uri],
+          'option': 'add',
+        },
+      );
+    } catch (e) {
+      _logger.log('Error adding artist to queue: $e');
+      rethrow;
+    }
+  }
+
+  /// Play playlist on player
+  Future<void> playPlaylist(String playerId, Playlist playlist) async {
+    try {
+      final uri = playlist.uri ?? 'library://playlist/${playlist.itemId}';
+      _logger.log('📝 Playing playlist: ${playlist.name} with URI: $uri');
+
+      await _sendCommand(
+        'player_queues/play_media',
+        args: {
+          'queue_id': playerId,
+          'media': [uri],
+          'option': 'replace',
+        },
+      );
+    } catch (e) {
+      _logger.log('Error playing playlist: $e');
       rethrow;
     }
   }
@@ -2181,6 +2453,71 @@ class MusicAssistantAPI {
     }
   }
 
+  /// Delete an item from the queue
+  Future<void> queueCommandDeleteItem(String queueId, String itemId) async {
+    try {
+      await _sendCommand(
+        'player_queues/delete_item',
+        args: {
+          'queue_id': queueId,
+          'item_id_or_index': itemId,
+        },
+      );
+    } catch (e) {
+      _logger.log('Error deleting queue item: $e');
+      rethrow;
+    }
+  }
+
+  /// Move an item in the queue by a relative position shift
+  /// pos_shift > 0: move down, pos_shift < 0: move up, pos_shift = 0: move to next
+  Future<void> queueCommandMoveItem(String queueId, String itemId, int posShift) async {
+    try {
+      await _sendCommand(
+        'player_queues/move_item',
+        args: {
+          'queue_id': queueId,
+          'queue_item_id': itemId,
+          'pos_shift': posShift,
+        },
+      );
+    } catch (e) {
+      _logger.log('Error moving queue item: $e');
+      rethrow;
+    }
+  }
+
+  /// Play a specific item in the queue by its queue_item_id
+  Future<void> queueCommandPlayIndex(String queueId, String queueItemId) async {
+    try {
+      await _sendCommand(
+        'player_queues/play_index',
+        args: {
+          'queue_id': queueId,
+          'index': queueItemId,
+        },
+      );
+    } catch (e) {
+      _logger.log('Error playing queue item: $e');
+      rethrow;
+    }
+  }
+
+  /// Clear all items from the queue
+  Future<void> queueCommandClear(String queueId) async {
+    try {
+      await _sendCommand(
+        'player_queues/clear',
+        args: {
+          'queue_id': queueId,
+        },
+      );
+    } catch (e) {
+      _logger.log('Error clearing queue: $e');
+      rethrow;
+    }
+  }
+
   // ============================================================================
   // BUILT-IN PLAYER MANAGEMENT
   // ============================================================================
@@ -2206,6 +2543,39 @@ class MusicAssistantAPI {
       _eventStreams['player_added'] = StreamController<Map<String, dynamic>>.broadcast();
     }
     return _eventStreams['player_added']!.stream;
+  }
+
+  /// Stream of media_item_added events (for refreshing library when items are added)
+  Stream<Map<String, dynamic>> get mediaItemAddedEvents {
+    if (!_eventStreams.containsKey('media_item_added')) {
+      _eventStreams['media_item_added'] = StreamController<Map<String, dynamic>>.broadcast();
+    }
+    return _eventStreams['media_item_added']!.stream;
+  }
+
+  /// Stream of media_item_deleted events (for refreshing library when items are removed)
+  Stream<Map<String, dynamic>> get mediaItemDeletedEvents {
+    if (!_eventStreams.containsKey('media_item_deleted')) {
+      _eventStreams['media_item_deleted'] = StreamController<Map<String, dynamic>>.broadcast();
+    }
+    return _eventStreams['media_item_deleted']!.stream;
+  }
+
+  /// Stream of queue_updated events (for queue metadata changes)
+  Stream<Map<String, dynamic>> get queueUpdatedEvents {
+    if (!_eventStreams.containsKey('queue_updated')) {
+      _eventStreams['queue_updated'] = StreamController<Map<String, dynamic>>.broadcast();
+    }
+    return _eventStreams['queue_updated']!.stream;
+  }
+
+  /// Stream of queue_items_updated events (for queue item add/remove/reorder)
+  /// This is critical for keeping queue UI in sync, especially in radio mode
+  Stream<Map<String, dynamic>> get queueItemsUpdatedEvents {
+    if (!_eventStreams.containsKey('queue_items_updated')) {
+      _eventStreams['queue_items_updated'] = StreamController<Map<String, dynamic>>.broadcast();
+    }
+    return _eventStreams['queue_items_updated']!.stream;
   }
 
   /// Register this device as a player with retry logic
@@ -2609,6 +2979,7 @@ class MusicAssistantAPI {
           }
         }
       } catch (e) {
+        _logger.log('⚠️ Error parsing stream URI "$uri": $e');
       }
     }
 
@@ -2686,6 +3057,57 @@ class MusicAssistantAPI {
     final provider = selectedImage['provider'] as String?;
     // Use the imageproxy endpoint
     return '$baseUrl/imageproxy?provider=${Uri.encodeComponent(provider ?? "")}&size=$size&fmt=jpeg&path=${Uri.encodeComponent(imagePath)}';
+  }
+
+  // ==================== iTunes Artwork Lookup ====================
+
+  /// Search iTunes for a podcast and return high-res artwork URL
+  /// Returns null if not found or on error
+  Future<String?> getITunesPodcastArtwork(String podcastName) async {
+    try {
+      final searchTerm = Uri.encodeComponent(podcastName);
+      final url = 'https://itunes.apple.com/search?term=$searchTerm&entity=podcast&limit=1';
+
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 10);
+
+      final request = await client.getUrl(Uri.parse(url));
+      final response = await request.close();
+
+      if (response.statusCode != 200) {
+        _logger.log('🎨 iTunes search failed for "$podcastName": ${response.statusCode}');
+        return null;
+      }
+
+      final body = await response.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      final results = json['results'] as List<dynamic>?;
+      if (results == null || results.isEmpty) {
+        _logger.log('🎨 No iTunes results for "$podcastName"');
+        return null;
+      }
+
+      final podcast = results.first as Map<String, dynamic>;
+      var artworkUrl = podcast['artworkUrl600'] as String?;
+
+      if (artworkUrl == null) {
+        artworkUrl = podcast['artworkUrl100'] as String?;
+      }
+
+      if (artworkUrl != null) {
+        // Use 800x800 - good quality without being excessive (was 1400x1400)
+        artworkUrl = artworkUrl
+            .replaceAll('600x600', '800x800')
+            .replaceAll('100x100', '800x800');
+        _logger.log('🎨 Found iTunes artwork for "$podcastName": $artworkUrl');
+      }
+
+      return artworkUrl;
+    } catch (e) {
+      _logger.log('🎨 iTunes lookup error for "$podcastName": $e');
+      return null;
+    }
   }
 
   // ==================== Authentication Methods ====================
@@ -2977,6 +3399,17 @@ class MusicAssistantAPI {
     _updateConnectionState(MAConnectionState.disconnected);
     await _channel?.sink.close();
     _channel = null;
+    // Complete all pending requests with an error before clearing
+    _cancelPendingRequests('Connection disconnected');
+  }
+
+  /// Cancel all pending requests with an error message
+  void _cancelPendingRequests(String reason) {
+    for (final entry in _pendingRequests.entries) {
+      if (!entry.value.isCompleted) {
+        entry.value.completeError(Exception(reason));
+      }
+    }
     _pendingRequests.clear();
   }
 
@@ -2995,74 +3428,4 @@ class MusicAssistantAPI {
     }
     _eventStreams.clear();
   }
-}
-
-/// Adapter to make ITransport look like a WebSocketChannel
-/// This allows the existing MusicAssistantAPI code to work with WebRTC transport
-class _TransportChannelAdapter extends StreamChannelMixin implements WebSocketChannel {
-  final ITransport _transport;
-  final StreamController<String> _messageController = StreamController<String>.broadcast();
-
-  _TransportChannelAdapter(this._transport) {
-    // Forward messages from transport to our stream
-    _transport.messageStream.listen(
-      (message) => _messageController.add(message),
-      onError: (error) => _messageController.addError(error),
-      onDone: () => _messageController.close(),
-    );
-  }
-
-  @override
-  Stream get stream => _messageController.stream;
-
-  @override
-  WebSocketSink get sink => _TransportSinkAdapter(_transport);
-
-  @override
-  int? get closeCode => null;
-
-  @override
-  String? get closeReason => null;
-
-  @override
-  String? get protocol => null;
-
-  @override
-  Future<void> get ready => Future.value();
-}
-
-/// Adapter to make ITransport send operations work like WebSocketSink
-class _TransportSinkAdapter implements WebSocketSink {
-  final ITransport _transport;
-
-  _TransportSinkAdapter(this._transport);
-
-  @override
-  void add(dynamic data) {
-    if (data is String) {
-      _transport.send(data);
-    } else {
-      throw ArgumentError('Only String data is supported');
-    }
-  }
-
-  @override
-  void addError(Object error, [StackTrace? stackTrace]) {
-    // Not supported for transport
-  }
-
-  @override
-  Future addStream(Stream stream) async {
-    await for (final data in stream) {
-      add(data);
-    }
-  }
-
-  @override
-  Future close([int? closeCode, String? closeReason]) async {
-    _transport.disconnect();
-  }
-
-  @override
-  Future get done => Future.value();
 }

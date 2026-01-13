@@ -7,6 +7,8 @@ import 'package:web_socket_channel/io.dart';
 import 'debug_logger.dart';
 import 'settings_service.dart';
 import 'device_id_service.dart';
+import 'music_assistant_api.dart';
+import 'remote/webrtc_sendspin_transport.dart';
 
 /// Connection state for Sendspin player
 enum SendspinConnectionState {
@@ -26,20 +28,24 @@ typedef SendspinAudioDataCallback = void Function(Uint8List audioData);
 typedef SendspinStreamStartCallback = void Function(Map<String, dynamic>? trackInfo);
 typedef SendspinStreamEndCallback = void Function();
 
-/// Service to manage Sendspin WebSocket connection for local playback
+/// Service to manage Sendspin connection for local and remote playback
 /// Sendspin is the replacement for builtin_player in MA 2.7.0b20+
 ///
-/// Connection strategy (smart fallback for external access):
-/// 1. If server is HTTPS, try external wss://{server}/sendspin first
-/// 2. Fall back to local_ws_url from API (ws://local-ip:8927/sendspin)
-/// 3. WebRTC fallback as last resort (requires TURN servers)
+/// Connection strategy:
+/// 1. Local: WebSocket to ws://{server-ip}:8927/sendspin
+/// 2. Remote: WebRTC DataChannel (second peer connection) for audio
 class SendspinService {
   final String serverUrl;
   final _logger = DebugLogger();
 
+  // WebSocket mode (local connections)
   WebSocketChannel? _channel;
   Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
+
+  // WebRTC mode (remote connections)
+  WebRTCSendspinTransport? _webrtcTransport;
+  bool _useWebRTC = false;
 
   // Connection state
   SendspinConnectionState _state = SendspinConnectionState.disconnected;
@@ -187,6 +193,98 @@ class SendspinService {
       return true;
     } catch (e) {
       _logger.log('Sendspin: Connection error: $e');
+      _updateState(SendspinConnectionState.error);
+      _connectionInProgress?.complete(false);
+      _connectionInProgress = null;
+      return false;
+    }
+  }
+
+  /// Connect via WebRTC for remote connections
+  /// Uses second peer connection signaled through MA API
+  Future<bool> connectViaWebRTC(MusicAssistantAPI api) async {
+    if (_isDisposed) return false;
+    if (_state == SendspinConnectionState.connected) return true;
+
+    // Deduplicate concurrent connection attempts
+    if (_connectionInProgress != null) {
+      _logger.log('Sendspin: Connection already in progress, waiting...');
+      return _connectionInProgress!.future;
+    }
+    _connectionInProgress = Completer<bool>();
+
+    _updateState(SendspinConnectionState.connecting);
+
+    try {
+      _playerId = await DeviceIdService.getOrCreateDevicePlayerId();
+      _playerName = await SettingsService.getLocalPlayerName();
+
+      _logger.log('Sendspin: Connecting via WebRTC as "$_playerName" (ID: $_playerId)');
+
+      // Create WebRTC transport for second peer connection
+      _webrtcTransport = WebRTCSendspinTransport(api);
+      _useWebRTC = true;
+
+      // Set up message handlers
+      _webrtcTransport!.textMessageStream.listen(_handleTextMessage);
+      _webrtcTransport!.binaryMessageStream.listen(_handleBinaryMessage);
+
+      // Connect the peer connection
+      await _webrtcTransport!.connect();
+
+      // Send client/hello message
+      _logger.log('Sendspin: Sending client/hello via WebRTC');
+      _sendMessageWebRTC({
+        'type': 'client/hello',
+        'payload': {
+          'client_id': _playerId,
+          'name': _playerName,
+          'version': 1,
+          'supported_roles': ['player@v1'],
+          'player_support': {
+            'supported_formats': [
+              {
+                'codec': 'pcm',
+                'channels': 2,
+                'sample_rate': 48000,
+                'bit_depth': 16,
+              },
+            ],
+            'buffer_capacity': 1048576,
+            'supported_commands': ['volume', 'mute'],
+          },
+        },
+      });
+
+      // Wait for server acknowledgment
+      final ackReceived = await _waitForAck().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => false,
+      );
+
+      if (!ackReceived) {
+        _logger.log('Sendspin: No acknowledgment from server after hello (WebRTC)');
+        _webrtcTransport?.disconnect();
+        _webrtcTransport = null;
+        _useWebRTC = false;
+        _updateState(SendspinConnectionState.error);
+        _connectionInProgress?.complete(false);
+        _connectionInProgress = null;
+        return false;
+      }
+
+      _logger.log('Sendspin: Connected via WebRTC and registered successfully');
+      _updateState(SendspinConnectionState.connected);
+      _startHeartbeat();
+
+      _connectionInProgress?.complete(true);
+      _connectionInProgress = null;
+      return true;
+    } catch (e) {
+      _logger.log('Sendspin: WebRTC connection error: $e');
+      _webrtcTransport?.disconnect();
+      _webrtcTransport = null;
+      _useWebRTC = false;
       _updateState(SendspinConnectionState.error);
       _connectionInProgress?.complete(false);
       _connectionInProgress = null;
@@ -515,6 +613,11 @@ class SendspinService {
   /// Send a JSON message to the server
   /// allowDuringHandshake: set to true to send messages before connection is established (e.g., hello)
   void _sendMessage(Map<String, dynamic> message, {bool allowDuringHandshake = false}) {
+    if (_useWebRTC) {
+      _sendMessageWebRTC(message);
+      return;
+    }
+
     if (_channel == null) return;
 
     // During handshake, we need to send hello even though state is still 'connecting'
@@ -527,6 +630,135 @@ class SendspinService {
     } catch (e) {
       _logger.log('Sendspin: Error sending message: $e');
     }
+  }
+
+  /// Send message via WebRTC DataChannel
+  void _sendMessageWebRTC(Map<String, dynamic> message) {
+    if (_webrtcTransport == null) return;
+
+    try {
+      final json = jsonEncode(message);
+      _logger.log('Sendspin: Sending WebRTC message: ${message['type']}');
+      _webrtcTransport!.sendText(json);
+    } catch (e) {
+      _logger.log('Sendspin: Error sending WebRTC message: $e');
+    }
+  }
+
+  /// Handle text message from WebRTC
+  void _handleTextMessage(String message) {
+    try {
+      final data = jsonDecode(message) as Map<String, dynamic>;
+      final type = data['type'] as String?;
+
+      _logger.log('Sendspin: Received WebRTC message type: $type');
+
+      // Reuse existing message handler logic
+      switch (type) {
+        case 'server/hello':
+          _logger.log('Sendspin: Received server/hello via WebRTC');
+          final payload = data['payload'] as Map<String, dynamic>?;
+          if (payload != null) {
+            _logger.log('Sendspin: Server name: ${payload['name']}, version: ${payload['version']}');
+          }
+          if (_ackCompleter != null && !_ackCompleter!.isCompleted) {
+            _ackCompleter!.complete(true);
+          }
+          _sendInitialStateWebRTC();
+          _sendClientTimeWebRTC();
+          break;
+
+        case 'server/time':
+          _logger.log('Sendspin: Received server/time response (WebRTC)');
+          break;
+
+        case 'group/update':
+          _logger.log('Sendspin: Received group/update (WebRTC)');
+          break;
+
+        case 'stream/start':
+          _logger.log('Sendspin: Audio stream starting (WebRTC)');
+          _isStreamingAudio = true;
+          _audioFramesReceived = 0;
+          _isPlaying = true;
+          _isPaused = false;
+          final streamPayload = data['payload'] as Map<String, dynamic>?;
+          onStreamStart?.call(streamPayload);
+          break;
+
+        case 'stream/end':
+          _logger.log('Sendspin: Audio stream ended (WebRTC, received $_audioFramesReceived frames)');
+          _isStreamingAudio = false;
+          _isPlaying = false;
+          onStreamEnd?.call();
+          break;
+
+        case 'pause':
+          _isPaused = true;
+          _isPlaying = false;
+          onPause?.call();
+          break;
+
+        case 'stop':
+          _isPlaying = false;
+          _isPaused = false;
+          _isStreamingAudio = false;
+          onStop?.call();
+          break;
+
+        case 'seek':
+          final position = data['position'] as int?;
+          if (position != null) {
+            _position = position;
+            onSeek?.call(position);
+          }
+          break;
+
+        case 'volume':
+          final level = data['level'] as int?;
+          if (level != null) {
+            _volume = level;
+            onVolume?.call(level);
+          }
+          break;
+
+        default:
+          _logger.log('Sendspin: Unknown WebRTC message type: $type');
+      }
+    } catch (e) {
+      _logger.log('Sendspin: Error handling WebRTC text message: $e');
+    }
+  }
+
+  /// Handle binary message from WebRTC
+  void _handleBinaryMessage(Uint8List message) {
+    _handleBinaryAudioData(message);
+  }
+
+  /// Send initial state via WebRTC
+  void _sendInitialStateWebRTC() {
+    _logger.log('Sendspin: Sending initial client/state (WebRTC)');
+    _sendMessageWebRTC({
+      'type': 'client/state',
+      'payload': {
+        'player': {
+          'state': 'synchronized',
+          'volume': _volume,
+          'muted': _isMuted,
+        },
+      },
+    });
+  }
+
+  /// Send client/time via WebRTC
+  void _sendClientTimeWebRTC() {
+    final timestampMicroseconds = DateTime.now().microsecondsSinceEpoch;
+    _sendMessageWebRTC({
+      'type': 'client/time',
+      'payload': {
+        'client_transmitted': timestampMicroseconds,
+      },
+    });
   }
 
   /// Report current player state to server
@@ -665,7 +897,18 @@ class SendspinService {
     _stopHeartbeat();
     _reconnectTimer?.cancel();
 
-    if (_channel != null) {
+    if (_useWebRTC && _webrtcTransport != null) {
+      // Send graceful goodbye via WebRTC
+      _sendMessageWebRTC({
+        'type': 'client/goodbye',
+        'payload': {
+          'reason': 'user_request',
+        },
+      });
+      _webrtcTransport!.disconnect();
+      _webrtcTransport = null;
+      _useWebRTC = false;
+    } else if (_channel != null) {
       // Send graceful goodbye per Sendspin protocol
       _sendMessage({
         'type': 'client/goodbye',
@@ -686,6 +929,7 @@ class SendspinService {
     _stopHeartbeat();
     _reconnectTimer?.cancel();
     _channel?.sink.close();
+    _webrtcTransport?.dispose();
     _stateController.close();
     _audioDataController.close();
   }

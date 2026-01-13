@@ -2835,15 +2835,81 @@ class MusicAssistantAPI {
     return _eventStreams['sendspin_player']!.stream;
   }
 
-  // NOTE: The following Sendspin API methods were removed because they don't exist in MA:
-  // - getSendspinConnectionInfo (sendspin/connection_info)
-  // - sendspinOffer (sendspin/webrtc_offer)
-  // - sendspinAnswer (sendspin/webrtc_answer)
-  // - sendspinIceCandidate (sendspin/ice_candidate)
+  // ============================================================================
+  // SENDSPIN WEBRTC SIGNALING (for remote connections)
+  // ============================================================================
+  // For remote connections, Sendspin audio uses a second WebRTC peer connection.
+  // Signaling for this connection happens through the MA API data channel.
   //
-  // Sendspin connection is handled directly via WebSocket to:
-  // - Local: ws://{server-ip}:8927/sendspin
-  // - External: wss://{server}/sendspin (via MA's proxy with auth)
+  // Local connections still use WebSocket: ws://{server-ip}:8927/sendspin
+  // Remote connections use WebRTC DataChannel signaled through these methods:
+
+  /// Get ICE servers for Sendspin WebRTC connection
+  /// Returns STUN/TURN server configuration for establishing audio peer connection
+  Future<List<Map<String, dynamic>>> getSendspinIceServers() async {
+    try {
+      _logger.log('Sendspin: Requesting ICE servers for WebRTC audio connection');
+      final result = await _sendCommand('sendspin/ice_servers');
+      
+      if (result is Map && result.containsKey('ice_servers')) {
+        final servers = result['ice_servers'] as List;
+        return servers.cast<Map<String, dynamic>>();
+      }
+      
+      // Fallback ICE servers if server doesn't provide them
+      _logger.log('Sendspin: Using fallback ICE servers');
+      return [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun.cloudflare.com:3478'},
+      ];
+    } catch (e) {
+      _logger.log('Sendspin: Error getting ICE servers: $e');
+      // Return fallback servers on error
+      return [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun.cloudflare.com:3478'},
+      ];
+    }
+  }
+
+  /// Send SDP offer and receive answer for Sendspin WebRTC connection
+  /// Establishes the second peer connection for audio streaming
+  Future<Map<String, dynamic>> sendspinConnect(Map<String, dynamic> offer) async {
+    try {
+      _logger.log('Sendspin: Sending SDP offer for WebRTC audio connection');
+      final result = await _sendCommand(
+        'sendspin/connect',
+        args: {'sdp': offer},
+      );
+      
+      if (result is Map && result.containsKey('sdp')) {
+        _logger.log('Sendspin: Received SDP answer');
+        return result['sdp'] as Map<String, dynamic>;
+      }
+      
+      throw Exception('Invalid response from sendspin/connect');
+    } catch (e) {
+      _logger.log('Sendspin: Error in sendspin/connect: $e');
+      rethrow;
+    }
+  }
+
+  /// Send ICE candidate to server for Sendspin WebRTC connection
+  Future<void> sendspinIceCandidate(Map<String, dynamic> candidate) async {
+    try {
+      await _sendCommand(
+        'sendspin/ice_candidate',
+        args: {'candidate': candidate},
+      );
+    } catch (e) {
+      _logger.log('Sendspin: Error sending ICE candidate: $e');
+      // Non-fatal, don't rethrow
+    }
+  }
+
+  // ============================================================================
+  // END SENDSPIN WEBRTC SIGNALING
+  // ============================================================================
 
   /// Update Sendspin player state
   /// Similar to updateBuiltinPlayerState but for Sendspin protocol

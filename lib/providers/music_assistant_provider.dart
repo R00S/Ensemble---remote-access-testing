@@ -1806,7 +1806,25 @@ class MusicAssistantProvider with ChangeNotifier {
       final playerId = await DeviceIdService.getOrCreateDevicePlayerId();
       _logger.log('Sendspin: Player ID: $playerId');
 
-      // Parse server URL to determine connection strategy
+      // Check if we're in remote mode (WebRTC connection)
+      final isRemoteMode = _serverUrl == 'wss://remote.music-assistant.io';
+      
+      if (isRemoteMode) {
+        _logger.log('🌐 Sendspin: Remote mode detected, using WebRTC DataChannel for audio');
+        
+        // Use WebRTC transport for audio (second peer connection)
+        final connected = await _sendspinService!.connectViaWebRTC(_api!);
+        if (connected) {
+          _sendspinConnected = true;
+          _logger.log('✅ Sendspin: Connected via WebRTC DataChannel');
+          return true;
+        }
+        
+        _logger.log('❌ Sendspin: WebRTC connection failed');
+        return false;
+      }
+
+      // Parse server URL to determine connection strategy for local mode
       final serverUri = Uri.parse(_serverUrl!.startsWith('http')
           ? _serverUrl!
           : 'https://$_serverUrl');
